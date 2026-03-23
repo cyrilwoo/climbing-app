@@ -1,0 +1,1548 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stavění Limit + Lanovka</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    // ── Inline SVG icons ─────────────────────────────────────────────────────
+    const Ico = ({ className = "w-4 h-4", children }) => (
+      <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {children}
+      </svg>
+    );
+    const ChevronLeft  = ({c}) => <Ico className={c}><polyline points="15 18 9 12 15 6"/></Ico>;
+    const ChevronRight = ({c}) => <Ico className={c}><polyline points="9 18 15 12 9 6"/></Ico>;
+    const Plus         = ({c}) => <Ico className={c}><path d="M5 12h14"/><path d="M12 5v14"/></Ico>;
+    const X            = ({c}) => <Ico className={c}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></Ico>;
+    const UserIcon     = ({c}) => <Ico className={c}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Ico>;
+    const RotateCcw    = ({c}) => <Ico className={c}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></Ico>;
+    const AlertCircle  = ({c}) => <Ico className={c}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></Ico>;
+    const GripV        = ({c}) => <Ico className={c}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></Ico>;
+    const Check        = ({c}) => <Ico className={c}><path d="M20 6 9 17l-5-5"/></Ico>;
+    const CalEdit      = ({c}) => <Ico className={c}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="m14.5 16.5 1 1 2-2"/></Ico>;
+
+    // ── Date helpers ─────────────────────────────────────────────────────────
+    function getMonday(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+    const addDays  = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+    const fmt      = d => `${d.getDate()}.${d.getMonth()+1}.`;
+    const fmtFull  = d => `${d.getDate()}.${d.getMonth()+1}.${d.getFullYear()}`;
+    // Use local date (not UTC) to avoid timezone-shift issues with toISOString()
+    const weekKey  = mon => {
+      const y = mon.getFullYear();
+      const m = String(mon.getMonth()+1).padStart(2,'0');
+      const d = String(mon.getDate()).padStart(2,'0');
+      return `${y}-${m}-${d}`;
+    };
+
+    // ── Team & constants ─────────────────────────────────────────────────────
+    const TEAM = ['Cyril', 'Vašek', 'Morčák', 'Kuba', 'Máza', 'Sebastián'];
+    const REMOVAL_TEAM = ['Áďa', 'Korchy', 'Míví', 'Kuba D.', 'Kuba M.', 'Terezka'];
+    const E4   = () => [null, null, null, null];
+
+    // ── Plán stavění 2026 ────────────────────────────────────────────────────
+    // Limit rotace (5 týdnů): Dětská (čtvrtek) → Přední převis → Zadní převis → Kolmice → Volno → opakuj
+    // Limit START: 2.4.2026 (týden 2026-03-30)
+    // Lanovka rotace (5 týdnů): Převis+Bizár → Dole kout+Strop → Nový profil → Hříbek → Dole kolmice → opakuj
+    // Lanovka START: 16.3.2026 (L5); červenec–srpen střídavě s Limitem
+    const V  = { sector: null,                           setters: [], isOff: true };
+    const D  = { sector: 'Dětská',                       setters: [] };
+    const P  = { sector: 'Přední převis',                setters: [] };
+    const Z  = { sector: 'Zadní převis',                 setters: [] };
+    const K  = { sector: 'Kolmice',                      setters: [] };
+    const M  = { sector: null,                           setters: [], lano: null };
+    const L1 = { sector: 'Převis + Bizár',               setters: [], lano: null };
+    const L2 = { sector: 'Dole kout + Strop',            setters: [], lano: null };
+    const L3 = { sector: 'Nový profil + nahoře kolmice', setters: [], lano: null };
+    const L4 = { sector: 'Hříbek',                       setters: [], lano: null };
+    const L5 = { sector: 'Dole kolmice + převis',        setters: [], lano: null };
+    const TG = { sector: 'Tělocvična', setters: [] };
+    const isDetskaWed = s => s?.toLowerCase().includes('dět') || s?.toLowerCase().includes('det');
+    const CAL = {
+      // ── LEDEN–BŘEZEN: Lanovka bez sektoru, Limit ještě nezačal ───
+      '2026-01-05': { mon: M },
+      '2026-01-12': { mon: M },
+      '2026-01-19': { mon: M },
+      '2026-01-26': { mon: M },
+      '2026-02-02': { mon: M },
+      '2026-02-09': { mon: M },
+      '2026-02-16': { mon: M },
+      '2026-02-23': { mon: M },
+      '2026-03-02': { mon: M },
+      '2026-03-09': { mon: M },
+      '2026-03-16': { mon: L5, thu: TG },           // Lanovka rotace start
+      '2026-03-23': { mon: L1 },
+      // ── LIMIT START 2.4. (čtvrtek) ───────────────────────────────
+      '2026-03-30': { mon: L2, wed: D },
+      // ── DUBEN ────────────────────────────────────────────────────
+      '2026-04-06': { mon: L3, wed: P },
+      '2026-04-13': { mon: L4, wed: Z, thu: TG },
+      '2026-04-20': { mon: L5, wed: K },
+      '2026-04-27': { mon: L1, wed: V },
+      // ── KVĚTEN ───────────────────────────────────────────────────
+      '2026-05-04': { mon: L2, wed: D },
+      '2026-05-11': { mon: L3, wed: P, thu: TG },
+      '2026-05-18': { mon: L4, wed: Z },
+      '2026-05-25': { mon: L5, wed: K },
+      // ── ČERVEN ───────────────────────────────────────────────────
+      '2026-06-01': { mon: L1, wed: V },
+      '2026-06-08': { mon: L2, wed: D, thu: TG },
+      '2026-06-15': { mon: L3, wed: P },
+      '2026-06-22': { mon: L4, wed: Z },
+      '2026-06-29': { mon: L5, wed: K },
+      // ── ČERVENEC — střídavě Limit / Lanovka ──────────────────────
+      '2026-07-06': { wed: V, thu: TG },
+      '2026-07-13': { mon: L1          },
+      '2026-07-20': {            wed: D  },
+      '2026-07-27': { mon: L2          },
+      // ── SRPEN — střídavě Limit / Lanovka ─────────────────────────
+      '2026-08-03': { wed: P, thu: TG },
+      '2026-08-10': { mon: L3          },
+      '2026-08-17': {            wed: Z  },
+      '2026-08-24': { mon: L4          },
+      '2026-08-31': { wed: K, thu: TG },
+      // ── ZÁŘÍ ─────────────────────────────────────────────────────
+      '2026-09-07': { mon: L5, wed: V },
+      '2026-09-14': { mon: L1, wed: D },
+      '2026-09-21': { mon: L2, wed: P },
+      '2026-09-28': { mon: L3, wed: Z, thu: TG },
+      // ── ŘÍJEN ────────────────────────────────────────────────────
+      '2026-10-05': { mon: L4, wed: K },
+      '2026-10-12': { mon: L5, wed: V },
+      '2026-10-19': { mon: L1, wed: D },
+      '2026-10-26': { mon: L2, wed: P, thu: TG },
+      // ── LISTOPAD ─────────────────────────────────────────────────
+      '2026-11-02': { mon: L3, wed: Z },
+      '2026-11-09': { mon: L4, wed: K },
+      '2026-11-16': { mon: L5, wed: V },
+      '2026-11-23': { mon: L1, wed: D, thu: TG },
+      '2026-11-30': { mon: L2, wed: P },
+      // ── PROSINEC ─────────────────────────────────────────────────
+      '2026-12-07': { mon: L3, wed: Z },
+      '2026-12-14': { mon: L4, wed: K },
+      '2026-12-21': { mon: L5, wed: V, thu: TG },
+      '2026-12-28': { mon: L1, wed: D },
+    };
+
+    function initWeek(key) {
+      const c = CAL[key];
+      if (!c) {
+        // default: Cyril in wed slot 1
+        return { monday: E4(), mondayLano: null, wednesday: ['Cyril', null, null, null], thursday: E4(),
+                 mondaySundavaci: [], mondayMyti: null, wednesdaySundavaci: [], wednesdayMyti: null,
+                 thuDateOverride: null, monDateOverride: null, wedDateOverride: null };
+      }
+      const monday = E4();
+      (c.mon?.setters ?? []).slice(0,4).forEach((s,i) => { monday[i] = s; });
+
+      const wednesday = E4();
+      if (c.wed?.setters?.length) {
+        c.wed.setters.slice(0,4).forEach((s,i) => { wednesday[i] = s; });
+      } else if (c.wed && !c.wed.isOff) {
+        wednesday[0] = 'Cyril';
+      }
+
+      const thursday = E4();
+      if (c.thu?.setters?.length) {
+        c.thu.setters.slice(0,4).forEach((s,i) => { thursday[i] = s; });
+      }
+      return { monday, mondayLano: c.mon?.lano ?? null, wednesday, thursday,
+               mondaySundavaci: [], mondayMyti: null,
+               wednesdaySundavaci: [], wednesdayMyti: null,
+               thuDateOverride: null,
+               monDateOverride: null, wedDateOverride: null };
+    }
+
+    // ── SundavaniCard ─────────────────────────────────────────────────────────
+    function SundavaniCard({ session, theme, date, sundavaci, myti, onToggleSundavac, onToggleMyti }) {
+      const isYellow = theme === 'yellow';
+      const rawDay = date.toLocaleString('cs-CZ', { weekday: 'long' });
+      const displayDay = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
+      const isGreen = theme === 'green';
+      const hdr     = isYellow ? 'bg-gradient-to-br from-amber-400 to-yellow-400' : isGreen ? 'bg-gradient-to-br from-emerald-500 to-green-600' : 'bg-[#1e1e20]';
+      const hdrText = isYellow ? 'text-gray-900' : 'text-white';
+      const hdrSub  = isYellow ? 'text-gray-600' : 'text-white/60';
+      const activeBg = isYellow ? 'bg-amber-600 text-white' : isGreen ? 'bg-emerald-600 text-white' : 'bg-pink-600 text-white';
+      return (
+        <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-200">
+          <div className={`${hdr} px-4 py-3`}>
+            <div className={`flex items-center justify-between gap-3 ${hdrText}`}>
+              <div>
+                <h3 className="text-base font-black leading-none">{displayDay}</h3>
+                <p className={`text-xs font-medium mt-0.5 ${hdrSub}`}>{fmtFull(date)}</p>
+              </div>
+              <span className={`text-sm font-black tracking-widest ${isYellow ? 'text-black' : isGreen ? 'text-white' : 'text-pink-500'}`}>
+                SUNDAVÁNÍ
+              </span>
+            </div>
+          </div>
+          <div className="p-3 space-y-3">
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5">Sundavači</p>
+              <div className="flex flex-wrap gap-1.5">
+                {REMOVAL_TEAM.filter(n => n !== 'Terezka').map(name => (
+                  <button key={name} onClick={() => onToggleSundavac(name)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all
+                      ${sundavaci.includes(name) ? activeBg + ' border-transparent' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-100'}`}>
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5">Mytí chytů</p>
+              <div className="flex flex-wrap gap-1.5">
+                {['Korchy', 'Terezka', 'Kuba D.'].map(name => (
+                  <button key={name} onClick={() => onToggleMyti(name)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all
+                      ${myti === name ? 'bg-blue-600 text-white border-transparent' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-100'}`}>
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Logo components ──────────────────────────────────────────────────────
+    const LanovkaLogo = ({ size = 52 }) => (
+      <svg viewBox="0 0 90 72" xmlns="http://www.w3.org/2000/svg"
+        style={{ width: Math.round(size * 90 / 72), height: size }}
+        className="flex-shrink-0">
+        {/* Cable: lower-left → upper-right */}
+        <line x1="6" y1="58" x2="82" y2="10" stroke="#78350f" strokeWidth="5.5" strokeLinecap="round"/>
+        {/* Vertical hang */}
+        <line x1="60" y1="24" x2="60" y2="36" stroke="#78350f" strokeWidth="5" strokeLinecap="round"/>
+        {/* Gondola cabin */}
+        <rect x="38" y="36" width="44" height="30" rx="9" ry="9"
+          fill="none" stroke="#78350f" strokeWidth="5"/>
+      </svg>
+    );
+
+    const LimitLogo = ({ size = 36 }) => {
+      const lc = '#e8e4e4';
+      const pk = '#e6007e';
+      // viewBox: 285 wide × 133 tall
+      // Letter cap-height: y=15 to y=105 (90 units)
+      // Stroke width: 10 units
+      // Letters at: L=x50, I=x90, M=x110..x180, I=x198, T=x217..x277
+      return (
+        <svg viewBox="0 0 285 133" xmlns="http://www.w3.org/2000/svg"
+          style={{ width: Math.round(size * 285 / 133), height: size }}
+          className="flex-shrink-0">
+          {/* Pink dash LEFT (at 75% letter height) */}
+          <rect x="0" y="82" width="44" height="9" rx="1" fill={pk}/>
+          {/* L: vertical stem */}
+          <rect x="50" y="15" width="10" height="90" fill={lc}/>
+          {/* L: foot */}
+          <rect x="50" y="95" width="26" height="10" fill={lc}/>
+          {/* I (2nd letter) */}
+          <rect x="90" y="15" width="10" height="90" fill={lc}/>
+          {/* Pink triangle above I */}
+          <polygon points="95,1 110,15 80,15" fill={pk}/>
+          {/* M: solid with deep V-notch (notch goes to 73% = y=81) */}
+          <polygon points="110,15 120,15 140,81 160,15 170,15 170,105 110,105" fill={lc}/>
+          {/* I (4th letter) */}
+          <rect x="189" y="15" width="10" height="90" fill={lc}/>
+          {/* T crossbar */}
+          <rect x="208" y="15" width="60" height="10" fill={lc}/>
+          {/* T stem */}
+          <rect x="229" y="25" width="10" height="80" fill={lc}/>
+          {/* Pink dash RIGHT above T */}
+          <rect x="208" y="3" width="60" height="10" rx="1" fill={pk}/>
+          {/* Pink dot (below, right of 4th I) */}
+          <circle cx="197" cy="121" r="10" fill={pk}/>
+        </svg>
+      );
+    };
+
+    // ── Slot component ───────────────────────────────────────────────────────
+    function Slot({ num, name, sel, emptyBg, filledBg, filledText, numEmpty, selRing,
+                    onClick, onDragStart, onDragOver, onDrop }) {
+      return (
+        <div onClick={onClick}
+          draggable={!!name}
+          onDragStart={name ? onDragStart : undefined}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border
+            cursor-pointer transition-all duration-150 select-none
+            ${name
+              ? `${filledBg} ${filledText} hover:bg-red-50 hover:border-red-200 group`
+              : `${emptyBg} border-dashed ${sel ? selRing : 'opacity-75'}`
+            }`}>
+          <span className={`w-5 h-5 rounded-full flex items-center justify-center
+            text-xs font-bold flex-shrink-0
+            ${name ? 'bg-white/70 text-gray-600' : numEmpty}`}>
+            {num}
+          </span>
+          {name ? (
+            <>
+              <span className="flex-1 text-sm font-semibold truncate">{name}</span>
+              <GripV c="w-4 h-4 opacity-20 group-hover:opacity-0 flex-shrink-0 transition-opacity" />
+              <X c="w-3.5 h-3.5 opacity-0 group-hover:opacity-50 flex-shrink-0 transition-opacity" />
+            </>
+          ) : (
+            <span className="text-xs text-gray-400 font-medium">
+              {sel ? `Přiřadit: ${sel}` : 'Volný slot'}
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    // ── SessionCard ──────────────────────────────────────────────────────────
+    function SessionCard({ session, day, date, theme, slots, lanoSlot, calInfo,
+      sel, onSlotClick, onDragStartSlot, onDragOverSlot, onDropSlot,
+      onLanoClick, onDragStartLano, onDropLano, onClear, onDateChange }) {
+
+      const [editingDate, setEditingDate] = React.useState(false);
+      const isYellow = theme === 'yellow';
+      const isGreen  = theme === 'green';
+      const rawDay = date.toLocaleString('cs-CZ', { weekday: 'long' });
+      const displayDay = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
+      // Slot count: Tělocvična=2, Lanovka=variable, Limit=variable
+      const maxSlots = calInfo?.sector && !calInfo.isOff
+        ? (isGreen ? 2 : isYellow ? getLanovkaSlotCount(calInfo.sector) : getWedSlotCount(calInfo.sector))
+        : slots.length;
+      const visibleSlots = slots.slice(0, maxSlots);
+      const filled = visibleSlots.filter(Boolean).length + (lanoSlot ? 1 : 0);
+      const total  = maxSlots + (lanoSlot !== undefined ? 1 : 0);
+      const allFilled = filled === total;
+      const flash = false; // conflict prevention removed
+
+      // Theme tokens
+      const hdr      = isYellow ? 'bg-gradient-to-br from-amber-400 to-yellow-400' : isGreen ? 'bg-gradient-to-br from-emerald-500 to-green-600' : 'bg-[#1e1e20]';
+      const hdrText  = isYellow ? 'text-gray-900' : 'text-white';
+      const hdrSub   = isYellow ? 'text-gray-600' : isGreen ? 'text-white/60' : 'text-white/50';
+      const progTrack= isYellow ? 'bg-black/15'   : 'bg-white/10';
+      const progFill = isYellow ? 'bg-gray-700'   : isGreen ? 'bg-emerald-200' : 'bg-[#e6007e]';
+      const countCol = allFilled ? (isYellow ? 'text-gray-900' : isGreen ? 'text-emerald-200' : 'text-[#e6007e]') : (isYellow ? 'text-gray-600' : 'text-white/60');
+
+      const emptyBg  = isYellow
+        ? 'border-amber-200 hover:border-amber-400 hover:bg-amber-50'
+        : isGreen
+        ? 'border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50'
+        : 'border-zinc-200 hover:border-pink-400 hover:bg-zinc-50';
+      const filledBg  = isYellow ? 'bg-amber-50 border-amber-200'   : isGreen ? 'bg-emerald-50 border-emerald-200' : 'bg-zinc-50 border-zinc-200';
+      const filledText= isYellow ? 'text-gray-900' : 'text-zinc-800';
+      const numEmpty  = isYellow ? 'bg-amber-100 text-amber-600'    : isGreen ? 'bg-emerald-100 text-emerald-600' : 'bg-zinc-100 text-zinc-400';
+      const selRing   = isYellow ? 'ring-2 ring-amber-400 ring-offset-1' : isGreen ? 'ring-2 ring-emerald-400 ring-offset-1' : 'ring-2 ring-pink-400 ring-offset-1';
+
+      const slotProps = { sel, emptyBg, filledBg, filledText, numEmpty, selRing,
+        onDragOver: onDragOverSlot };
+
+      return (
+        <div className={`bg-white rounded-2xl overflow-hidden shadow-sm border transition-all duration-300
+          ${flash ? 'ring-2 ring-red-400 ring-offset-2 border-red-200' : 'border-gray-200'}`}>
+
+          {/* Header */}
+          <div className={`${hdr} p-4 h-52 flex flex-col justify-between`}>
+            <div className={`flex items-center justify-between gap-3 ${hdrText}`}>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-xl font-black leading-none">{displayDay}</h3>
+                <div className="flex items-center gap-1 mt-0.5">
+                  {editingDate ? (
+                    <input type="date"
+                      defaultValue={`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
+                      className={`text-xs font-medium outline-none rounded px-1 py-0.5 w-32
+                        ${isYellow ? 'bg-black/10 text-gray-900' : 'bg-white/10 text-white'}`}
+                      onChange={e => { if(e.target.value) { onDateChange(e.target.value); setEditingDate(false); } }}
+                      onBlur={() => setEditingDate(false)}
+                      autoFocus
+                    />
+                  ) : (
+                    <>
+                      <p className={`text-sm font-medium ${hdrSub}`}>{fmtFull(date)}</p>
+                      <button onClick={() => setEditingDate(true)} title="Změnit datum"
+                        className={`p-0.5 rounded transition-opacity opacity-30 hover:opacity-80`}>
+                        <CalEdit c="w-3 h-3" />
+                      </button>
+                    </>
+                  )}
+                </div>
+                {calInfo?.sector && (
+                  <span className={`inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full
+                    ${isYellow ? 'bg-black/10 text-gray-800' : 'bg-white/10 text-white/80'}`}>
+                    {calInfo.sector}
+                    {calInfo.note && <span className="ml-1 opacity-60">· {calInfo.note}</span>}
+                  </span>
+                )}
+                {calInfo?.isOff && (
+                  <span className={`inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full
+                    ${isYellow ? 'bg-black/10 text-gray-700' : 'bg-white/10 text-white/60'}`}>
+                    {calInfo.sector}
+                  </span>
+                )}
+              </div>
+              <div className="flex-shrink-0">
+                <span className={`text-sm font-black tracking-widest flex-shrink-0
+                  ${isYellow ? 'text-black' : isGreen ? 'text-white' : 'text-pink-500'}`}>
+                  {isYellow ? 'LANOVKA' : isGreen ? 'TĚLOCVIČNA' : 'LIMIT'}
+                </span>
+              </div>
+              <button onClick={onClear} title="Vymazat přiřazení"
+                className={`p-1.5 rounded-lg transition-colors flex-shrink-0
+                  ${isYellow ? 'hover:bg-black/10' : 'hover:bg-white/20'}`}>
+                <RotateCcw c="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Sector label */}
+            {calInfo?.sector && !calInfo.isOff && isYellow && (
+              <div className="mt-3 rounded-xl px-3 py-4 flex items-center justify-center min-h-[3.5rem] bg-black/10 ring-1 ring-black/10">
+                <span className={`font-black text-center leading-tight tracking-tight break-words w-full text-amber-900
+                  ${calInfo.sector.length > 20 ? 'text-lg' : calInfo.sector.length > 12 ? 'text-xl' : 'text-2xl'}`}>
+                  {calInfo.sector}
+                </span>
+              </div>
+            )}
+            {/* Limit sequence: Dětská → Přední převis → Zadní převis → Kolmice */}
+            {calInfo?.sector && !calInfo.isOff && !isYellow && !isGreen && (() => {
+              const active = getLimitSectors(calInfo.sector);
+              const steps = [
+                { id: 1, label: 'Dětská' },
+                { id: 2, label: 'Přední převis' },
+                { id: 3, label: 'Zadní převis' },
+                { id: 4, label: 'Kolmice' },
+              ];
+              return (
+                <div className="mt-3 grid grid-cols-4 gap-1.5">
+                  {steps.map(({ id, label }) => (
+                    <div key={id} className={`rounded-lg py-2.5 px-1 text-center
+                      ${active.has(id) ? 'bg-pink-600 ring-1 ring-pink-400' : 'bg-white/5 ring-1 ring-white/10'}`}>
+                      <div className={`text-xs font-black leading-tight
+                        ${active.has(id) ? 'text-white' : 'text-white/30'}`}>
+                        {label}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* Progress */}
+            <div className="mt-3 flex items-center gap-2.5">
+              <div className={`flex-1 ${progTrack} rounded-full h-1.5`}>
+                <div className={`${progFill} rounded-full h-1.5 transition-all duration-500`}
+                  style={{ width: `${(filled / total) * 100}%` }} />
+              </div>
+              <span className={`text-xs font-bold tabular-nums ${countCol}`}>
+                {allFilled && '✓ '}{filled}/{total}
+              </span>
+            </div>
+          </div>
+
+          {/* Main slots */}
+          <div className="p-3 space-y-2">
+            {calInfo?.isOff ? (
+              <div className={`text-center py-4 text-sm font-medium rounded-xl
+                ${isYellow ? 'text-amber-600 bg-amber-50' : isGreen ? 'text-emerald-600 bg-emerald-50' : 'text-zinc-400 bg-zinc-50'}`}>
+                {calInfo.sector === 'Sundavání' ? '🧹 ' : '🚐 '}
+                {calInfo.sector} — není stavění
+              </div>
+            ) : (
+              visibleSlots.map((name, i) => (
+                <Slot key={i} num={i+1} name={name} {...slotProps}
+                  onClick={() => onSlotClick(i)}
+                  onDragStart={() => onDragStartSlot(i, name)}
+                  onDrop={() => onDropSlot(i)} />
+              ))
+            )}
+
+            {/* Lano section (Lanovka only) */}
+            {lanoSlot !== undefined && !calInfo?.isOff && (
+              <div className="mt-3 pt-3 border-t border-amber-100">
+                <p className="text-xs font-bold text-amber-700 mb-2 flex items-center gap-1">
+                  🪢 Lano
+                </p>
+                <Slot num="L" name={lanoSlot} {...slotProps}
+                  emptyBg="border-amber-300 hover:border-amber-500 hover:bg-amber-50"
+                  numEmpty="bg-amber-200 text-amber-700"
+                  onClick={onLanoClick}
+                  onDragStart={() => onDragStartLano && onDragStartLano(lanoSlot)}
+                  onDrop={onDropLano} />
+              </div>
+            )}
+
+            {/* Conflict flash */}
+            {flash && (
+              <div className="flex items-center gap-2 text-xs font-semibold text-red-600
+                bg-red-50 border border-red-100 rounded-xl px-3 py-2 mt-1">
+                <AlertCircle c="w-3.5 h-3.5 flex-shrink-0" />
+                Stavěč je již přiřazen v tomto týdnu!
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ── ClimberChip ──────────────────────────────────────────────────────────
+    function ClimberChip({ name, isSelected, inMon, inWed, onClick, onRemove, onDragStart }) {
+      return (
+        <div draggable onDragStart={onDragStart} onClick={onClick}
+          className={`group flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full border
+            text-sm cursor-pointer transition-all duration-150 select-none
+            ${isSelected
+              ? 'bg-gray-900 border-gray-800 text-white shadow-md scale-[1.03]'
+              : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300 hover:shadow-sm'
+            }`}>
+          <UserIcon c="w-5 h-5 flex-shrink-0 opacity-50" />
+          <span className="font-semibold">{name}</span>
+          {inMon && (
+            <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold
+              ${isSelected ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>Po</span>
+          )}
+          {inWed && (
+            <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold
+              ${isSelected ? 'bg-white/20 text-white' : 'bg-pink-100 text-pink-700'}`}>St</span>
+          )}
+          <button onClick={e => { e.stopPropagation(); onRemove(); }}
+            className={`ml-0.5 p-0.5 rounded-full transition-colors flex-shrink-0
+              ${isSelected
+                ? 'text-white/50 hover:text-white hover:bg-white/20'
+                : 'text-gray-300 hover:text-red-400 hover:bg-red-50'}`}>
+            <X c="w-3 h-3" />
+          </button>
+        </div>
+      );
+    }
+
+    // ── Lanovka floor plan ───────────────────────────────────────────────
+    // Maps CAL sector text → set of highlighted sector numbers (1–5)
+    function getLanovkaSectors(sectorName) {
+      if (!sectorName) return new Set();
+      const s = sectorName.toLowerCase();
+      const out = new Set();
+      if (s.includes('hříbek') || s.includes('hribek'))             out.add(4);
+      if (s.includes('kout')   || s.includes('strop'))              out.add(2);
+      if (s.includes('nový')   || s.includes('nahoře') ||
+          s.includes('šedá')   || s.includes('profil'))             out.add(3);
+      if (s.includes('dole') &&
+          (s.includes('kolm')  || s.includes('přev') ||
+           s.includes('prev')  || s.includes('malé')))              out.add(5);
+      if (!out.has(5) &&
+          (s.includes('přev')  || s.includes('prev') ||
+           s.includes('bizár') || s.includes('bizar')))             out.add(1);
+      return out;
+    }
+
+    function LanovkaFloorPlan({ activeSectors }) {
+      const as = activeSectors || new Set();
+      const aF = '#fbbf24', iF = '#2a2a2c';
+      const aS = '#f59e0b', iS = '#484848';
+      const aL = '#78350f', iL = '#555';
+      const f  = n => as.has(n) ? aF : iF;
+      const st = n => as.has(n) ? aS : iS;
+      const lb = n => as.has(n) ? aL : iL;
+
+      return (
+        <svg viewBox="0 0 300 224" xmlns="http://www.w3.org/2000/svg" className="w-full">
+          <rect width="300" height="224" fill="#111113" rx="8"/>
+
+          {/* ══ HORNÍ PATRO — sektory 1, 3, 4 ══ */}
+          <text x="12" y="14" fontSize="5" fontWeight="700" fontFamily="Arial,sans-serif"
+            fill="#444" letterSpacing="1">NAHOŘE</text>
+
+          {/* 1. Převis + Bizár — jeden spojený schodový tvar */}
+          <polygon points="9,34 137,34 137,20 201,20 201,52 9,52"
+            fill={f(1)} stroke={st(1)} strokeWidth="1.5"/>
+          <text x="70" y="45" textAnchor="middle" fontSize="8" fontWeight="900"
+            fontFamily="Arial Black,sans-serif" fill={lb(1)}>1</text>
+          <text x="70" y="55" textAnchor="middle" fontSize="4.5" fontWeight="600"
+            fontFamily="Arial,sans-serif" fill={lb(1)} opacity="0.85">Převis / Bizár</text>
+
+          {/* 3. Nový profil — jeden polygon (zkosený blok + spodní proužek spojeny) */}
+          <polygon points="212,9 291,9 291,108 274,108 274,78 260,64 212,40"
+            fill={f(3)} stroke={st(3)} strokeWidth="1.5"/>
+          <text x="263" y="34" textAnchor="middle" fontSize="8" fontWeight="900"
+            fontFamily="Arial Black,sans-serif" fill={lb(3)}>3</text>
+          <text x="263" y="44" textAnchor="middle" fontSize="4.5" fontWeight="600"
+            fontFamily="Arial,sans-serif" fill={lb(3)} opacity="0.85">Nový profil</text>
+          <text x="282" y="100" textAnchor="middle" fontSize="5.5" fontWeight="900"
+            fontFamily="Arial Black,sans-serif" fill={lb(3)}>3</text>
+
+          {/* 3. Šedá kolmice — chybějící část sektoru 3, úzký vertikální proužek */}
+          <rect x="193" y="56" width="18" height="52" rx="1"
+            fill={f(3)} stroke={st(3)} strokeWidth="1.5"/>
+          <text x="202" y="82" textAnchor="middle" fontSize="5.5" fontWeight="900"
+            fontFamily="Arial Black,sans-serif" fill={lb(3)}>3</text>
+          <text x="202" y="91" textAnchor="middle" fontSize="3.5" fontWeight="600"
+            fontFamily="Arial,sans-serif" fill={lb(3)} opacity="0.85">Šedá</text>
+          <text x="202" y="99" textAnchor="middle" fontSize="3.5" fontWeight="600"
+            fontFamily="Arial,sans-serif" fill={lb(3)} opacity="0.85">kolmice</text>
+
+          {/* 4. Hříbek — přesný kosočtverec, nezasahuje do jiných profilů */}
+          <polygon points="115,56 190,82 115,108 40,82"
+            fill={f(4)} stroke={st(4)} strokeWidth="1.5"/>
+          <text x="115" y="78" textAnchor="middle" fontSize="9" fontWeight="900"
+            fontFamily="Arial Black,sans-serif" fill={lb(4)}>4</text>
+          <text x="115" y="89" textAnchor="middle" fontSize="5" fontWeight="600"
+            fontFamily="Arial,sans-serif" fill={lb(4)} opacity="0.85">Hříbek</text>
+
+          {/* ══ DOLNÍ PATRO — sektory 2 vlevo, 5 vpravo, uprostřed místo ══ */}
+          <text x="12" y="122" fontSize="5" fontWeight="700" fontFamily="Arial,sans-serif"
+            fill="#444" letterSpacing="1">DOLE</text>
+
+          {/* 2. Kout / Strop — levá strana */}
+          <rect x="9" y="126" width="80" height="88" rx="1"
+            fill={f(2)} stroke={st(2)} strokeWidth="1.5"/>
+          <text x="49" y="168" textAnchor="middle" fontSize="9" fontWeight="900"
+            fontFamily="Arial Black,sans-serif" fill={lb(2)}>2</text>
+          <text x="49" y="179" textAnchor="middle" fontSize="4.5" fontWeight="600"
+            fontFamily="Arial,sans-serif" fill={lb(2)} opacity="0.85">Kout / Strop</text>
+
+          {/* 5. Dole kolmice — vertikální proužek vpravo, uprostřed místo */}
+          <rect x="205" y="126" width="52" height="88" rx="1"
+            fill={f(5)} stroke={st(5)} strokeWidth="1.5"/>
+          <text x="231" y="168" textAnchor="middle" fontSize="9" fontWeight="900"
+            fontFamily="Arial Black,sans-serif" fill={lb(5)}>5</text>
+          <text x="231" y="179" textAnchor="middle" fontSize="4.5" fontWeight="600"
+            fontFamily="Arial,sans-serif" fill={lb(5)} opacity="0.85">Kolmice / Převis</text>
+        </svg>
+      );
+    }
+
+
+    // ── Limit floor plan ─────────────────────────────────────────────────
+    // Sectors per the PDF plan:
+    //  1 = Dětská (left, 4 setters)   2 = Přední převis (center-lower, 3 setters)
+    //  3 = Zadní převis (center-upper, 3 setters)   4 = Kolmice (right, 4 setters)
+    function getLimitSectors(sectorName) {
+      if (!sectorName) return new Set();
+      const s = sectorName.toLowerCase();
+      const out = new Set();
+      if (s.includes('dět') || s.includes('det'))   out.add(1);
+      if (s.includes('přev') || s.includes('prev')) {
+        const isZadni  = s.includes('zadní') || s.includes('zadni');
+        const isPredni = s.includes('přední') || s.includes('predni');
+        if (isZadni && !isPredni)       out.add(3);          // Zadní převis only
+        else if (isPredni && !isZadni)  out.add(2);          // Přední převis only
+        else                            { out.add(2); out.add(3); } // generic → both
+      }
+      if (s.includes('kolm'))                        out.add(4);
+      return out;
+    }
+    function getWedSlotCount(sectorName) {
+      if (!sectorName) return 4;
+      const s = sectorName.toLowerCase();
+      if (s.includes('přev') || s.includes('prev')) return 3; // 3 setters for převis
+      return 4; // Dětská and Kolmice: 4 setters
+    }
+    function getLanovkaSlotCount(sector) {
+      if (!sector) return 4;
+      const s = sector.toLowerCase();
+      if (s.includes('hříbek') || s.includes('hribek')) return 4;
+      if (s.includes('převis') && s.includes('biz'))    return 3;
+      if (s.includes('nový')   || s.includes('novy'))   return 3;
+      return 2; // Dole kout+Strop, Dole kolmice+převis
+    }
+
+    function LimitFloorPlan({ activeSectors }) {
+      const as = activeSectors || new Set();
+      const aF = '#e6007e', iF = '#2c2c2e';
+      const aS = '#ff4db5', iS = '#3a3a3c';
+      const aL = '#fff',    iL = '#666';
+      const f  = n => as.has(n) ? aF : iF;
+      const st = n => as.has(n) ? aS : iS;
+      const lb = n => as.has(n) ? aL : iL;
+      // 3 equal columns (each 84px), 13px gaps, 6px margin → viewBox 300
+      const cw = 84, g = 13, m = 6;
+      const x1 = m, x2 = m + cw + g, x3 = m + 2*(cw + g);
+      const cx1 = x1 + cw/2, cx2 = x2 + cw/2, cx3 = x3 + cw/2;
+      return (
+        <svg viewBox="0 0 300 185" xmlns="http://www.w3.org/2000/svg" className="w-full">
+          <rect width="300" height="185" fill="#111113" rx="8"/>
+
+          {/* 1. Dětská */}
+          <polygon points={`${x1+5},6 ${x1+cw-5},6 ${x1+cw},179 ${x1},179`}
+            fill={f(1)} stroke={st(1)} strokeWidth="1.5"/>
+          <text x={cx1} y="86" textAnchor="middle" fontSize="13" fontWeight="900"
+            fontFamily="Arial Black,sans-serif" fill={lb(1)}>1</text>
+          <text x={cx1} y="100" textAnchor="middle" fontSize="6.5" fontWeight="700"
+            fontFamily="Arial,sans-serif" fill={lb(1)} opacity="0.8">Dětská</text>
+          <text x={cx1} y="111" textAnchor="middle" fontSize="6" fontWeight="600"
+            fontFamily="Arial,sans-serif" fill={lb(1)} opacity="0.5">4 stavěči</text>
+
+          {/* 3. Zadní převis */}
+          <rect x={x2} y="18" width={cw} height="64" rx="2"
+            fill={f(3)} stroke={st(3)} strokeWidth="1.5"/>
+          <text x={cx2} y="44" textAnchor="middle" fontSize="11" fontWeight="900"
+            fontFamily="Arial Black,sans-serif" fill={lb(3)}>3</text>
+          <text x={cx2} y="57" textAnchor="middle" fontSize="6.5" fontWeight="700"
+            fontFamily="Arial,sans-serif" fill={lb(3)} opacity="0.8">Zadní převis</text>
+          <text x={cx2} y="68" textAnchor="middle" fontSize="6" fontWeight="600"
+            fontFamily="Arial,sans-serif" fill={lb(3)} opacity="0.5">3 stavěči</text>
+
+          {/* 2. Přední převis */}
+          <rect x={x2} y="103" width={cw} height="64" rx="2"
+            fill={f(2)} stroke={st(2)} strokeWidth="1.5"/>
+          <text x={cx2} y="129" textAnchor="middle" fontSize="11" fontWeight="900"
+            fontFamily="Arial Black,sans-serif" fill={lb(2)}>2</text>
+          <text x={cx2} y="143" textAnchor="middle" fontSize="6.5" fontWeight="700"
+            fontFamily="Arial,sans-serif" fill={lb(2)} opacity="0.8">Přední převis</text>
+          <text x={cx2} y="154" textAnchor="middle" fontSize="6" fontWeight="600"
+            fontFamily="Arial,sans-serif" fill={lb(2)} opacity="0.5">3 stavěči</text>
+
+          {/* 4. Kolmice */}
+          <rect x={x3} y="6" width={cw} height="173" rx="2"
+            fill={f(4)} stroke={st(4)} strokeWidth="1.5"/>
+          <text x={cx3} y="86" textAnchor="middle" fontSize="11" fontWeight="900"
+            fontFamily="Arial Black,sans-serif" fill={lb(4)}>4</text>
+          <text x={cx3} y="100" textAnchor="middle" fontSize="6.5" fontWeight="700"
+            fontFamily="Arial,sans-serif" fill={lb(4)} opacity="0.8">Kolmice</text>
+          <text x={cx3} y="112" textAnchor="middle" fontSize="6" fontWeight="600"
+            fontFamily="Arial,sans-serif" fill={lb(4)} opacity="0.5">4 stavěči</text>
+        </svg>
+      );
+    }
+
+    // ── YearPlan ─────────────────────────────────────────────────────────
+    function YearPlan() {
+      const MONTHS_CS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+      const lanovkaKey = [
+        { n:'L1', label:'Převis + Bizár',               slots:3 },
+        { n:'L2', label:'Dole kout + Strop',            slots:2 },
+        { n:'L3', label:'Nový profil + nahoře kolmice', slots:3 },
+        { n:'L4', label:'Hříbek',                       slots:4 },
+        { n:'L5', label:'Dole kolmice + převis',        slots:2 },
+      ];
+      const limitKey = [
+        { label:'Dětská',        day:'čtvrtek' },
+        { label:'Přední převis', day:'středa'  },
+        { label:'Zadní převis',  day:'středa'  },
+        { label:'Kolmice',       day:'středa'  },
+        { label:'Volno',         day:'—'       },
+      ];
+
+      // Build monthly data from CAL
+      const monthly = Array.from({length:12}, () => ({ lanovka:[], limit:[], gym:0 }));
+      Object.entries(CAL).sort().forEach(([key, entry]) => {
+        const mon = new Date(key);
+        if (mon.getFullYear() !== 2026) return;
+        const m = mon.getMonth();
+        const d = n => mon.getDate() + n;
+        const dayName = d => d.toLocaleString('cs-CZ', { weekday: 'long' });
+        if (entry.mon && !entry.mon.isOff && entry.mon.sector)
+          monthly[m].lanovka.push({ day: mon.getDate(), dayName: dayName(mon), sector: entry.mon.sector });
+        if (entry.wed && !entry.wed.isOff && entry.wed.sector) {
+          const wOff = isDetskaWed(entry.wed.sector) ? 3 : 2;
+          const wedD = new Date(mon); wedD.setDate(wedD.getDate() + wOff);
+          monthly[wedD.getMonth()].limit.push({ day: wedD.getDate(), dayName: dayName(wedD), sector: entry.wed.sector });
+        }
+        if (entry.thu) {
+          const thuD = new Date(mon); thuD.setDate(thuD.getDate() + 3);
+          monthly[thuD.getMonth()].gym += 1;
+        }
+      });
+
+      return (
+        <div className="mt-2 space-y-5">
+          {/* Rotation keys */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Lanovka */}
+            <div className="bg-amber-50 rounded-2xl p-4 space-y-3">
+              <div>
+                <p className="text-xs font-black text-amber-800 uppercase tracking-wider">Lanovka — rotace</p>
+                <p className="text-xs text-amber-600 mt-1">Leden–červen + září–prosinec: každý týden v pondělí. Červenec–srpen: střídá se s Limitem.</p>
+              </div>
+              {lanovkaKey.map(r => (
+                <div key={r.n} className="flex items-center gap-2 py-1.5 border-b border-amber-100 last:border-0">
+                  <span className="text-xs font-black text-amber-500 w-6">{r.n}</span>
+                  <span className="text-sm text-amber-900 flex-1">{r.label}</span>
+                  <span className="text-xs font-semibold text-amber-600">{r.slots} st.</span>
+                </div>
+              ))}
+            </div>
+            {/* Limit */}
+            <div className="bg-zinc-900 rounded-2xl p-4 space-y-3">
+              <div>
+                <p className="text-xs font-black text-pink-400 uppercase tracking-wider">Limit — rotace</p>
+                <p className="text-xs text-white/40 mt-1">Od dubna 2026. Středa (Dětská výjimečně čtvrtek). Červenec–srpen: střídá se s Lanovkou.</p>
+              </div>
+              {limitKey.map((r,i) => (
+                <div key={i} className="flex items-center gap-2 py-1.5 border-b border-white/10 last:border-0">
+                  <span className="text-xs font-black text-pink-500 w-4">{i+1}.</span>
+                  <span className="text-sm text-white flex-1">{r.label}</span>
+                  <span className="text-xs text-white/30">{r.day}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Three separate wall calendars side by side */}
+          <div className="grid grid-cols-3 gap-4">
+
+            {/* LANOVKA */}
+            <div className="rounded-2xl overflow-hidden border border-amber-200">
+              <div className="bg-gradient-to-br from-amber-400 to-yellow-400 px-4 py-3">
+                <p className="text-sm font-black text-gray-900 uppercase tracking-wider">Lanovka</p>
+                <p className="text-xs text-amber-800/70 mt-0.5">pondělí</p>
+              </div>
+              {MONTHS_CS.map((name, m) => {
+                const d = monthly[m];
+                if (d.lanovka.length === 0 && d.gym === 0) return (
+                  <div key={m} className="px-3 py-2 border-b border-amber-50 last:border-0 bg-white">
+                    <span className="text-[10px] font-black text-amber-300 uppercase">{name}</span>
+                    <span className="text-[11px] text-gray-200 ml-2">—</span>
+                  </div>
+                );
+                return (
+                  <div key={m} className="px-3 py-2.5 border-b border-amber-100 last:border-0 bg-amber-50/40">
+                    <p className="text-[10px] font-black text-amber-500 uppercase tracking-wide mb-1">{name}</p>
+                    {d.lanovka.map((s,i) => (
+                      <div key={i} className="mb-0.5">
+                        <span className="text-[10px] text-amber-400 font-bold">{s.day}. {s.dayName} </span>
+                        <span className="text-[11px] font-semibold text-amber-900">{s.sector}</span>
+                      </div>
+                    ))}
+                    {d.gym > 0 && <div className="text-[10px] font-bold text-emerald-600 mt-0.5">Tělocvična ×{d.gym}</div>}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* LIMIT */}
+            <div className="rounded-2xl overflow-hidden border border-zinc-700">
+              <div className="bg-[#1e1e20] px-4 py-3">
+                <p className="text-sm font-black text-pink-400 uppercase tracking-wider">Limit</p>
+                <p className="text-xs text-white/30 mt-0.5">středa / čtvrtek</p>
+              </div>
+              {MONTHS_CS.map((name, m) => {
+                const d = monthly[m];
+                if (d.limit.length === 0) return (
+                  <div key={m} className="px-3 py-2 border-b border-zinc-800 last:border-0 bg-zinc-900">
+                    <span className="text-[10px] font-black text-zinc-600 uppercase">{name}</span>
+                    <span className="text-[11px] text-zinc-700 ml-2">—</span>
+                  </div>
+                );
+                return (
+                  <div key={m} className="px-3 py-2.5 border-b border-zinc-800 last:border-0 bg-zinc-900">
+                    <p className="text-[10px] font-black text-pink-500 uppercase tracking-wide mb-1">{name}</p>
+                    {d.limit.map((s,i) => (
+                      <div key={i} className="mb-0.5">
+                        <span className="text-[10px] text-pink-400 font-bold">{s.day}. {s.dayName} </span>
+                        <span className="text-[11px] font-semibold text-pink-100">{s.sector}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* TĚLOCVIČNA */}
+            <div className="rounded-2xl overflow-hidden border border-emerald-200">
+              <div className="bg-gradient-to-br from-emerald-500 to-green-600 px-4 py-3">
+                <p className="text-sm font-black text-white uppercase tracking-wider">Tělocvična</p>
+                <p className="text-xs text-white/60 mt-0.5">čtvrtek · každé 4 týdny</p>
+              </div>
+              {MONTHS_CS.map((name, m) => {
+                const d = monthly[m];
+                return (
+                  <div key={m} className={`px-3 py-2.5 border-b border-emerald-100 last:border-0 ${d.gym > 0 ? 'bg-emerald-50/60' : 'bg-white'}`}>
+                    <span className="text-[10px] font-black text-emerald-500 uppercase tracking-wide">{name}</span>
+                    {d.gym > 0
+                      ? <span className="text-[11px] font-bold text-emerald-800 ml-2">×{d.gym}</span>
+                      : <span className="text-[11px] text-gray-200 ml-2">—</span>}
+                  </div>
+                );
+              })}
+            </div>
+
+          </div>
+        </div>
+      );
+    }
+
+    // ── MonthlyOccupancy ─────────────────────────────────────────────────
+    function MonthlyOccupancy({ data }) {
+      const now = new Date();
+      const months = [0, 1, 2].map(offset => {
+        const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+        return { year: d.getFullYear(), month: d.getMonth() }; // 0-indexed
+      });
+
+      return (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-4 pt-4 pb-2 border-b border-gray-100">
+            <h2 className="font-bold text-gray-900 text-sm">Obsazenost</h2>
+          </div>
+          <div className="p-3 space-y-3">
+            {months.map(({ year, month }) => {
+              // Compute occupancy for this month
+              let monFill = 0, monTotal = 0;
+              let wedFill = 0, wedTotal = 0;
+              let thuFill = 0, thuTotal = 0;
+
+              Object.keys(CAL).forEach(k => {
+                const [ky, km, kd] = k.split('-').map(Number);
+                const monDate = new Date(ky, km - 1, kd);
+                const calEntry = CAL[k];
+                const wd = data[k] ?? { monday: [], mondayLano: null, wednesday: [], thursday: [] };
+                const wOff = isDetskaWed(calEntry?.wed?.sector) ? 3 : 2;
+
+                // Lanovka — Monday
+                if (calEntry?.mon && !calEntry.mon.isOff) {
+                  const sessionDate = new Date(ky, km - 1, kd);
+                  if (sessionDate.getFullYear() === year && sessionDate.getMonth() === month) {
+                    const maxSlots = getLanovkaSlotCount(calEntry.mon.sector);
+                    monTotal += maxSlots + 1; // +1 for lano
+                    monFill += (wd.monday || []).slice(0, maxSlots).filter(Boolean).length + (wd.mondayLano ? 1 : 0);
+                  }
+                }
+                // Limit — Wed (+2) or Thu (+3 for Dětská)
+                if (calEntry?.wed && !calEntry.wed.isOff && calEntry.wed.sector !== 'Volno') {
+                  const sessionDate = addDays(monDate, wOff);
+                  if (sessionDate.getFullYear() === year && sessionDate.getMonth() === month) {
+                    const maxSlots = getWedSlotCount(calEntry.wed.sector);
+                    wedTotal += maxSlots;
+                    wedFill += (wd.wednesday || []).slice(0, maxSlots).filter(Boolean).length;
+                  }
+                }
+                // Tělocvična — Thursday (+3)
+                if (calEntry?.thu && !calEntry.thu.isOff) {
+                  const sessionDate = addDays(monDate, 3);
+                  if (sessionDate.getFullYear() === year && sessionDate.getMonth() === month) {
+                    thuTotal += 2;
+                    thuFill += (wd.thursday || []).slice(0, 2).filter(Boolean).length;
+                  }
+                }
+              });
+
+              const pct = (f, t) => t ? Math.round(f / t * 100) : null;
+              const monPct = pct(monFill, monTotal);
+              const wedPct = pct(wedFill, wedTotal);
+              const thuPct = pct(thuFill, thuTotal);
+              const monthLabel = new Date(year, month, 1).toLocaleString('cs-CZ', { month: 'long' });
+
+              const Bar = ({ pct, color }) => pct === null ? null : (
+                <div className="flex items-center gap-1.5">
+                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-xs font-bold tabular-nums w-7 text-right text-gray-600">{pct}%</span>
+                </div>
+              );
+
+              return (
+                <div key={`${year}-${month}`} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  <p className="text-xs font-black text-gray-800 mb-2 capitalize">{monthLabel} {year}</p>
+                  {monPct !== null && (
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs text-amber-700 font-semibold w-20 shrink-0">Lanovka</span>
+                      <Bar pct={monPct} color="bg-amber-400" />
+                    </div>
+                  )}
+                  {wedPct !== null && (
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs text-pink-700 font-semibold w-20 shrink-0">Limit</span>
+                      <Bar pct={wedPct} color="bg-pink-500" />
+                    </div>
+                  )}
+                  {thuPct !== null && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-emerald-700 font-semibold w-20 shrink-0">Tělocvična</span>
+                      <Bar pct={thuPct} color="bg-emerald-500" />
+                    </div>
+                  )}
+                  {monPct === null && wedPct === null && thuPct === null && (
+                    <p className="text-xs text-gray-400">Žádné stavění</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ── StatsPanel ───────────────────────────────────────────────────────
+    function StatsPanel({ stats, team }) {
+      const now = new Date();
+      const monthName = now.toLocaleString('cs-CZ', { month: 'long' });
+      const sorted = [...team].sort((a, b) => (stats[b]?.year ?? 0) - (stats[a]?.year ?? 0));
+      return (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-4 pt-4 pb-2 border-b border-gray-100">
+            <h2 className="font-bold text-gray-900 text-sm">Statistiky</h2>
+            <div className="flex gap-1 mt-2 text-xs text-gray-400 font-semibold uppercase tracking-wide">
+              <span className="flex-1">Stavěč</span>
+              <span className="w-12 text-center capitalize">{monthName.slice(0,3)}</span>
+              <span className="w-12 text-center">{now.getFullYear()}</span>
+            </div>
+          </div>
+          <div className="px-4 py-2">
+            {sorted.map((name, i) => {
+              const s = stats[name] ?? { month: 0, year: 0 };
+              return (
+                <div key={name} className={`flex items-center gap-1 py-1.5
+                  ${i < sorted.length - 1 ? 'border-b border-gray-50' : ''}`}>
+                  <span className="flex-1 text-sm font-semibold text-gray-800 truncate">{name}</span>
+                  <span className={`w-12 text-center text-sm tabular-nums font-bold
+                    ${s.month > 0 ? 'text-amber-600' : 'text-gray-300'}`}>{s.month}</span>
+                  <span className={`w-12 text-center text-sm tabular-nums font-bold
+                    ${s.year > 0 ? 'text-gray-700' : 'text-gray-300'}`}>{s.year}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="px-4 pb-3 text-xs text-gray-400 text-center">
+            stavění celkem
+          </div>
+        </div>
+      );
+    }
+
+    // ── RemovalStatsPanel ────────────────────────────────────────────────────
+    function RemovalStatsPanel({ stats }) {
+      const now = new Date();
+      const monthName = now.toLocaleString('cs-CZ', { month: 'long' });
+      const sorted = [...REMOVAL_TEAM].sort((a, b) => (stats[b]?.sundYear ?? 0) - (stats[a]?.sundYear ?? 0));
+      return (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-4 pt-4 pb-2 border-b border-gray-100">
+            <h2 className="font-bold text-gray-900 text-sm">Sundavání + Mytí</h2>
+            <div className="flex gap-1 mt-2 text-xs text-gray-400 font-semibold uppercase tracking-wide">
+              <span className="flex-1"></span>
+              <span className="w-8 text-center">S</span>
+              <span className="w-8 text-center">M</span>
+            </div>
+          </div>
+          <div className="px-4 py-2">
+            {sorted.map((name, i) => {
+              const s = stats[name] ?? { sundYear: 0, mytiYear: 0 };
+              return (
+                <div key={name} className={`flex items-center gap-1 py-1.5
+                  ${i < sorted.length - 1 ? 'border-b border-gray-50' : ''}`}>
+                  <span className="flex-1 text-sm font-semibold text-gray-800 truncate">{name}</span>
+                  <span className={`w-8 text-center text-sm tabular-nums font-bold
+                    ${s.sundYear > 0 ? 'text-pink-600' : 'text-gray-300'}`}>{s.sundYear}</span>
+                  <span className={`w-8 text-center text-sm tabular-nums font-bold
+                    ${s.mytiYear > 0 ? 'text-blue-500' : 'text-gray-300'}`}>{s.mytiYear}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="px-4 pb-3 text-xs text-gray-400 text-center">
+            S = sundavání &nbsp; M = mytí
+          </div>
+        </div>
+      );
+    }
+
+    // ── App ──────────────────────────────────────────────────────────────────
+    function App() {
+      const [team,    setTeam]    = useState(TEAM);
+      const [offset,  setOffset]  = useState(0);
+      const [data,    setData]    = useState(() => {
+        try { const s = localStorage.getItem('climbing-setters'); return s ? JSON.parse(s) : {}; } catch { return {}; }
+      });
+      const [sel,     setSel]     = useState(null);
+      const [drag,    setDrag]    = useState(null);  // { from, climber, session, idx? }
+      React.useEffect(() => {
+        try { localStorage.setItem('climbing-setters', JSON.stringify(data)); } catch {}
+        window.__appData = data;
+        const t = setTimeout(() => {
+          fetch('/sync', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) }).catch(() => {});
+        }, 1000);
+        return () => clearTimeout(t);
+      }, [data]);
+
+      const monday = addDays(getMonday(new Date()), offset * 7);
+      const friday = addDays(monday, 4);
+      const key    = weekKey(monday);
+      const week   = data[key] ?? initWeek(key);
+      const calMon = CAL[key]?.mon ?? null;
+      const calWed = CAL[key]?.wed ?? null;
+      const calThu = CAL[key]?.thu ?? null;
+
+      // Dětská na Limitu se staví ve čtvrtek (+3), ostatní sektory ve středu (+2)
+      const wedOffset = isDetskaWed(calWed?.sector) ? 3 : 2;
+      // Custom date overrides (for competitions etc.)
+      const monDate = week.monDateOverride ? new Date(week.monDateOverride) : monday;
+      const wedDate = week.wedDateOverride ? new Date(week.wedDateOverride) : addDays(monday, wedOffset);
+      const thuDate = week.thuDateOverride ? new Date(week.thuDateOverride) : addDays(monday, 3);
+      function setMonDate(iso) { setWeek({ ...week, monDateOverride: iso }); }
+      function setWedDate(iso) { setWeek({ ...week, wedDateOverride: iso }); }
+      function setThuDate(iso) { setWeek({ ...week, thuDateOverride: iso }); }
+
+      function setWeek(w) { setData(d => ({ ...d, [key]: w })); }
+
+      // ── Badge helpers (display only) ──────────────────────────────────────
+      function isMonday(c)    { return week.monday.includes(c) || week.mondayLano === c; }
+      function isWednesday(c) { return week.wednesday.includes(c); }
+
+      // ── Assign / remove ───────────────────────────────────────────────────
+      function assign(climber, session, idx) {
+
+        if (session === 'mondayLano') {
+          if (week.mondayLano !== null) return false;
+          setWeek({ ...week, mondayLano: climber });
+          return true;
+        }
+        if (week[session][idx] !== null) return false;
+        if (week[session].includes(climber)) return false;
+        setWeek({ ...week, [session]: week[session].map((s,i) => i === idx ? climber : s) });
+        return true;
+      }
+
+      function remove(session, idx) {
+        if (session === 'mondayLano') {
+          const c = week.mondayLano;
+          setWeek({ ...week, mondayLano: null });
+          if (sel === c) setSel(null);
+          return;
+        }
+        const c = week[session][idx];
+        setWeek({ ...week, [session]: week[session].map((s,i) => i === idx ? null : s) });
+        if (sel === c) setSel(null);
+      }
+
+      function clearSession(session) {
+        if (session === 'monday') {
+          setWeek({ ...week, monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null });
+        } else if (session === 'wednesday') {
+          setWeek({ ...week, wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null });
+        } else {
+          setWeek({ ...week, thursday: E4() });
+        }
+        setSel(null);
+      }
+      function clearWeek() {
+        setData(d => { const n={...d}; delete n[key]; return n; });
+        setSel(null);
+      }
+      function toggleSundavac(session, name) {
+        const fld = session === 'monday' ? 'mondaySundavaci' : 'wednesdaySundavaci';
+        const curr = week[fld] || [];
+        setWeek({ ...week, [fld]: curr.includes(name) ? curr.filter(x => x !== name) : [...curr, name] });
+      }
+      function toggleMyti(session, name) {
+        const fld = session === 'monday' ? 'mondayMyti' : 'wednesdayMyti';
+        setWeek({ ...week, [fld]: week[fld] === name ? null : name });
+      }
+
+      // ── Click ─────────────────────────────────────────────────────────────
+      function onSlotClick(session, idx) {
+        if (week[session][idx]) remove(session, idx);
+        else if (sel) assign(sel, session, idx);
+        // sel stays active — assign to multiple slots/sessions in one go
+      }
+      function onLanoClick() {
+        if (week.mondayLano) remove('mondayLano', 0);
+        else if (sel) assign(sel, 'mondayLano', 0);
+      }
+      function onChipClick(name) { setSel(s => s === name ? null : name); }
+      function onThuSlotClick(idx) {
+        if ((week.thursday || E4())[idx]) remove('thursday', idx);
+        else if (sel) assign(sel, 'thursday', idx);
+      }
+
+      // ── Team management ───────────────────────────────────────────────────
+      function deleteClimber(name) {
+        setTeam(t => t.filter(x => x !== name));
+        if (sel === name) setSel(null);
+        setData(d => {
+          const out = {};
+          for (const [k,w] of Object.entries(d)) {
+            out[k] = {
+              monday:    w.monday.map(s => s===name ? null : s),
+              mondayLano: w.mondayLano === name ? null : w.mondayLano,
+              wednesday: w.wednesday.map(s => s===name ? null : s),
+              thursday: (w.thursday || E4()).map(s => s===name ? null : s),
+              mondaySundavaci: (w.mondaySundavaci || []).filter(s => s !== name),
+              mondayMyti: w.mondayMyti === name ? null : w.mondayMyti,
+              wednesdaySundavaci: (w.wednesdaySundavaci || []).filter(s => s !== name),
+              wednesdayMyti: w.wednesdayMyti === name ? null : w.wednesdayMyti,
+            };
+          }
+          return out;
+        });
+      }
+
+      // ── Drag ──────────────────────────────────────────────────────────────
+      function onDragStartPool(name) { setDrag({ from:'pool', climber:name }); setSel(null); }
+      function onDragStartSlot(session, idx, name) { setDrag({ from:'slot', climber:name, session, idx }); }
+      function onDragStartLano(name) { if (name) setDrag({ from:'lano', climber:name }); }
+
+      function onDropSlot(session, idx) {
+        if (!drag) return;
+        const { from, climber, session: src, idx: srcIdx } = drag;
+        setDrag(null);
+        if (from === 'pool') {
+          assign(climber, session, idx);
+        } else if (from === 'lano') {
+          // lano → regular slot
+          if (week[session][idx] !== null) return;
+          setWeek({ ...week, mondayLano: null,
+            [session]: week[session].map((s,i) => i===idx ? climber : s) });
+        } else {
+          if (src === session) {
+            if (idx === srcIdx || week[session][idx] !== null) return;
+            const s = [...week[session]]; s[srcIdx]=null; s[idx]=climber;
+            setWeek({ ...week, [session]: s });
+          } else {
+            // cross-session drag: just assign normally
+            assign(climber, session, idx);
+          }
+        }
+      }
+      function onDropLano() {
+        if (!drag) return;
+        const { from, climber, session: src, idx: srcIdx } = drag;
+        setDrag(null);
+        if (from === 'pool') {
+          assign(climber, 'mondayLano', 0);
+        } else if (from === 'slot') {
+          if (week.mondayLano !== null) return;
+          const s = [...week[src]]; s[srcIdx] = null;
+          setWeek({ ...week, [src]: s, mondayLano: climber });
+        }
+      }
+      function onDropPool() {
+        if (!drag) return;
+        if (drag.from === 'slot') remove(drag.session, drag.idx);
+        else if (drag.from === 'lano') remove('mondayLano', 0);
+        setDrag(null);
+      }
+
+      // ── Statistics ────────────────────────────────────────────────────────
+      function computeStats() {
+        const now = new Date();
+        const thisYear  = now.getFullYear();
+        const thisMonth = now.getMonth(); // 0-indexed
+        const stats = {};
+        TEAM.forEach(n => { stats[n] = { month: 0, year: 0 }; });
+
+        function countWeek(wd, defaultMonDate, calEntry) {
+          const effectiveMon = wd.monDateOverride ? new Date(wd.monDateOverride) : defaultMonDate;
+          const wOff = isDetskaWed(calEntry?.wed?.sector) ? 3 : 2;
+          const effectiveWed = wd.wedDateOverride ? new Date(wd.wedDateOverride) : addDays(defaultMonDate, wOff);
+          function tally(name, date) {
+            if (!name || !stats[name]) return;
+            if (date.getFullYear() === thisYear) {
+              stats[name].year++;
+              if (date.getMonth() === thisMonth) stats[name].month++;
+            }
+          }
+          (wd.monday || []).forEach(s => tally(s, effectiveMon));
+          tally(wd.mondayLano, effectiveMon);
+          (wd.wednesday || []).forEach(s => tally(s, effectiveWed));
+          const effectiveThu = wd.thuDateOverride ? new Date(wd.thuDateOverride) : addDays(defaultMonDate, 3);
+          (wd.thursday || []).forEach(s => tally(s, effectiveThu));
+        }
+
+        // All weeks from CAL, with user data overrides where present
+        Object.keys(CAL).forEach(k => {
+          const [y, m, d] = k.split('-').map(Number);
+          const monDate = new Date(y, m-1, d);
+          countWeek(data[k] ?? initWeek(k), monDate, CAL[k]);
+        });
+        // Any user-edited weeks outside CAL
+        Object.keys(data).forEach(k => {
+          if (!CAL[k]) {
+            const [y, m, d] = k.split('-').map(Number);
+            countWeek(data[k], new Date(y, m-1, d), null);
+          }
+        });
+        return stats;
+      }
+
+      function computeRemovalStats() {
+        const now = new Date();
+        const thisYear  = now.getFullYear();
+        const thisMonth = now.getMonth();
+        const stats = {};
+        REMOVAL_TEAM.forEach(n => { stats[n] = { sundMonth: 0, sundYear: 0, mytiMonth: 0, mytiYear: 0 }; });
+        function tally(name, date, field) {
+          if (!name || !stats[name]) return;
+          if (date.getFullYear() === thisYear) {
+            stats[name][field + 'Year']++;
+            if (date.getMonth() === thisMonth) stats[name][field + 'Month']++;
+          }
+        }
+        const allKeys = new Set([...Object.keys(CAL), ...Object.keys(data)]);
+        allKeys.forEach(k => {
+          const [y, m, d] = k.split('-').map(Number);
+          const monDate = new Date(y, m-1, d);
+          const wd = data[k] ?? initWeek(k);
+          const wOff = isDetskaWed(CAL[k]?.wed?.sector) ? 3 : 2;
+          const wedDate = wd.wedDateOverride ? new Date(wd.wedDateOverride) : addDays(monDate, wOff);
+          const sundMon = addDays(wd.monDateOverride ? new Date(wd.monDateOverride) : monDate, -1);
+          const sundWed = addDays(wedDate, -1);
+          (wd.mondaySundavaci || []).forEach(n => tally(n, sundMon, 'sund'));
+          tally(wd.mondayMyti, sundMon, 'myti');
+          (wd.wednesdaySundavaci || []).forEach(n => tally(n, sundWed, 'sund'));
+          tally(wd.wednesdayMyti, sundWed, 'myti');
+        });
+        return stats;
+      }
+
+      const isNow = offset === 0;
+
+      return (
+        <div className="min-h-screen bg-slate-100">
+
+          {/* Header */}
+          <header className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
+            <div className="max-w-2xl mx-auto px-4 pt-3 pb-2">
+              {/* Top row: title + navigation */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-base font-bold text-gray-900 leading-none">Stavění</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Týdenní plán stavěčů</p>
+                </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button onClick={() => setOffset(o => o-1)}
+                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors">
+                  <ChevronLeft c="w-5 h-5" />
+                </button>
+                <div className="text-center min-w-[138px] px-1">
+                  <p className="text-sm font-bold text-gray-900 tabular-nums">
+                    {fmt(monday)} – {fmt(friday)}{friday.getFullYear()}
+                  </p>
+                  <p className={`text-xs font-semibold mt-0.5 ${isNow ? 'text-amber-600' : 'text-gray-400'}`}>
+                    {isNow ? 'Aktuální týden' : `Týden ${offset>0?'+':''}${offset}`}
+                  </p>
+                </div>
+                <button onClick={() => setOffset(o => o+1)}
+                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors">
+                  <ChevronRight c="w-5 h-5" />
+                </button>
+              </div>
+              </div>
+              {/* Second row: fill indicators */}
+              {(() => {
+                const monMax = calMon?.sector && !calMon.isOff ? getLanovkaSlotCount(calMon.sector) : 0;
+                const wedMax = calWed?.sector && !calWed.isOff ? getWedSlotCount(calWed.sector) : 0;
+                const monFill = monMax ? week.monday.slice(0,monMax).filter(Boolean).length + (week.mondayLano ? 1 : 0) : 0;
+                const monTot  = monMax ? monMax + 1 : 0;
+                const wedFill = wedMax ? week.wednesday.slice(0,wedMax).filter(Boolean).length : 0;
+                const thuFill = (week.thursday||[]).slice(0,2).filter(Boolean).length;
+                const monPct  = monTot ? Math.round(monFill/monTot*100) : 0;
+                const wedPct  = wedMax ? Math.round(wedFill/wedMax*100) : 0;
+                const thuPct  = calThu ? Math.round(thuFill/2*100) : 0;
+                return (
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className={`text-sm font-black px-3 py-1 rounded-full
+                      ${monMax && monFill===monTot ? 'bg-amber-500 text-white' : monMax ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
+                      Lanovka {monPct}%
+                    </span>
+                    <span className={`text-sm font-black px-3 py-1 rounded-full
+                      ${wedMax && wedFill===wedMax ? 'bg-pink-600 text-white' : wedMax ? 'bg-zinc-800 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                      Limit {wedPct}%
+                    </span>
+                    <span className={`text-sm font-black px-3 py-1 rounded-full
+                      ${calThu && thuFill===2 ? 'bg-emerald-600 text-white' : calThu ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-400'}`}>
+                      Tělocvična {thuPct}%
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+          </header>
+
+          <main className="max-w-none mx-auto px-4 py-5 pb-10 flex gap-5 items-start">
+
+            {/* Main content column */}
+            <div className="flex-1 min-w-0 space-y-4">
+
+            {/* Řádek 1: Sundavání */}
+            <div className="overflow-x-auto">
+              <div className="flex gap-4 w-fit mx-auto">
+                <div className="w-72 flex-shrink-0">
+                  <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
+                    sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
+                    onToggleSundavac={name => toggleSundavac('monday', name)}
+                    onToggleMyti={name => toggleMyti('monday', name)} />
+                </div>
+                <div className="w-72 flex-shrink-0">
+                  <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
+                    sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
+                    onToggleSundavac={name => toggleSundavac('wednesday', name)}
+                    onToggleMyti={name => toggleMyti('wednesday', name)} />
+                </div>
+                {calThu && <div className="w-72 flex-shrink-0" />}
+              </div>
+            </div>
+
+            {/* Řádek 2: Stavění */}
+            <div className="overflow-x-auto">
+              <div className="flex gap-4 w-fit mx-auto">
+                <div className="w-72 flex-shrink-0">
+                  <SessionCard
+                    session="monday" day="Pondělí" date={monDate} theme="yellow"
+                    slots={week.monday} lanoSlot={week.mondayLano} calInfo={calMon}
+                    sel={sel}
+                    onSlotClick={i => onSlotClick('monday', i)}
+                    onDragStartSlot={(i,n) => onDragStartSlot('monday',i,n)}
+                    onDragOverSlot={e => e.preventDefault()}
+                    onDropSlot={i => onDropSlot('monday', i)}
+                    onLanoClick={onLanoClick}
+                    onDragStartLano={onDragStartLano}
+                    onDropLano={onDropLano}
+                    onClear={() => clearSession('monday')}
+                    onDateChange={setMonDate}
+                  />
+                </div>
+                <div className="w-72 flex-shrink-0">
+                  <SessionCard
+                    session="wednesday" day="Středa" date={wedDate} theme="dark"
+                    slots={week.wednesday} calInfo={calWed}
+                    sel={sel}
+                    onSlotClick={i => onSlotClick('wednesday', i)}
+                    onDragStartSlot={(i,n) => onDragStartSlot('wednesday',i,n)}
+                    onDragOverSlot={e => e.preventDefault()}
+                    onDropSlot={i => onDropSlot('wednesday', i)}
+                    onClear={() => clearSession('wednesday')}
+                    onDateChange={setWedDate}
+                  />
+                </div>
+                {calThu && (
+                  <div className="w-72 flex-shrink-0">
+                    <SessionCard
+                      session="thursday" day="Čtvrtek" date={thuDate} theme="green"
+                      slots={week.thursday || E4()} calInfo={calThu}
+                      sel={sel}
+                      onSlotClick={i => onThuSlotClick(i)}
+                      onDragStartSlot={(i,n) => onDragStartSlot('thursday',i,n)}
+                      onDragOverSlot={e => e.preventDefault()}
+                      onDropSlot={i => onDropSlot('thursday', i)}
+                      onClear={() => clearSession('thursday')}
+                      onDateChange={setThuDate}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Climber pool */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+              onDragOver={e => e.preventDefault()} onDrop={onDropPool}>
+
+              <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-bold text-gray-900 flex items-center gap-2">
+                    <UserIcon c="w-4 h-4 text-gray-400" />
+                    Stavěči
+                    <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                      {team.length}
+                    </span>
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    {sel && (
+                      <span className="hidden sm:flex items-center gap-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-full">
+                        <Check c="w-3 h-3" />{sel}
+                      </span>
+                    )}
+                    <button onClick={clearWeek}
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors py-1">
+                      <RotateCcw c="w-3.5 h-3.5" />
+                      Resetovat týden
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-4 py-3 flex flex-wrap gap-2 min-h-[64px] justify-center items-start content-start">
+                {team.map(name => (
+                    <ClimberChip key={name} name={name}
+                      isSelected={sel === name}
+                      inMon={isMonday(name)}
+                      inWed={isWednesday(name)}
+                      onClick={() => onChipClick(name)}
+                      onRemove={() => deleteClimber(name)}
+                      onDragStart={() => onDragStartPool(name)} />
+                  ))
+                }
+              </div>
+
+              {drag && (
+                <div className="mx-4 mb-3 border-2 border-dashed border-red-200 rounded-xl px-4 py-2.5 text-center text-xs font-medium text-red-400 bg-red-50">
+                  Přetáhněte sem pro odebrání ze slotu
+                </div>
+              )}
+              {sel && (
+                <div className="mx-4 mb-3 border border-amber-100 rounded-xl px-4 py-2.5 text-center text-xs font-medium text-amber-700 bg-amber-50">
+                  Klikněte na volný slot pro přiřazení &nbsp;
+                  <button onClick={() => setSel(null)} className="underline underline-offset-2 text-amber-500 hover:text-amber-700">
+                    Zrušit
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Year plan */}
+            <YearPlan />
+
+            </div>{/* end main content column */}
+
+            {/* Stats sidebar */}
+            <div className="w-48 flex-shrink-0 sticky top-20 hidden lg:block space-y-3">
+              {!isNow && (() => {
+                const todayMonday = getMonday(new Date());
+                const todayKey = weekKey(todayMonday);
+                const todayCalMon = CAL[todayKey]?.mon ?? null;
+                const todayCalWed = CAL[todayKey]?.wed ?? null;
+                const todayWedOff = isDetskaWed(todayCalWed?.sector) ? 3 : 2;
+                const todayWedDate = addDays(todayMonday, todayWedOff);
+                const fmtDate = d => d.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
+                return (
+                  <div className="rounded-2xl bg-amber-50 ring-1 ring-amber-200 p-3 space-y-2">
+                    <div className="text-xs font-black text-amber-700 uppercase tracking-wide">Dnes</div>
+                    {todayCalMon && !todayCalMon.isOff && (
+                      <div className="space-y-0.5">
+                        <div className="text-xs text-amber-600 font-semibold">{fmtDate(todayMonday)} Lanovka</div>
+                        <div className="text-xs font-black text-amber-900 leading-tight">{todayCalMon.sector}</div>
+                      </div>
+                    )}
+                    {todayCalWed && !todayCalWed.isOff && (
+                      <div className="space-y-0.5">
+                        <div className="text-xs text-pink-600 font-semibold">{fmtDate(todayWedDate)} Limit</div>
+                        <div className="text-xs font-black text-pink-900 leading-tight">{todayCalWed.sector}</div>
+                      </div>
+                    )}
+                    {(!todayCalMon || todayCalMon.isOff) && (!todayCalWed || todayCalWed.isOff) && (
+                      <div className="text-xs text-gray-400">Volno</div>
+                    )}
+                  </div>
+                );
+              })()}
+              <MonthlyOccupancy data={data} />
+              <RemovalStatsPanel stats={computeRemovalStats()} />
+              <StatsPanel stats={computeStats()} team={team} />
+            </div>
+
+          </main>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
