@@ -8,6 +8,22 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script>
+    // Initialize Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyAkrjX5SaUV8WyyVsYJK5TX2n_gmvuJGJE",
+      authDomain: "climbing-app-d0074.firebaseapp.com",
+      projectId: "climbing-app-d0074",
+      storageBucket: "climbing-app-d0074.firebasestorage.app",
+      messagingSenderId: "111537396068",
+      appId: "1:111537396068:web:6c4df4f53ada66e99ac271"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+  </script>
   <style>
     * { -webkit-tap-highlight-color: transparent; }
     body { margin: 0; }
@@ -1063,14 +1079,70 @@
       });
       const [sel,     setSel]     = useState(null);
       const [drag,    setDrag]    = useState(null);  // { from, climber, session, idx? }
+      const [firebaseReady, setFirebaseReady] = useState(false);
+      const skipNextFirebase = React.useRef(false);
+
+      // ── Firestore helpers: null ↔ "__NULL__" ────────────────────────────────
+      function toFirestore(weekData) {
+        const out = {};
+        for (const [k, v] of Object.entries(weekData)) {
+          if (Array.isArray(v)) out[k] = v.map(x => x === null ? '__NULL__' : x);
+          else if (v === null) out[k] = '__NULL__';
+          else out[k] = v;
+        }
+        return out;
+      }
+      function fromFirestore(weekData) {
+        const out = {};
+        for (const [k, v] of Object.entries(weekData)) {
+          if (Array.isArray(v)) out[k] = v.map(x => x === '__NULL__' ? null : x);
+          else if (v === '__NULL__') out[k] = null;
+          else out[k] = v;
+        }
+        return out;
+      }
+
+      // ── Load all data from Firestore on mount ─────────────────────────────
+      React.useEffect(() => {
+        db.collection('weeks').get().then(snapshot => {
+          if (!snapshot.empty) {
+            const loaded = {};
+            snapshot.forEach(doc => { loaded[doc.id] = fromFirestore(doc.data()); });
+            setData(prev => {
+              const merged = { ...prev, ...loaded };
+              return merged;
+            });
+          }
+          setFirebaseReady(true);
+        }).catch(() => { setFirebaseReady(true); });
+
+        // Real-time listener: sync changes from other users
+        const unsub = db.collection('weeks').onSnapshot(snapshot => {
+          if (skipNextFirebase.current) { skipNextFirebase.current = false; return; }
+          const loaded = {};
+          snapshot.forEach(doc => { loaded[doc.id] = fromFirestore(doc.data()); });
+          setData(prev => {
+            const merged = { ...prev, ...loaded };
+            return JSON.stringify(merged) !== JSON.stringify(prev) ? merged : prev;
+          });
+        });
+        return () => unsub();
+      }, []);
+
+      // ── Save to localStorage + Firestore when data changes ────────────────
       React.useEffect(() => {
         try { localStorage.setItem('climbing-setters', JSON.stringify(data)); } catch {}
         window.__appData = data;
+        if (!firebaseReady) return;
+        // Debounce Firestore writes
         const t = setTimeout(() => {
-          fetch('/sync', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) }).catch(() => {});
-        }, 1000);
+          skipNextFirebase.current = true;
+          Object.entries(data).forEach(([weekId, weekData]) => {
+            db.collection('weeks').doc(weekId).set(toFirestore(weekData), { merge: true }).catch(() => {});
+          });
+        }, 800);
         return () => clearTimeout(t);
-      }, [data]);
+      }, [data, firebaseReady]);
 
       const monday = addDays(getMonday(new Date()), offset * 7);
       const friday = addDays(monday, 4);
