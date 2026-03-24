@@ -161,6 +161,17 @@
       '2026-12-28': { mon: L1, wed: D },
     };
 
+    // Returns the next non-off CAL entry for venue ('mon'|'wed') after weekKey
+    function getNextSector(weekKey, venue) {
+      const calKeys = Object.keys(CAL).sort();
+      const idx = calKeys.indexOf(weekKey);
+      for (let i = idx + 1; i < calKeys.length; i++) {
+        const entry = CAL[calKeys[i]]?.[venue];
+        if (entry && !entry.isOff) return entry;
+      }
+      return null;
+    }
+
     function initWeek(key) {
       const c = CAL[key];
       if (!c) {
@@ -187,7 +198,8 @@
                mondaySundavaci: [], mondayMyti: null,
                wednesdaySundavaci: [], wednesdayMyti: null,
                thuDateOverride: null,
-               monDateOverride: null, wedDateOverride: null };
+               monDateOverride: null, wedDateOverride: null,
+               monSectorOverride: null, wedSectorOverride: null };
     }
 
     // ── SundavaniCard ─────────────────────────────────────────────────────────
@@ -333,7 +345,8 @@
     // ── SessionCard ──────────────────────────────────────────────────────────
     function SessionCard({ session, day, date, theme, slots, lanoSlot, calInfo,
       sel, onSlotClick, onDragStartSlot, onDragOverSlot, onDropSlot,
-      onLanoClick, onDragStartLano, onDropLano, onClear, onDateChange }) {
+      onLanoClick, onDragStartLano, onDropLano, onClear, onDateChange,
+      onShift, nextSector }) {
 
       const [editingDate, setEditingDate] = React.useState(false);
       const isYellow = theme === 'yellow';
@@ -512,6 +525,7 @@
                 Stavěč je již přiřazen v tomto týdnu!
               </div>
             )}
+
           </div>
         </div>
       );
@@ -1148,8 +1162,8 @@
       const friday = addDays(monday, 4);
       const key    = weekKey(monday);
       const week   = data[key] ?? initWeek(key);
-      const calMon = CAL[key]?.mon ?? null;
-      const calWed = CAL[key]?.wed ?? null;
+      const calMon = week.monSectorOverride ?? CAL[key]?.mon ?? null;
+      const calWed = week.wedSectorOverride ?? CAL[key]?.wed ?? null;
       const calThu = CAL[key]?.thu ?? null;
 
       // Dětská na Limitu se staví ve čtvrtek (+3), ostatní sektory ve středu (+2)
@@ -1163,6 +1177,80 @@
       function setThuDate(iso) { setWeek({ ...week, thuDateOverride: iso }); }
 
       function setWeek(w) { setData(d => ({ ...d, [key]: w })); }
+
+      // ── Posunout stavění (odložit o 7 dní) ────────────────────────────────
+      function toIso(d) {
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      }
+      function shiftMonSector() {
+        const calKeys = Object.keys(CAL).sort();
+        const idx = calKeys.indexOf(key);
+        let nextKey = null;
+        for (let i = idx + 1; i < calKeys.length; i++) {
+          if (CAL[calKeys[i]]?.mon && !CAL[calKeys[i]].mon.isOff) { nextKey = calKeys[i]; break; }
+        }
+        if (!nextKey) return;
+        const nextWeekData = data[nextKey] ?? initWeek(nextKey);
+        setData(d => ({
+          ...d,
+          [nextKey]: { ...nextWeekData, monSectorOverride: calMon },
+          [key]: { ...week, monday: E4(), mondayLano: null, monSectorOverride: { isOff: true, sector: 'Volný týden' }, monSavedSetters: week.monday, monSavedLano: week.mondayLano }
+        }));
+      }
+      function shiftWedSector() {
+        const calKeys = Object.keys(CAL).sort();
+        const idx = calKeys.indexOf(key);
+        let nextKey = null;
+        for (let i = idx + 1; i < calKeys.length; i++) {
+          if (CAL[calKeys[i]]?.wed && !CAL[calKeys[i]].wed.isOff) { nextKey = calKeys[i]; break; }
+        }
+        if (!nextKey) return;
+        const nextWeekData = data[nextKey] ?? initWeek(nextKey);
+        setData(d => ({
+          ...d,
+          [nextKey]: { ...nextWeekData, wedSectorOverride: calWed },
+          [key]: { ...week, wednesday: E4(), wedSectorOverride: { isOff: true, sector: 'Volný týden' }, wedSavedSetters: week.wednesday }
+        }));
+      }
+
+      function undoMonShift() {
+        const calKeys = Object.keys(CAL).sort();
+        const idx = calKeys.indexOf(key);
+        let nextKey = null;
+        for (let i = idx + 1; i < calKeys.length; i++) {
+          if (CAL[calKeys[i]]?.mon && !CAL[calKeys[i]].mon.isOff) { nextKey = calKeys[i]; break; }
+        }
+        setData(d => {
+          const curr = { ...week };
+          if (curr.monSavedSetters) { curr.monday = curr.monSavedSetters; curr.mondayLano = curr.monSavedLano ?? null; }
+          delete curr.monSectorOverride; delete curr.monSavedSetters; delete curr.monSavedLano;
+          const updates = { ...d, [key]: curr };
+          if (nextKey && d[nextKey]) {
+            const nxt = { ...d[nextKey] }; delete nxt.monSectorOverride;
+            updates[nextKey] = nxt;
+          }
+          return updates;
+        });
+      }
+      function undoWedShift() {
+        const calKeys = Object.keys(CAL).sort();
+        const idx = calKeys.indexOf(key);
+        let nextKey = null;
+        for (let i = idx + 1; i < calKeys.length; i++) {
+          if (CAL[calKeys[i]]?.wed && !CAL[calKeys[i]].wed.isOff) { nextKey = calKeys[i]; break; }
+        }
+        setData(d => {
+          const curr = { ...week };
+          if (curr.wedSavedSetters) { curr.wednesday = curr.wedSavedSetters; }
+          delete curr.wedSectorOverride; delete curr.wedSavedSetters;
+          const updates = { ...d, [key]: curr };
+          if (nextKey && d[nextKey]) {
+            const nxt = { ...d[nextKey] }; delete nxt.wedSectorOverride;
+            updates[nextKey] = nxt;
+          }
+          return updates;
+        });
+      }
 
       // ── Badge helpers (display only) ──────────────────────────────────────
       function isMonday(c)    { return week.monday.includes(c) || week.mondayLano === c; }
@@ -1479,6 +1567,8 @@
                     onDropLano={onDropLano}
                     onClear={() => clearSession('monday')}
                     onDateChange={setMonDate}
+                    onShift={shiftMonSector}
+                    nextSector={getNextSector(key, 'mon')}
                   />
                 </div>
                 <div className="w-72 flex-shrink-0">
@@ -1492,6 +1582,8 @@
                     onDropSlot={i => onDropSlot('wednesday', i)}
                     onClear={() => clearSession('wednesday')}
                     onDateChange={setWedDate}
+                    onShift={shiftWedSector}
+                    nextSector={getNextSector(key, 'wed')}
                   />
                 </div>
                 {calThu && (
@@ -1570,6 +1662,46 @@
 
             {/* Year plan */}
             <YearPlan />
+
+            {/* Posunout stavění — zřídka používané, dole */}
+            {(calMon || calWed) && (
+              <div className="flex gap-3 mt-2 flex-wrap">
+                {calMon && !calMon.isOff && (
+                  <button onClick={shiftMonSector}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
+                      border border-amber-200 text-amber-600 hover:bg-amber-50 transition-colors">
+                    Posunout stavění — {calMon.sector}
+                    <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-lg font-black">
+                      → týden {fmt(addDays(week.monDateOverride ? new Date(week.monDateOverride) : monDate, 7))}
+                    </span>
+                  </button>
+                )}
+                {week.monSectorOverride?.sector === 'Volný týden' && (
+                  <button onClick={undoMonShift}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
+                      border border-amber-200 text-amber-600 hover:bg-amber-50 transition-colors">
+                    ↩ Vrátit Lanovka
+                  </button>
+                )}
+                {calWed && !calWed.isOff && (
+                  <button onClick={shiftWedSector}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
+                      border border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-colors">
+                    Posunout stavění — {calWed.sector}
+                    <span className="bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-lg font-black">
+                      → týden {fmt(addDays(week.wedDateOverride ? new Date(week.wedDateOverride) : wedDate, 7))}
+                    </span>
+                  </button>
+                )}
+                {week.wedSectorOverride?.sector === 'Volný týden' && (
+                  <button onClick={undoWedShift}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
+                      border border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-colors">
+                    ↩ Vrátit Limit
+                  </button>
+                )}
+              </div>
+            )}
 
             </div>{/* end main content column */}
 
