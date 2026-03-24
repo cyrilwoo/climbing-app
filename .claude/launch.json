@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "climbing-app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5173"],
+      "port": 5173
+    },
+    {
+      "name": "sync-server",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["sync-server.js"],
+      "port": 3002
+    }
+  ]
+}
