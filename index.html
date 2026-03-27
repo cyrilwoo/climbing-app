@@ -1660,6 +1660,11 @@
                 }
               </div>
 
+              {/* Obsazenost — mobile only, right below setter chips */}
+              <div className="lg:hidden px-4 pb-2">
+                <MonthlyOccupancy data={data} />
+              </div>
+
               {drag && (
                 <div className="mx-4 mb-3 border-2 border-dashed border-red-200 rounded-xl px-4 py-2.5 text-center text-xs font-medium text-red-400 bg-red-50">
                   Přetáhněte sem pro odebrání ze slotu
@@ -1752,8 +1757,8 @@
                   </div>
                 );
               })()}
-              </div>
               <MonthlyOccupancy data={data} />
+              </div>
               <RemovalStatsPanel stats={computeRemovalStats()} />
               <StatsPanel stats={computeStats()} team={team} />
             </div>
