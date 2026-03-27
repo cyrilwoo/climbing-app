@@ -1660,9 +1660,11 @@
                 }
               </div>
 
-              {/* Obsazenost — mobile only, right below setter chips */}
-              <div className="lg:hidden px-4 pb-2">
+              {/* Stats — mobile only, right below setter chips */}
+              <div className="lg:hidden px-4 pb-2 space-y-3">
                 <MonthlyOccupancy data={data} />
+                <StatsPanel stats={computeStats()} team={team} />
+                <RemovalStatsPanel stats={computeRemovalStats()} />
               </div>
 
               {drag && (
@@ -1759,8 +1761,10 @@
               })()}
               <MonthlyOccupancy data={data} />
               </div>
-              <RemovalStatsPanel stats={computeRemovalStats()} />
-              <StatsPanel stats={computeStats()} team={team} />
+              <div className="hidden lg:block space-y-3">
+                <StatsPanel stats={computeStats()} team={team} />
+                <RemovalStatsPanel stats={computeRemovalStats()} />
+              </div>
             </div>
 
           </main>
