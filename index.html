@@ -399,8 +399,8 @@
                       defaultValue={`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
                       className={`text-xs font-medium outline-none rounded px-1 py-0.5 w-32
                         ${isYellow ? 'bg-black/10 text-gray-900' : 'bg-white/10 text-white'}`}
-                      onChange={e => { if(e.target.value) { onDateChange(e.target.value); setEditingDate(false); } }}
-                      onBlur={() => setEditingDate(false)}
+                      onChange={e => { if(e.target.value) onDateChange(e.target.value); }}
+                      onBlur={e => { if(e.target.value) onDateChange(e.target.value); setEditingDate(false); }}
                       autoFocus
                     />
                   ) : (
@@ -1238,10 +1238,10 @@
         setData(d => {
           const curr = { ...week };
           if (curr.monSavedSetters) { curr.monday = curr.monSavedSetters; curr.mondayLano = curr.monSavedLano ?? null; }
-          delete curr.monSectorOverride; delete curr.monSavedSetters; delete curr.monSavedLano;
+          curr.monSectorOverride = null; curr.monSavedSetters = null; curr.monSavedLano = null;
           const updates = { ...d, [key]: curr };
           if (nextKey && d[nextKey]) {
-            const nxt = { ...d[nextKey] }; delete nxt.monSectorOverride;
+            const nxt = { ...d[nextKey], monSectorOverride: null };
             updates[nextKey] = nxt;
           }
           return updates;
@@ -1257,10 +1257,10 @@
         setData(d => {
           const curr = { ...week };
           if (curr.wedSavedSetters) { curr.wednesday = curr.wedSavedSetters; }
-          delete curr.wedSectorOverride; delete curr.wedSavedSetters;
+          curr.wedSectorOverride = null; curr.wedSavedSetters = null;
           const updates = { ...d, [key]: curr };
           if (nextKey && d[nextKey]) {
-            const nxt = { ...d[nextKey] }; delete nxt.wedSectorOverride;
+            const nxt = { ...d[nextKey], wedSectorOverride: null };
             updates[nextKey] = nxt;
           }
           return updates;
