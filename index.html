@@ -825,7 +825,8 @@
           </div>
 
           {/* Three separate wall calendars side by side */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="overflow-x-auto">
+          <div className="grid grid-cols-3 gap-4 min-w-[30rem]">
 
             {/* LANOVKA */}
             <div className="rounded-2xl overflow-hidden border border-amber-200">
@@ -904,6 +905,7 @@
             </div>
 
           </div>
+          </div>{/* end overflow-x-auto */}
         </div>
       );
     }
