@@ -837,7 +837,7 @@
               {MONTHS_CS.map((name, m) => {
                 const d = monthly[m];
                 if (d.lanovka.length === 0 && d.gym === 0) return (
-                  <div key={m} className="px-3 py-2 border-b border-amber-50 last:border-0 bg-white">
+                  <div key={m} className="px-3 py-2 border-b border-amber-50 last:border-0">
                     <span className="text-[10px] font-black text-amber-300 uppercase">{name}</span>
                     <span className="text-[11px] text-gray-200 ml-2">—</span>
                   </div>
@@ -894,7 +894,7 @@
               {MONTHS_CS.map((name, m) => {
                 const d = monthly[m];
                 return (
-                  <div key={m} className={`px-3 py-2.5 border-b border-emerald-100 last:border-0 ${d.gym > 0 ? 'bg-emerald-50/60' : 'bg-white'}`}>
+                  <div key={m} className={`px-3 py-2.5 border-b border-emerald-100 last:border-0 ${d.gym > 0 ? 'bg-emerald-50/60' : ''}`}>
                     <span className="text-[10px] font-black text-emerald-500 uppercase tracking-wide">{name}</span>
                     {d.gym > 0
                       ? <span className="text-[11px] font-bold text-emerald-800 ml-2">×{d.gym}</span>
