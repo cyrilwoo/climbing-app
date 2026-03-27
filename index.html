@@ -1546,76 +1546,79 @@
             {/* Main content column */}
             <div className="flex-1 min-w-0 space-y-4">
 
-            {/* Řádek 1: Sundavání */}
+            {/* Řádky 1+2: Sundavání + Stavění — jeden scroll container */}
             <div className="overflow-x-auto relative z-0">
-              <div className="flex gap-4 w-fit mx-auto">
-                <div className="w-72 flex-shrink-0">
-                  <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
-                    sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
-                    onToggleSundavac={name => toggleSundavac('monday', name)}
-                    onToggleMyti={name => toggleMyti('monday', name)} />
-                </div>
-                <div className="w-72 flex-shrink-0">
-                  <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
-                    sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
-                    onToggleSundavac={name => toggleSundavac('wednesday', name)}
-                    onToggleMyti={name => toggleMyti('wednesday', name)} />
-                </div>
-                {calThu && <div className="w-72 flex-shrink-0" />}
-              </div>
-            </div>
+              <div className="w-fit mx-auto space-y-4">
 
-            {/* Řádek 2: Stavění */}
-            <div className="overflow-x-auto relative z-0">
-              <div className="flex gap-4 w-fit mx-auto">
-                <div className="w-72 flex-shrink-0">
-                  <SessionCard
-                    session="monday" day="Pondělí" date={monDate} theme="yellow"
-                    slots={week.monday} lanoSlot={week.mondayLano} calInfo={calMon}
-                    sel={sel}
-                    onSlotClick={i => onSlotClick('monday', i)}
-                    onDragStartSlot={(i,n) => onDragStartSlot('monday',i,n)}
-                    onDragOverSlot={e => e.preventDefault()}
-                    onDropSlot={i => onDropSlot('monday', i)}
-                    onLanoClick={onLanoClick}
-                    onDragStartLano={onDragStartLano}
-                    onDropLano={onDropLano}
-                    onClear={() => clearSession('monday')}
-                    onDateChange={setMonDate}
-                    onShift={shiftMonSector}
-                    nextSector={getNextSector(key, 'mon')}
-                  />
+                {/* Řádek 1: Sundavání */}
+                <div className="flex gap-4">
+                  <div className="w-72 flex-shrink-0">
+                    <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
+                      sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
+                      onToggleSundavac={name => toggleSundavac('monday', name)}
+                      onToggleMyti={name => toggleMyti('monday', name)} />
+                  </div>
+                  <div className="w-72 flex-shrink-0">
+                    <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
+                      sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
+                      onToggleSundavac={name => toggleSundavac('wednesday', name)}
+                      onToggleMyti={name => toggleMyti('wednesday', name)} />
+                  </div>
+                  {calThu && <div className="w-72 flex-shrink-0" />}
                 </div>
-                <div className="w-72 flex-shrink-0">
-                  <SessionCard
-                    session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} theme="dark"
-                    slots={week.wednesday} calInfo={calWed}
-                    sel={sel}
-                    onSlotClick={i => onSlotClick('wednesday', i)}
-                    onDragStartSlot={(i,n) => onDragStartSlot('wednesday',i,n)}
-                    onDragOverSlot={e => e.preventDefault()}
-                    onDropSlot={i => onDropSlot('wednesday', i)}
-                    onClear={() => clearSession('wednesday')}
-                    onDateChange={setWedDate}
-                    onShift={shiftWedSector}
-                    nextSector={getNextSector(key, 'wed')}
-                  />
-                </div>
-                {calThu && (
+
+                {/* Řádek 2: Stavění */}
+                <div className="flex gap-4">
                   <div className="w-72 flex-shrink-0">
                     <SessionCard
-                      session="thursday" day="Čtvrtek" date={thuDate} theme="green"
-                      slots={week.thursday || E4()} calInfo={calThu}
+                      session="monday" day="Pondělí" date={monDate} theme="yellow"
+                      slots={week.monday} lanoSlot={week.mondayLano} calInfo={calMon}
                       sel={sel}
-                      onSlotClick={i => onThuSlotClick(i)}
-                      onDragStartSlot={(i,n) => onDragStartSlot('thursday',i,n)}
+                      onSlotClick={i => onSlotClick('monday', i)}
+                      onDragStartSlot={(i,n) => onDragStartSlot('monday',i,n)}
                       onDragOverSlot={e => e.preventDefault()}
-                      onDropSlot={i => onDropSlot('thursday', i)}
-                      onClear={() => clearSession('thursday')}
-                      onDateChange={setThuDate}
+                      onDropSlot={i => onDropSlot('monday', i)}
+                      onLanoClick={onLanoClick}
+                      onDragStartLano={onDragStartLano}
+                      onDropLano={onDropLano}
+                      onClear={() => clearSession('monday')}
+                      onDateChange={setMonDate}
+                      onShift={shiftMonSector}
+                      nextSector={getNextSector(key, 'mon')}
                     />
                   </div>
-                )}
+                  <div className="w-72 flex-shrink-0">
+                    <SessionCard
+                      session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} theme="dark"
+                      slots={week.wednesday} calInfo={calWed}
+                      sel={sel}
+                      onSlotClick={i => onSlotClick('wednesday', i)}
+                      onDragStartSlot={(i,n) => onDragStartSlot('wednesday',i,n)}
+                      onDragOverSlot={e => e.preventDefault()}
+                      onDropSlot={i => onDropSlot('wednesday', i)}
+                      onClear={() => clearSession('wednesday')}
+                      onDateChange={setWedDate}
+                      onShift={shiftWedSector}
+                      nextSector={getNextSector(key, 'wed')}
+                    />
+                  </div>
+                  {calThu && (
+                    <div className="w-72 flex-shrink-0">
+                      <SessionCard
+                        session="thursday" day="Čtvrtek" date={thuDate} theme="green"
+                        slots={week.thursday || E4()} calInfo={calThu}
+                        sel={sel}
+                        onSlotClick={i => onThuSlotClick(i)}
+                        onDragStartSlot={(i,n) => onDragStartSlot('thursday',i,n)}
+                        onDragOverSlot={e => e.preventDefault()}
+                        onDropSlot={i => onDropSlot('thursday', i)}
+                        onClear={() => clearSession('thursday')}
+                        onDateChange={setThuDate}
+                      />
+                    </div>
+                  )}
+                </div>
+
               </div>
             </div>
 
