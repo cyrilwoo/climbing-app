@@ -1547,29 +1547,29 @@
             <div className="flex-1 min-w-0 space-y-4">
 
             {/* Řádky 1+2: Sundavání + Stavění — jeden scroll container */}
-            <div className="overflow-x-auto relative z-0">
+            <div className="overflow-x-auto snap-x snap-mandatory lg:snap-none relative z-0">
               <div className="flex flex-col gap-4 w-fit">
 
                 {/* Řádek 1: Sundavání */}
                 <div className="flex gap-4">
-                  <div className="w-72 flex-shrink-0">
+                  <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
                     <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
                       sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
                       onToggleSundavac={name => toggleSundavac('monday', name)}
                       onToggleMyti={name => toggleMyti('monday', name)} />
                   </div>
-                  <div className="w-72 flex-shrink-0">
+                  <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
                     <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
                       sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
                       onToggleSundavac={name => toggleSundavac('wednesday', name)}
                       onToggleMyti={name => toggleMyti('wednesday', name)} />
                   </div>
-                  {calThu && <div className="w-72 flex-shrink-0" />}
+                  {calThu && <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0" />}
                 </div>
 
                 {/* Řádek 2: Stavění */}
                 <div className="flex gap-4">
-                  <div className="w-72 flex-shrink-0">
+                  <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
                     <SessionCard
                       session="monday" day="Pondělí" date={monDate} theme="yellow"
                       slots={week.monday} lanoSlot={week.mondayLano} calInfo={calMon}
@@ -1587,7 +1587,7 @@
                       nextSector={getNextSector(key, 'mon')}
                     />
                   </div>
-                  <div className="w-72 flex-shrink-0">
+                  <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
                     <SessionCard
                       session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} theme="dark"
                       slots={week.wednesday} calInfo={calWed}
@@ -1603,7 +1603,7 @@
                     />
                   </div>
                   {calThu && (
-                    <div className="w-72 flex-shrink-0">
+                    <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
                       <SessionCard
                         session="thursday" day="Čtvrtek" date={thuDate} theme="green"
                         slots={week.thursday || E4()} calInfo={calThu}
