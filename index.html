@@ -1588,7 +1588,7 @@
                 </div>
                 <div className="w-72 flex-shrink-0">
                   <SessionCard
-                    session="wednesday" day="Středa" date={wedDate} theme="dark"
+                    session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} theme="dark"
                     slots={week.wednesday} calInfo={calWed}
                     sel={sel}
                     onSlotClick={i => onSlotClick('wednesday', i)}
