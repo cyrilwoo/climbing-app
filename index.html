@@ -1021,28 +1021,26 @@
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-4 pt-4 pb-2 border-b border-gray-100">
             <h2 className="font-bold text-gray-900 text-sm">Statistiky</h2>
-            <div className="flex gap-1 mt-2 text-xs text-gray-400 font-semibold uppercase tracking-wide">
-              <span className="flex-1">Stavěč</span>
-              <span className="w-12 text-center capitalize">{monthName.slice(0,3)}</span>
-              <span className="w-12 text-center">{now.getFullYear()}</span>
+          </div>
+          <div className="px-4 pt-2 pb-0 flex justify-center">
+            <div className="inline-grid" style={{gridTemplateColumns:'max-content 2.75rem 2.75rem', columnGap:'0.25rem'}}>
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide pb-1">Stavěč</span>
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-center pb-1 capitalize">{monthName.slice(0,3)}</span>
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-center pb-1">{now.getFullYear()}</span>
+              {sorted.map((name, i) => {
+                const s = stats[name] ?? { month: 0, year: 0 };
+                const b = i < sorted.length - 1 ? 'border-b border-gray-50' : '';
+                return (
+                  <React.Fragment key={name}>
+                    <span className={`text-sm font-semibold text-gray-800 py-1.5 ${b}`}>{name}</span>
+                    <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.month > 0 ? 'text-amber-600' : 'text-gray-300'}`}>{s.month}</span>
+                    <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.year > 0 ? 'text-gray-700' : 'text-gray-300'}`}>{s.year}</span>
+                  </React.Fragment>
+                );
+              })}
             </div>
           </div>
-          <div className="px-4 py-2">
-            {sorted.map((name, i) => {
-              const s = stats[name] ?? { month: 0, year: 0 };
-              return (
-                <div key={name} className={`flex items-center gap-1 py-1.5
-                  ${i < sorted.length - 1 ? 'border-b border-gray-50' : ''}`}>
-                  <span className="flex-1 text-sm font-semibold text-gray-800 truncate">{name}</span>
-                  <span className={`w-12 text-center text-sm tabular-nums font-bold
-                    ${s.month > 0 ? 'text-amber-600' : 'text-gray-300'}`}>{s.month}</span>
-                  <span className={`w-12 text-center text-sm tabular-nums font-bold
-                    ${s.year > 0 ? 'text-gray-700' : 'text-gray-300'}`}>{s.year}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="px-4 pb-3 text-xs text-gray-400 text-center">
+          <div className="px-4 py-3 text-xs text-gray-400 text-center">
             stavění celkem
           </div>
         </div>
@@ -1052,34 +1050,31 @@
     // ── RemovalStatsPanel ────────────────────────────────────────────────────
     function RemovalStatsPanel({ stats }) {
       const now = new Date();
-      const monthName = now.toLocaleString('cs-CZ', { month: 'long' });
       const sorted = [...REMOVAL_TEAM].sort((a, b) => (stats[b]?.sundYear ?? 0) - (stats[a]?.sundYear ?? 0));
       return (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-4 pt-4 pb-2 border-b border-gray-100">
             <h2 className="font-bold text-gray-900 text-sm">Sundavání + Mytí</h2>
-            <div className="flex gap-1 mt-2 text-xs text-gray-400 font-semibold uppercase tracking-wide">
-              <span className="flex-1"></span>
-              <span className="w-8 text-center">S</span>
-              <span className="w-8 text-center">M</span>
+          </div>
+          <div className="px-4 pt-2 pb-0 flex justify-center">
+            <div className="inline-grid" style={{gridTemplateColumns:'max-content 2.25rem 2.25rem', columnGap:'0.25rem'}}>
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide pb-1"></span>
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-center pb-1">S</span>
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-center pb-1">M</span>
+              {sorted.map((name, i) => {
+                const s = stats[name] ?? { sundYear: 0, mytiYear: 0 };
+                const b = i < sorted.length - 1 ? 'border-b border-gray-50' : '';
+                return (
+                  <React.Fragment key={name}>
+                    <span className={`text-sm font-semibold text-gray-800 py-1.5 ${b}`}>{name}</span>
+                    <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.sundYear > 0 ? 'text-pink-600' : 'text-gray-300'}`}>{s.sundYear}</span>
+                    <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.mytiYear > 0 ? 'text-blue-500' : 'text-gray-300'}`}>{s.mytiYear}</span>
+                  </React.Fragment>
+                );
+              })}
             </div>
           </div>
-          <div className="px-4 py-2">
-            {sorted.map((name, i) => {
-              const s = stats[name] ?? { sundYear: 0, mytiYear: 0 };
-              return (
-                <div key={name} className={`flex items-center gap-1 py-1.5
-                  ${i < sorted.length - 1 ? 'border-b border-gray-50' : ''}`}>
-                  <span className="flex-1 text-sm font-semibold text-gray-800 truncate">{name}</span>
-                  <span className={`w-8 text-center text-sm tabular-nums font-bold
-                    ${s.sundYear > 0 ? 'text-pink-600' : 'text-gray-300'}`}>{s.sundYear}</span>
-                  <span className={`w-8 text-center text-sm tabular-nums font-bold
-                    ${s.mytiYear > 0 ? 'text-blue-500' : 'text-gray-300'}`}>{s.mytiYear}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="px-4 pb-3 text-xs text-gray-400 text-center">
+          <div className="px-4 py-3 text-xs text-gray-400 text-center">
             S = sundavání &nbsp; M = mytí
           </div>
         </div>
