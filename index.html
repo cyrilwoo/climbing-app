@@ -1152,7 +1152,22 @@
         const t = setTimeout(() => {
           skipNextFirebase.current = true;
           Object.entries(data).forEach(([weekId, weekData]) => {
-            db.collection('weeks').doc(weekId).set(toFirestore(weekData), { merge: true }).catch(() => {});
+            // Derive effective sector + build dates for calendar sync
+            const calMon = weekData.monSectorOverride ?? CAL[weekId]?.mon ?? null;
+            const calWed = weekData.wedSectorOverride ?? CAL[weekId]?.wed ?? null;
+            const calThu = CAL[weekId]?.thu ?? null;
+            const monBase = new Date(weekId + 'T12:00:00');
+            const wOff = isDetskaWed(calWed?.sector) ? 3 : 2;
+            const enriched = {
+              ...weekData,
+              _monSector: (calMon && !calMon.isOff && calMon.sector) ? calMon.sector : null,
+              _wedSector: (calWed && !calWed.isOff && calWed.sector) ? calWed.sector : null,
+              _thuSector: (calThu && !calThu.isOff && calThu.sector) ? calThu.sector : null,
+              _monDate:   weekData.monDateOverride || weekId,
+              _wedDate:   weekData.wedDateOverride || toIso(addDays(monBase, wOff)),
+              _thuDate:   weekData.thuDateOverride || toIso(addDays(monBase, 3)),
+            };
+            db.collection('weeks').doc(weekId).set(toFirestore(enriched), { merge: true }).catch(() => {});
           });
         }, 800);
         return () => clearTimeout(t);
