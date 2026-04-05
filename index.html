@@ -1163,6 +1163,8 @@
               _monDate:   weekData.monDateOverride || weekId,
               _wedDate:   weekData.wedDateOverride || toIso(addDays(monBase, wOff)),
               _thuDate:   weekData.thuDateOverride || toIso(addDays(monBase, 3)),
+              _monCancelled: weekData.monCancelledSetters != null ? true : null,
+              _wedCancelled: weekData.wedCancelledSetters != null ? true : null,
             };
             db.collection('weeks').doc(weekId).set(toFirestore(enriched), { merge: true }).catch(() => {});
           });
