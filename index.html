@@ -1264,6 +1264,51 @@
         });
       }
 
+      // ── Smazat stavění (volný týden) ──────────────────────────────────────
+      function cancelMonSector() {
+        setWeek({
+          ...week,
+          monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null,
+          monSectorOverride: { isOff: true, sector: 'Volný týden' },
+          monCancelledSetters: week.monday,
+          monCancelledLano: week.mondayLano,
+          monCancelledSundavaci: week.mondaySundavaci || [],
+          monCancelledMyti: week.mondayMyti,
+        });
+      }
+      function undoMonCancel() {
+        setWeek({
+          ...week,
+          monday: week.monCancelledSetters || E4(),
+          mondayLano: week.monCancelledLano ?? null,
+          mondaySundavaci: week.monCancelledSundavaci || [],
+          mondayMyti: week.monCancelledMyti ?? null,
+          monSectorOverride: null,
+          monCancelledSetters: null, monCancelledLano: null,
+          monCancelledSundavaci: null, monCancelledMyti: null,
+        });
+      }
+      function cancelWedSector() {
+        setWeek({
+          ...week,
+          wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null,
+          wedSectorOverride: { isOff: true, sector: 'Volný týden' },
+          wedCancelledSetters: week.wednesday,
+          wedCancelledSundavaci: week.wednesdaySundavaci || [],
+          wedCancelledMyti: week.wednesdayMyti,
+        });
+      }
+      function undoWedCancel() {
+        setWeek({
+          ...week,
+          wednesday: week.wedCancelledSetters || E4(),
+          wednesdaySundavaci: week.wedCancelledSundavaci || [],
+          wednesdayMyti: week.wedCancelledMyti ?? null,
+          wedSectorOverride: null,
+          wedCancelledSetters: null, wedCancelledSundavaci: null, wedCancelledMyti: null,
+        });
+      }
+
       // ── Badge helpers (display only) ──────────────────────────────────────
       function isMonday(c)    { return week.monday.includes(c) || week.mondayLano === c; }
       function isWednesday(c) { return week.wednesday.includes(c); }
@@ -1685,41 +1730,77 @@
             {/* Year plan */}
             <YearPlan />
 
-            {/* Posunout stavění — zřídka používané, dole */}
+            {/* Posunout / Smazat stavění — zřídka používané, dole */}
             {(calMon || calWed) && (
-              <div className="flex gap-3 mt-2 flex-wrap">
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {/* Lanovka — posunout */}
                 {calMon && !calMon.isOff && (
                   <button onClick={shiftMonSector}
                     className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
                       border border-amber-200 text-amber-600 hover:bg-amber-50 transition-colors">
-                    Posunout stavění — {calMon.sector}
+                    Posunout — {calMon.sector}
                     <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-lg font-black">
-                      → týden {fmt(addDays(week.monDateOverride ? new Date(week.monDateOverride) : monDate, 7))}
+                      → {fmt(addDays(week.monDateOverride ? new Date(week.monDateOverride) : monDate, 7))}
                     </span>
                   </button>
                 )}
-                {week.monSectorOverride?.sector === 'Volný týden' && (
+                {/* Lanovka — smazat */}
+                {calMon && !calMon.isOff && (
+                  <button onClick={cancelMonSector}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
+                      border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+                    Smazat stavění — {calMon.sector}
+                  </button>
+                )}
+                {/* Lanovka — vrátit po posunu */}
+                {week.monSectorOverride?.sector === 'Volný týden' && week.monSavedSetters && (
                   <button onClick={undoMonShift}
                     className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
                       border border-amber-200 text-amber-600 hover:bg-amber-50 transition-colors">
                     ↩ Vrátit Lanovka
                   </button>
                 )}
+                {/* Lanovka — vrátit po smazání */}
+                {week.monCancelledSetters && (
+                  <button onClick={undoMonCancel}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
+                      border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+                    ↩ Obnovit Lanovka
+                  </button>
+                )}
+                {/* Limit — posunout */}
                 {calWed && !calWed.isOff && (
                   <button onClick={shiftWedSector}
                     className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
                       border border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-colors">
-                    Posunout stavění — {calWed.sector}
+                    Posunout — {calWed.sector}
                     <span className="bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-lg font-black">
-                      → týden {fmt(addDays(week.wedDateOverride ? new Date(week.wedDateOverride) : wedDate, 7))}
+                      → {fmt(addDays(week.wedDateOverride ? new Date(week.wedDateOverride) : wedDate, 7))}
                     </span>
                   </button>
                 )}
-                {week.wedSectorOverride?.sector === 'Volný týden' && (
+                {/* Limit — smazat */}
+                {calWed && !calWed.isOff && (
+                  <button onClick={cancelWedSector}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
+                      border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+                    Smazat stavění — {calWed.sector}
+                  </button>
+                )}
+                {/* Limit — vrátit po posunu */}
+                {week.wedSectorOverride?.sector === 'Volný týden' && week.wedSavedSetters && (
                   <button onClick={undoWedShift}
                     className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
                       border border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-colors">
                     ↩ Vrátit Limit
+                  </button>
+                )}
+                {/* Limit — vrátit po smazání */}
+                {week.wedCancelledSetters && (
+                  <button onClick={undoWedCancel}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
+                      border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+                    ↩ Obnovit Limit
                   </button>
                 )}
               </div>
