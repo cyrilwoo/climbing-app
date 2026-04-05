@@ -1165,6 +1165,8 @@
               _thuDate:   weekData.thuDateOverride || toIso(addDays(monBase, 3)),
               _monCancelled: weekData.monCancelledSetters != null ? true : null,
               _wedCancelled: weekData.wedCancelledSetters != null ? true : null,
+              _monShifted: weekData.monSavedSetters != null ? true : null,
+              _wedShifted: weekData.wedSavedSetters != null ? true : null,
             };
             db.collection('weeks').doc(weekId).set(toFirestore(enriched), { merge: true }).catch(() => {});
           });
