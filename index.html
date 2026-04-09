@@ -935,22 +935,25 @@
                 const monDate = new Date(ky, km - 1, kd);
                 const calEntry = CAL[k];
                 const wd = data[k] ?? { monday: [], mondayLano: null, wednesday: [], thursday: [] };
-                const wOff = isDetskaWed(calEntry?.wed?.sector) ? 3 : 2;
+                // Respect sector overrides (shifted/cancelled weeks count as isOff)
+                const effMon = wd.monSectorOverride ?? calEntry?.mon ?? null;
+                const effWed = wd.wedSectorOverride ?? calEntry?.wed ?? null;
+                const wOff = isDetskaWed(effWed?.sector) ? 3 : 2;
 
                 // Lanovka — Monday
-                if (calEntry?.mon && !calEntry.mon.isOff) {
+                if (effMon && !effMon.isOff) {
                   const sessionDate = new Date(ky, km - 1, kd);
                   if (sessionDate.getFullYear() === year && sessionDate.getMonth() === month) {
-                    const maxSlots = getLanovkaSlotCount(calEntry.mon.sector);
+                    const maxSlots = getLanovkaSlotCount(effMon.sector);
                     monTotal += maxSlots + 1; // +1 for lano
                     monFill += (wd.monday || []).slice(0, maxSlots).filter(Boolean).length + (wd.mondayLano ? 1 : 0);
                   }
                 }
                 // Limit — Wed (+2) or Thu (+3 for Dětská)
-                if (calEntry?.wed && !calEntry.wed.isOff && calEntry.wed.sector !== 'Volno') {
+                if (effWed && !effWed.isOff && effWed.sector !== 'Volno') {
                   const sessionDate = addDays(monDate, wOff);
                   if (sessionDate.getFullYear() === year && sessionDate.getMonth() === month) {
-                    const maxSlots = getWedSlotCount(calEntry.wed.sector);
+                    const maxSlots = getWedSlotCount(effWed.sector);
                     wedTotal += maxSlots;
                     wedFill += (wd.wednesday || []).slice(0, maxSlots).filter(Boolean).length;
                   }
@@ -1199,70 +1202,68 @@
         return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       }
       function shiftMonSector() {
-        const calKeys = Object.keys(CAL).sort();
-        const idx = calKeys.indexOf(key);
-        let nextKey = null;
-        for (let i = idx + 1; i < calKeys.length; i++) {
-          if (CAL[calKeys[i]]?.mon && !CAL[calKeys[i]].mon.isOff) { nextKey = calKeys[i]; break; }
-        }
-        if (!nextKey) return;
+        const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
         const nextWeekData = data[nextKey] ?? initWeek(nextKey);
+        // Only shift the sector/profile — setters/sundavači stay tied to their date (cleared here, not moved)
         setData(d => ({
           ...d,
           [nextKey]: { ...nextWeekData, monSectorOverride: calMon },
-          [key]: { ...week, monday: E4(), mondayLano: null, monSectorOverride: { isOff: true, sector: 'Volný týden' }, monSavedSetters: week.monday, monSavedLano: week.mondayLano }
+          [key]: { ...week,
+            monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null,
+            monSectorOverride: { isOff: true, sector: 'Volný týden' },
+            monSavedSetters: week.monday, monSavedLano: week.mondayLano,
+            monSavedSundavaci: week.mondaySundavaci || [], monSavedMyti: week.mondayMyti,
+          }
         }));
       }
       function shiftWedSector() {
-        const calKeys = Object.keys(CAL).sort();
-        const idx = calKeys.indexOf(key);
-        let nextKey = null;
-        for (let i = idx + 1; i < calKeys.length; i++) {
-          if (CAL[calKeys[i]]?.wed && !CAL[calKeys[i]].wed.isOff) { nextKey = calKeys[i]; break; }
-        }
-        if (!nextKey) return;
+        const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
         const nextWeekData = data[nextKey] ?? initWeek(nextKey);
+        // Only shift the sector/profile — setters/sundavači stay tied to their date (cleared here, not moved)
         setData(d => ({
           ...d,
           [nextKey]: { ...nextWeekData, wedSectorOverride: calWed },
-          [key]: { ...week, wednesday: E4(), wedSectorOverride: { isOff: true, sector: 'Volný týden' }, wedSavedSetters: week.wednesday }
+          [key]: { ...week,
+            wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null,
+            wedSectorOverride: { isOff: true, sector: 'Volný týden' },
+            wedSavedSetters: week.wednesday,
+            wedSavedSundavaci: week.wednesdaySundavaci || [], wedSavedMyti: week.wednesdayMyti,
+          }
         }));
       }
 
       function undoMonShift() {
-        const calKeys = Object.keys(CAL).sort();
-        const idx = calKeys.indexOf(key);
-        let nextKey = null;
-        for (let i = idx + 1; i < calKeys.length; i++) {
-          if (CAL[calKeys[i]]?.mon && !CAL[calKeys[i]].mon.isOff) { nextKey = calKeys[i]; break; }
-        }
+        const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
         setData(d => {
           const curr = { ...week };
           if (curr.monSavedSetters) { curr.monday = curr.monSavedSetters; curr.mondayLano = curr.monSavedLano ?? null; }
-          curr.monSectorOverride = null; curr.monSavedSetters = null; curr.monSavedLano = null;
+          curr.mondaySundavaci = curr.monSavedSundavaci || [];
+          curr.mondayMyti = curr.monSavedMyti ?? null;
+          curr.monSectorOverride = null;
+          curr.monSavedSetters = null; curr.monSavedLano = null;
+          curr.monSavedSundavaci = null; curr.monSavedMyti = null;
           const updates = { ...d, [key]: curr };
-          if (nextKey && d[nextKey]) {
-            const nxt = { ...d[nextKey], monSectorOverride: null };
-            updates[nextKey] = nxt;
+          if (d[nextKey]) {
+            // Only clear the sector override — keep next week's setters (they belong to that date)
+            updates[nextKey] = { ...d[nextKey], monSectorOverride: null };
           }
           return updates;
         });
       }
       function undoWedShift() {
-        const calKeys = Object.keys(CAL).sort();
-        const idx = calKeys.indexOf(key);
-        let nextKey = null;
-        for (let i = idx + 1; i < calKeys.length; i++) {
-          if (CAL[calKeys[i]]?.wed && !CAL[calKeys[i]].wed.isOff) { nextKey = calKeys[i]; break; }
-        }
+        const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
         setData(d => {
           const curr = { ...week };
           if (curr.wedSavedSetters) { curr.wednesday = curr.wedSavedSetters; }
-          curr.wedSectorOverride = null; curr.wedSavedSetters = null;
+          curr.wednesdaySundavaci = curr.wedSavedSundavaci || [];
+          curr.wednesdayMyti = curr.wedSavedMyti ?? null;
+          curr.wedSectorOverride = null;
+          curr.wedSavedSetters = null;
+          curr.wedSavedSundavaci = null; curr.wedSavedMyti = null;
           const updates = { ...d, [key]: curr };
-          if (nextKey && d[nextKey]) {
-            const nxt = { ...d[nextKey], wedSectorOverride: null };
-            updates[nextKey] = nxt;
+          if (d[nextKey]) {
+            // Only clear the sector override — keep next week's setters (they belong to that date)
+            updates[nextKey] = { ...d[nextKey], wedSectorOverride: null };
           }
           return updates;
         });
@@ -1390,15 +1391,28 @@
         setData(d => {
           const out = {};
           for (const [k,w] of Object.entries(d)) {
+            const nullify = v => v === name ? null : v;
+            const nullifyArr = a => (a || []).map(nullify);
+            const filterArr = a => (a || []).filter(x => x !== name);
             out[k] = {
-              monday:    w.monday.map(s => s===name ? null : s),
-              mondayLano: w.mondayLano === name ? null : w.mondayLano,
-              wednesday: w.wednesday.map(s => s===name ? null : s),
-              thursday: (w.thursday || E4()).map(s => s===name ? null : s),
-              mondaySundavaci: (w.mondaySundavaci || []).filter(s => s !== name),
-              mondayMyti: w.mondayMyti === name ? null : w.mondayMyti,
-              wednesdaySundavaci: (w.wednesdaySundavaci || []).filter(s => s !== name),
-              wednesdayMyti: w.wednesdayMyti === name ? null : w.wednesdayMyti,
+              ...w,
+              monday:    nullifyArr(w.monday),
+              mondayLano: nullify(w.mondayLano),
+              wednesday: nullifyArr(w.wednesday),
+              thursday:  nullifyArr(w.thursday),
+              mondaySundavaci: filterArr(w.mondaySundavaci),
+              mondayMyti: nullify(w.mondayMyti),
+              wednesdaySundavaci: filterArr(w.wednesdaySundavaci),
+              wednesdayMyti: nullify(w.wednesdayMyti),
+              // preserve saved/cancelled arrays too
+              monSavedSetters: nullifyArr(w.monSavedSetters),
+              monSavedSundavaci: filterArr(w.monSavedSundavaci),
+              wedSavedSetters: nullifyArr(w.wedSavedSetters),
+              wedSavedSundavaci: filterArr(w.wedSavedSundavaci),
+              monCancelledSetters: nullifyArr(w.monCancelledSetters),
+              monCancelledSundavaci: filterArr(w.monCancelledSundavaci),
+              wedCancelledSetters: nullifyArr(w.wedCancelledSetters),
+              wedCancelledSundavaci: filterArr(w.wedCancelledSundavaci),
             };
           }
           return out;
@@ -1596,22 +1610,28 @@
             <div className="overflow-x-auto snap-x snap-mandatory lg:snap-none relative z-0">
               <div className="flex flex-col gap-4 w-fit">
 
-                {/* Řádek 1: Sundavání */}
+                {/* Řádek 1: Sundavání — zobraz jen pokud má týden stavění */}
+                {(!calMon?.isOff || !calWed?.isOff) && (
                 <div className="flex gap-4">
+                  {!calMon?.isOff && (
                   <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
                     <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
                       sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
                       onToggleSundavac={name => toggleSundavac('monday', name)}
                       onToggleMyti={name => toggleMyti('monday', name)} />
                   </div>
+                  )}
+                  {!calWed?.isOff && (
                   <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
                     <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
                       sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
                       onToggleSundavac={name => toggleSundavac('wednesday', name)}
                       onToggleMyti={name => toggleMyti('wednesday', name)} />
                   </div>
+                  )}
                   {calThu && <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0" />}
                 </div>
+                )}
 
                 {/* Řádek 2: Stavění */}
                 <div className="flex gap-4">
