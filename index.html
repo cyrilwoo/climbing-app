@@ -1485,7 +1485,8 @@
 
         function countWeek(wd, defaultMonDate, calEntry) {
           const effectiveMon = wd.monDateOverride ? new Date(wd.monDateOverride) : defaultMonDate;
-          const wOff = isDetskaWed(calEntry?.wed?.sector) ? 3 : 2;
+          const effWedSector = wd.wedSectorOverride?.sector ?? calEntry?.wed?.sector;
+          const wOff = isDetskaWed(effWedSector) ? 3 : 2;
           const effectiveWed = wd.wedDateOverride ? new Date(wd.wedDateOverride) : addDays(defaultMonDate, wOff);
           function tally(name, date) {
             if (!name || !stats[name]) return;
@@ -1777,7 +1778,7 @@
                       border border-amber-200 text-amber-600 hover:bg-amber-50 transition-colors">
                     Posunout — {calMon.sector}
                     <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-lg font-black">
-                      → {fmt(addDays(week.monDateOverride ? new Date(week.monDateOverride) : monDate, 7))}
+                      → {fmt(addDays(monday, 7))}
                     </span>
                   </button>
                 )}
@@ -1812,7 +1813,7 @@
                       border border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-colors">
                     Posunout — {calWed.sector}
                     <span className="bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-lg font-black">
-                      → {fmt(addDays(week.wedDateOverride ? new Date(week.wedDateOverride) : wedDate, 7))}
+                      → {fmt(addDays(monday, 7))}
                     </span>
                   </button>
                 )}
