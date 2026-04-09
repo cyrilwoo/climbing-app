@@ -1131,15 +1131,19 @@
         }).catch(() => { setFirebaseReady(true); });
 
         // Real-time listener: sync changes from other users
+        // Use docChanges() to process only added/modified docs, not the full snapshot every time
         const unsub = db.collection('weeks').onSnapshot(snapshot => {
           const loaded = {};
-          snapshot.forEach(doc => {
+          snapshot.docChanges().forEach(change => {
+            if (change.type === 'removed') return;
+            const doc = change.doc;
             if (skipFirebaseWeeks.current.has(doc.id)) {
               skipFirebaseWeeks.current.delete(doc.id);
               return; // vlastní zápis — přeskoč
             }
             loaded[doc.id] = fromFirestore(doc.data());
           });
+          if (Object.keys(loaded).length === 0) return;
           setData(prev => {
             const merged = { ...prev, ...loaded };
             return JSON.stringify(merged) !== JSON.stringify(prev) ? merged : prev;
