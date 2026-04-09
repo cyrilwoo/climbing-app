@@ -1349,8 +1349,9 @@
           if (sel === c) setSel(null);
           return;
         }
-        const c = week[session][idx];
-        setWeek({ ...week, [session]: week[session].map((s,i) => i === idx ? null : s) });
+        const arr = week[session] || E4();
+        const c = arr[idx];
+        setWeek({ ...week, [session]: arr.map((s,i) => i === idx ? null : s) });
         if (sel === c) setSel(null);
       }
 
