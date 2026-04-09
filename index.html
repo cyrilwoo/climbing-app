@@ -1324,8 +1324,8 @@
       }
 
       // ── Badge helpers (display only) ──────────────────────────────────────
-      function isMonday(c)    { return week.monday.includes(c) || week.mondayLano === c; }
-      function isWednesday(c) { return week.wednesday.includes(c); }
+      function isMonday(c)    { return (week.monday || []).includes(c) || week.mondayLano === c; }
+      function isWednesday(c) { return (week.wednesday || []).includes(c); }
 
       // ── Assign / remove ───────────────────────────────────────────────────
       function assign(climber, session, idx) {
@@ -1603,9 +1603,9 @@
               {(() => {
                 const monMax = calMon?.sector && !calMon.isOff ? getLanovkaSlotCount(calMon.sector) : 0;
                 const wedMax = calWed?.sector && !calWed.isOff ? getWedSlotCount(calWed.sector) : 0;
-                const monFill = monMax ? week.monday.slice(0,monMax).filter(Boolean).length + (week.mondayLano ? 1 : 0) : 0;
+                const monFill = monMax ? (week.monday||[]).slice(0,monMax).filter(Boolean).length + (week.mondayLano ? 1 : 0) : 0;
                 const monTot  = monMax ? monMax + 1 : 0;
-                const wedFill = wedMax ? week.wednesday.slice(0,wedMax).filter(Boolean).length : 0;
+                const wedFill = wedMax ? (week.wednesday||[]).slice(0,wedMax).filter(Boolean).length : 0;
                 const thuFill = (week.thursday||[]).slice(0,2).filter(Boolean).length;
                 const monPct  = monTot ? Math.round(monFill/monTot*100) : 0;
                 const wedPct  = wedMax ? Math.round(wedFill/wedMax*100) : 0;
