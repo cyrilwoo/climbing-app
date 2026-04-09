@@ -1094,7 +1094,7 @@
       const [sel,     setSel]     = useState(null);
       const [drag,    setDrag]    = useState(null);  // { from, climber, session, idx? }
       const [firebaseReady, setFirebaseReady] = useState(false);
-      const skipNextFirebase = React.useRef(false);
+      const skipFirebaseWeeks = React.useRef(new Set());
 
       // ── Firestore helpers: null ↔ "__NULL__" ────────────────────────────────
       function toFirestore(weekData) {
@@ -1132,9 +1132,14 @@
 
         // Real-time listener: sync changes from other users
         const unsub = db.collection('weeks').onSnapshot(snapshot => {
-          if (skipNextFirebase.current) { skipNextFirebase.current = false; return; }
           const loaded = {};
-          snapshot.forEach(doc => { loaded[doc.id] = fromFirestore(doc.data()); });
+          snapshot.forEach(doc => {
+            if (skipFirebaseWeeks.current.has(doc.id)) {
+              skipFirebaseWeeks.current.delete(doc.id);
+              return; // vlastní zápis — přeskoč
+            }
+            loaded[doc.id] = fromFirestore(doc.data());
+          });
           setData(prev => {
             const merged = { ...prev, ...loaded };
             return JSON.stringify(merged) !== JSON.stringify(prev) ? merged : prev;
@@ -1150,8 +1155,8 @@
         if (!firebaseReady) return;
         // Debounce Firestore writes
         const t = setTimeout(() => {
-          skipNextFirebase.current = true;
           Object.entries(data).forEach(([weekId, weekData]) => {
+            skipFirebaseWeeks.current.add(weekId);
             // Derive effective sector + build dates for calendar sync
             const calMon = weekData.monSectorOverride ?? CAL[weekId]?.mon ?? null;
             const calWed = weekData.wedSectorOverride ?? CAL[weekId]?.wed ?? null;
@@ -1355,6 +1360,7 @@
         setSel(null);
       }
       function clearWeek() {
+        if (!window.confirm('Resetovat celý týden? Smažou se všichni stavěči, sundavači i případný posun/zrušení.')) return;
         setData(d => { const n={...d}; delete n[key]; return n; });
         setSel(null);
       }
@@ -1441,8 +1447,12 @@
             const s = [...week[session]]; s[srcIdx]=null; s[idx]=climber;
             setWeek({ ...week, [session]: s });
           } else {
-            // cross-session drag: just assign normally
-            assign(climber, session, idx);
+            // cross-session drag: remove from source, assign to target in one update
+            if (week[session][idx] !== null) return;
+            if (week[session].includes(climber)) return;
+            const newSrc = [...week[src]]; newSrc[srcIdx] = null;
+            const newDst = [...week[session]]; newDst[idx] = climber;
+            setWeek({ ...week, [src]: newSrc, [session]: newDst });
           }
         }
       }
@@ -1491,11 +1501,13 @@
           (wd.thursday || []).forEach(s => tally(s, effectiveThu));
         }
 
-        // All weeks from CAL, with user data overrides where present
+        // All weeks from CAL — only count weeks where user has explicitly saved data
+        // (initWeek adds Cyril as default setter which would inflate his stats)
         Object.keys(CAL).forEach(k => {
+          if (!data[k]) return;
           const [y, m, d] = k.split('-').map(Number);
           const monDate = new Date(y, m-1, d);
-          countWeek(data[k] ?? initWeek(k), monDate, CAL[k]);
+          countWeek(data[k], monDate, CAL[k]);
         });
         // Any user-edited weeks outside CAL
         Object.keys(data).forEach(k => {
@@ -1520,11 +1532,12 @@
             if (date.getMonth() === thisMonth) stats[name][field + 'Month']++;
           }
         }
-        const allKeys = new Set([...Object.keys(CAL), ...Object.keys(data)]);
+        // Only count weeks where user has saved data (same reason as computeStats)
+        const allKeys = new Set(Object.keys(data));
         allKeys.forEach(k => {
           const [y, m, d] = k.split('-').map(Number);
           const monDate = new Date(y, m-1, d);
-          const wd = data[k] ?? initWeek(k);
+          const wd = data[k];
           const wOff = isDetskaWed(CAL[k]?.wed?.sector) ? 3 : 2;
           const wedDate = wd.wedDateOverride ? new Date(wd.wedDateOverride) : addDays(monDate, wOff);
           const sundMon = addDays(wd.monDateOverride ? new Date(wd.monDateOverride) : monDate, -1);
