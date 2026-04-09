@@ -1331,9 +1331,10 @@
           setWeek({ ...week, mondayLano: climber });
           return true;
         }
-        if (week[session][idx] !== null) return false;
-        if (week[session].includes(climber)) return false;
-        setWeek({ ...week, [session]: week[session].map((s,i) => i === idx ? climber : s) });
+        const arr = week[session] || E4();
+        if (arr[idx] !== null) return false;
+        if (arr.includes(climber)) return false;
+        setWeek({ ...week, [session]: arr.map((s,i) => i === idx ? climber : s) });
         return true;
       }
 
@@ -1412,13 +1413,19 @@
               wednesdayMyti: nullify(w.wednesdayMyti),
               // preserve saved/cancelled arrays too
               monSavedSetters: nullifyArr(w.monSavedSetters),
+              monSavedLano: nullify(w.monSavedLano),
               monSavedSundavaci: filterArr(w.monSavedSundavaci),
+              monSavedMyti: nullify(w.monSavedMyti),
               wedSavedSetters: nullifyArr(w.wedSavedSetters),
               wedSavedSundavaci: filterArr(w.wedSavedSundavaci),
+              wedSavedMyti: nullify(w.wedSavedMyti),
               monCancelledSetters: nullifyArr(w.monCancelledSetters),
+              monCancelledLano: nullify(w.monCancelledLano),
               monCancelledSundavaci: filterArr(w.monCancelledSundavaci),
+              monCancelledMyti: nullify(w.monCancelledMyti),
               wedCancelledSetters: nullifyArr(w.wedCancelledSetters),
               wedCancelledSundavaci: filterArr(w.wedCancelledSundavaci),
+              wedCancelledMyti: nullify(w.wedCancelledMyti),
             };
           }
           return out;
@@ -1438,20 +1445,23 @@
           assign(climber, session, idx);
         } else if (from === 'lano') {
           // lano → regular slot
-          if (week[session][idx] !== null) return;
+          const dstArr = week[session] || E4();
+          if (dstArr[idx] !== null) return;
           setWeek({ ...week, mondayLano: null,
-            [session]: week[session].map((s,i) => i===idx ? climber : s) });
+            [session]: dstArr.map((s,i) => i===idx ? climber : s) });
         } else {
+          const dstArr = week[session] || E4();
+          const srcArr = week[src] || E4();
           if (src === session) {
-            if (idx === srcIdx || week[session][idx] !== null) return;
-            const s = [...week[session]]; s[srcIdx]=null; s[idx]=climber;
+            if (idx === srcIdx || dstArr[idx] !== null) return;
+            const s = [...dstArr]; s[srcIdx]=null; s[idx]=climber;
             setWeek({ ...week, [session]: s });
           } else {
             // cross-session drag: remove from source, assign to target in one update
-            if (week[session][idx] !== null) return;
-            if (week[session].includes(climber)) return;
-            const newSrc = [...week[src]]; newSrc[srcIdx] = null;
-            const newDst = [...week[session]]; newDst[idx] = climber;
+            if (dstArr[idx] !== null) return;
+            if (dstArr.includes(climber)) return;
+            const newSrc = [...srcArr]; newSrc[srcIdx] = null;
+            const newDst = [...dstArr]; newDst[idx] = climber;
             setWeek({ ...week, [src]: newSrc, [session]: newDst });
           }
         }
@@ -1853,8 +1863,8 @@
               {!isNow && (() => {
                 const todayMonday = getMonday(new Date());
                 const todayKey = weekKey(todayMonday);
-                const todayCalMon = CAL[todayKey]?.mon ?? null;
-                const todayCalWed = CAL[todayKey]?.wed ?? null;
+                const todayCalMon = data[todayKey]?.monSectorOverride ?? CAL[todayKey]?.mon ?? null;
+                const todayCalWed = data[todayKey]?.wedSectorOverride ?? CAL[todayKey]?.wed ?? null;
                 const todayWedOff = isDetskaWed(todayCalWed?.sector) ? 3 : 2;
                 const todayWedDate = addDays(todayMonday, todayWedOff);
                 const fmtDate = d => d.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
