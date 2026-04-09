@@ -1381,7 +1381,7 @@
 
       // ── Click ─────────────────────────────────────────────────────────────
       function onSlotClick(session, idx) {
-        if (week[session][idx]) remove(session, idx);
+        if ((week[session] || E4())[idx]) remove(session, idx);
         else if (sel) assign(sel, session, idx);
         // sel stays active — assign to multiple slots/sessions in one go
       }
@@ -1478,7 +1478,7 @@
           assign(climber, 'mondayLano', 0);
         } else if (from === 'slot') {
           if (week.mondayLano !== null) return;
-          const s = [...week[src]]; s[srcIdx] = null;
+          const s = [...(week[src] || E4())]; s[srcIdx] = null;
           setWeek({ ...week, [src]: s, mondayLano: climber });
         }
       }
