@@ -1539,7 +1539,8 @@
           const [y, m, d] = k.split('-').map(Number);
           const monDate = new Date(y, m-1, d);
           const wd = data[k];
-          const wOff = isDetskaWed(CAL[k]?.wed?.sector) ? 3 : 2;
+          const effWedSector = wd.wedSectorOverride?.sector ?? CAL[k]?.wed?.sector;
+          const wOff = isDetskaWed(effWedSector) ? 3 : 2;
           const wedDate = wd.wedDateOverride ? new Date(wd.wedDateOverride) : addDays(monDate, wOff);
           const sundMon = addDays(wd.monDateOverride ? new Date(wd.monDateOverride) : monDate, -1);
           const sundWed = addDays(wedDate, -1);
