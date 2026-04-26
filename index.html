@@ -127,38 +127,38 @@
       '2026-06-15': { mon: L3, wed: P },
       '2026-06-22': { mon: L4, wed: Z },
       '2026-06-29': { mon: L5, wed: K },
-      // ── ČERVENEC — střídavě Limit / Lanovka ──────────────────────
-      '2026-07-06': { wed: V, thu: TG },
-      '2026-07-13': { mon: L1          },
-      '2026-07-20': {            wed: D  },
-      '2026-07-27': { mon: L2          },
-      // ── SRPEN — střídavě Limit / Lanovka ─────────────────────────
-      '2026-08-03': { wed: P, thu: TG },
-      '2026-08-10': { mon: L3          },
-      '2026-08-17': {            wed: Z  },
-      '2026-08-24': { mon: L4          },
-      '2026-08-31': { wed: K, thu: TG },
+      // ── ČERVENEC — střídavě Lanovka / Limit ──────────────────────
+      '2026-07-06': { mon: L1, thu: TG },
+      '2026-07-13': {            wed: D  },
+      '2026-07-20': { mon: L2          },
+      '2026-07-27': {            wed: P  },
+      // ── SRPEN — střídavě Lanovka / Limit ─────────────────────────
+      '2026-08-03': { mon: L3, thu: TG },
+      '2026-08-10': {            wed: Z  },
+      '2026-08-17': { mon: L4          },
+      '2026-08-24': {            wed: K  },
+      '2026-08-31': { mon: L5, thu: TG },
       // ── ZÁŘÍ ─────────────────────────────────────────────────────
-      '2026-09-07': { mon: L5, wed: V },
-      '2026-09-14': { mon: L1, wed: D },
-      '2026-09-21': { mon: L2, wed: P },
-      '2026-09-28': { mon: L3, wed: Z, thu: TG },
+      '2026-09-07': { mon: L1, wed: V },
+      '2026-09-14': { mon: L2, wed: D },
+      '2026-09-21': { mon: L3, wed: P },
+      '2026-09-28': { mon: L4, wed: Z, thu: TG },
       // ── ŘÍJEN ────────────────────────────────────────────────────
-      '2026-10-05': { mon: L4, wed: K },
-      '2026-10-12': { mon: L5, wed: V },
-      '2026-10-19': { mon: L1, wed: D },
-      '2026-10-26': { mon: L2, wed: P, thu: TG },
+      '2026-10-05': { mon: L5, wed: K },
+      '2026-10-12': { mon: L1, wed: V },
+      '2026-10-19': { mon: L2, wed: D },
+      '2026-10-26': { mon: L3, wed: P, thu: TG },
       // ── LISTOPAD ─────────────────────────────────────────────────
-      '2026-11-02': { mon: L3, wed: Z },
-      '2026-11-09': { mon: L4, wed: K },
-      '2026-11-16': { mon: L5, wed: V },
-      '2026-11-23': { mon: L1, wed: D, thu: TG },
-      '2026-11-30': { mon: L2, wed: P },
+      '2026-11-02': { mon: L4, wed: Z },
+      '2026-11-09': { mon: L5, wed: K },
+      '2026-11-16': { mon: L1, wed: V },
+      '2026-11-23': { mon: L2, wed: D, thu: TG },
+      '2026-11-30': { mon: L3, wed: P },
       // ── PROSINEC ─────────────────────────────────────────────────
-      '2026-12-07': { mon: L3, wed: Z },
-      '2026-12-14': { mon: L4, wed: K },
-      '2026-12-21': { mon: L5, wed: V, thu: TG },
-      '2026-12-28': { mon: L1, wed: D },
+      '2026-12-07': { mon: L4, wed: Z },
+      '2026-12-14': { mon: L5, wed: K },
+      '2026-12-21': { mon: L1, wed: V, thu: TG },
+      '2026-12-28': { mon: L2, wed: D },
     };
 
     // Returns the next non-off CAL entry for venue ('mon'|'wed') after weekKey
@@ -358,10 +358,11 @@
         ? (isGreen ? 2 : isYellow ? getLanovkaSlotCount(calInfo.sector) : getWedSlotCount(calInfo.sector))
         : slots.length;
       const visibleSlots = slots.slice(0, maxSlots);
-      const filled = visibleSlots.filter(Boolean).length + (lanoSlot ? 1 : 0);
-      const total  = maxSlots + (lanoSlot !== undefined ? 1 : 0);
+      const filled = visibleSlots.filter(Boolean).length + (lanoSlot && calInfo != null ? 1 : 0);
+      const total  = maxSlots + (lanoSlot !== undefined && calInfo != null ? 1 : 0);
       const allFilled = filled === total;
       const flash = false; // conflict prevention removed
+      const isJulyAugust = date.getMonth() === 6 || date.getMonth() === 7;
 
       // Theme tokens
       const hdr      = isYellow ? 'bg-gradient-to-br from-amber-400 to-yellow-400' : isGreen ? 'bg-gradient-to-br from-emerald-500 to-green-600' : 'bg-[#1e1e20]';
@@ -426,6 +427,12 @@
                     {calInfo.sector}
                   </span>
                 )}
+                {!calInfo && isJulyAugust && (
+                  <span className={`inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full
+                    ${isYellow ? 'bg-black/10 text-gray-700' : 'bg-white/10 text-white/60'}`}>
+                    není stavění
+                  </span>
+                )}
               </div>
               <div className="flex-shrink-0">
                 <span className={`text-sm font-black tracking-widest flex-shrink-0
@@ -446,6 +453,15 @@
                 <span className={`font-black text-center leading-tight tracking-tight break-words w-full text-amber-900
                   ${calInfo.sector.length > 20 ? 'text-lg' : calInfo.sector.length > 12 ? 'text-xl' : 'text-2xl'}`}>
                   {calInfo.sector}
+                </span>
+              </div>
+            )}
+            {/* Není stavění — July/August alternating weeks */}
+            {calInfo == null && isJulyAugust && (
+              <div className={`mt-3 rounded-xl px-3 py-4 flex items-center justify-center min-h-[3.5rem]
+                ${isYellow ? 'bg-black/10 ring-1 ring-black/10' : 'bg-white/5 ring-1 ring-white/10'}`}>
+                <span className={`text-sm font-bold ${isYellow ? 'text-amber-800/50' : 'text-white/30'}`}>
+                  není stavění
                 </span>
               </div>
             )}
@@ -493,6 +509,11 @@
                 {calInfo.sector === 'Sundavání' ? '🧹 ' : '🚐 '}
                 {calInfo.sector} — není stavění
               </div>
+            ) : calInfo == null ? (
+              <div className={`text-center py-2 text-xs font-medium rounded-xl
+                ${isYellow ? 'text-amber-400/60 bg-amber-50/50' : 'text-white/20 bg-white/5'}`}>
+                —
+              </div>
             ) : (
               visibleSlots.map((name, i) => (
                 <Slot key={i} num={i+1} name={name} {...slotProps}
@@ -503,7 +524,7 @@
             )}
 
             {/* Lano section (Lanovka only) */}
-            {lanoSlot !== undefined && !calInfo?.isOff && (
+            {lanoSlot !== undefined && calInfo != null && !calInfo?.isOff && (
               <div className="mt-3 pt-3 border-t border-amber-100">
                 <p className="text-xs font-bold text-amber-700 mb-2 flex items-center gap-1">
                   🪢 Lano
@@ -1162,8 +1183,10 @@
           Object.entries(data).forEach(([weekId, weekData]) => {
             skipFirebaseWeeks.current.add(weekId);
             // Derive effective sector + build dates for calendar sync
-            const calMon = weekData.monSectorOverride ?? CAL[weekId]?.mon ?? null;
-            const calWed = weekData.wedSectorOverride ?? CAL[weekId]?.wed ?? null;
+            const _monOvS = weekData.monSectorOverride;
+            const calMon = (_monOvS != null && (_monOvS.isOff || _monOvS.sector)) ? _monOvS : (CAL[weekId]?.mon ?? null);
+            const _wedOvS = weekData.wedSectorOverride;
+            const calWed = (_wedOvS != null && (_wedOvS.isOff || _wedOvS.sector)) ? _wedOvS : (CAL[weekId]?.wed ?? null);
             const calThu = CAL[weekId]?.thu ?? null;
             const monBase = new Date(weekId + 'T12:00:00');
             const wOff = isDetskaWed(calWed?.sector) ? 3 : 2;
@@ -1190,8 +1213,10 @@
       const friday = addDays(monday, 4);
       const key    = weekKey(monday);
       const week   = data[key] ?? initWeek(key);
-      const calMon = week.monSectorOverride ?? CAL[key]?.mon ?? null;
-      const calWed = week.wedSectorOverride ?? CAL[key]?.wed ?? null;
+      const _monOv = week.monSectorOverride;
+      const calMon = (_monOv != null && (_monOv.isOff || _monOv.sector)) ? _monOv : (CAL[key]?.mon ?? null);
+      const _wedOv = week.wedSectorOverride;
+      const calWed = (_wedOv != null && (_wedOv.isOff || _wedOv.sector)) ? _wedOv : (CAL[key]?.wed ?? null);
       const calThu = CAL[key]?.thu ?? null;
 
       // Dětská na Limitu se staví ve čtvrtek (+3), ostatní sektory ve středu (+2)
@@ -1212,11 +1237,10 @@
       }
       function shiftMonSector() {
         const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
-        const nextWeekData = data[nextKey] ?? initWeek(nextKey);
         // Only shift the sector/profile — setters/sundavači stay tied to their date (cleared here, not moved)
         setData(d => ({
           ...d,
-          [nextKey]: { ...nextWeekData, monSectorOverride: calMon },
+          [nextKey]: { ...(d[nextKey] ?? initWeek(nextKey)), monSectorOverride: calMon },
           [key]: { ...week,
             monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null,
             monSectorOverride: { isOff: true, sector: 'Volný týden' },
@@ -1227,11 +1251,10 @@
       }
       function shiftWedSector() {
         const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
-        const nextWeekData = data[nextKey] ?? initWeek(nextKey);
         // Only shift the sector/profile — setters/sundavači stay tied to their date (cleared here, not moved)
         setData(d => ({
           ...d,
-          [nextKey]: { ...nextWeekData, wedSectorOverride: calWed },
+          [nextKey]: { ...(d[nextKey] ?? initWeek(nextKey)), wedSectorOverride: calWed },
           [key]: { ...week,
             wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null,
             wedSectorOverride: { isOff: true, sector: 'Volný týden' },
@@ -1244,7 +1267,7 @@
       function undoMonShift() {
         const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
         setData(d => {
-          const curr = { ...week };
+          const curr = { ...(d[key] ?? week) };
           if (curr.monSavedSetters) { curr.monday = curr.monSavedSetters; curr.mondayLano = curr.monSavedLano ?? null; }
           curr.mondaySundavaci = curr.monSavedSundavaci || [];
           curr.mondayMyti = curr.monSavedMyti ?? null;
@@ -1262,7 +1285,7 @@
       function undoWedShift() {
         const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
         setData(d => {
-          const curr = { ...week };
+          const curr = { ...(d[key] ?? week) };
           if (curr.wedSavedSetters) { curr.wednesday = curr.wedSavedSetters; }
           curr.wednesdaySundavaci = curr.wedSavedSundavaci || [];
           curr.wednesdayMyti = curr.wedSavedMyti ?? null;
@@ -1280,46 +1303,58 @@
 
       // ── Smazat stavění (volný týden) ──────────────────────────────────────
       function cancelMonSector() {
-        setWeek({
-          ...week,
-          monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null,
-          monSectorOverride: { isOff: true, sector: 'Volný týden' },
-          monCancelledSetters: week.monday,
-          monCancelledLano: week.mondayLano,
-          monCancelledSundavaci: week.mondaySundavaci || [],
-          monCancelledMyti: week.mondayMyti,
+        setData(d => {
+          const curr = d[key] ?? initWeek(key);
+          return { ...d, [key]: {
+            ...curr,
+            monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null,
+            monSectorOverride: { isOff: true, sector: 'Volný týden' },
+            monCancelledSetters: curr.monday,
+            monCancelledLano: curr.mondayLano,
+            monCancelledSundavaci: curr.mondaySundavaci || [],
+            monCancelledMyti: curr.mondayMyti,
+          }};
         });
       }
       function undoMonCancel() {
-        setWeek({
-          ...week,
-          monday: week.monCancelledSetters || E4(),
-          mondayLano: week.monCancelledLano ?? null,
-          mondaySundavaci: week.monCancelledSundavaci || [],
-          mondayMyti: week.monCancelledMyti ?? null,
-          monSectorOverride: null,
-          monCancelledSetters: null, monCancelledLano: null,
-          monCancelledSundavaci: null, monCancelledMyti: null,
+        setData(d => {
+          const curr = d[key] ?? initWeek(key);
+          return { ...d, [key]: {
+            ...curr,
+            monday: curr.monCancelledSetters || E4(),
+            mondayLano: curr.monCancelledLano ?? null,
+            mondaySundavaci: curr.monCancelledSundavaci || [],
+            mondayMyti: curr.monCancelledMyti ?? null,
+            monSectorOverride: null,
+            monCancelledSetters: null, monCancelledLano: null,
+            monCancelledSundavaci: null, monCancelledMyti: null,
+          }};
         });
       }
       function cancelWedSector() {
-        setWeek({
-          ...week,
-          wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null,
-          wedSectorOverride: { isOff: true, sector: 'Volný týden' },
-          wedCancelledSetters: week.wednesday,
-          wedCancelledSundavaci: week.wednesdaySundavaci || [],
-          wedCancelledMyti: week.wednesdayMyti,
+        setData(d => {
+          const curr = d[key] ?? initWeek(key);
+          return { ...d, [key]: {
+            ...curr,
+            wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null,
+            wedSectorOverride: { isOff: true, sector: 'Volný týden' },
+            wedCancelledSetters: curr.wednesday,
+            wedCancelledSundavaci: curr.wednesdaySundavaci || [],
+            wedCancelledMyti: curr.wednesdayMyti,
+          }};
         });
       }
       function undoWedCancel() {
-        setWeek({
-          ...week,
-          wednesday: week.wedCancelledSetters || E4(),
-          wednesdaySundavaci: week.wedCancelledSundavaci || [],
-          wednesdayMyti: week.wedCancelledMyti ?? null,
-          wedSectorOverride: null,
-          wedCancelledSetters: null, wedCancelledSundavaci: null, wedCancelledMyti: null,
+        setData(d => {
+          const curr = d[key] ?? initWeek(key);
+          return { ...d, [key]: {
+            ...curr,
+            wednesday: curr.wedCancelledSetters || E4(),
+            wednesdaySundavaci: curr.wedCancelledSundavaci || [],
+            wednesdayMyti: curr.wedCancelledMyti ?? null,
+            wedSectorOverride: null,
+            wedCancelledSetters: null, wedCancelledSundavaci: null, wedCancelledMyti: null,
+          }};
         });
       }
 
@@ -1641,9 +1676,9 @@
               <div className="flex flex-col gap-4 w-fit">
 
                 {/* Řádek 1: Sundavání — zobraz jen pokud má týden stavění */}
-                {(!calMon?.isOff || !calWed?.isOff) && (
+                {((calMon != null && !calMon.isOff) || (calWed != null && !calWed.isOff)) && (
                 <div className="flex gap-4">
-                  {!calMon?.isOff && (
+                  {calMon != null && !calMon.isOff && (
                   <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
                     <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
                       sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
@@ -1651,7 +1686,7 @@
                       onToggleMyti={name => toggleMyti('monday', name)} />
                   </div>
                   )}
-                  {!calWed?.isOff && (
+                  {calWed != null && !calWed.isOff && (
                   <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
                     <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
                       sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
