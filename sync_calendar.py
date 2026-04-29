@@ -330,8 +330,19 @@ def sync_calendar(request):
                     created += 1
 
                 # Sundavání Lanovka (day before mon_date)
+                sun_date = (datetime.strptime(mon_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+
+                # If date was overridden, also clean up old sundavání from default date (week_id - 1)
+                if mon_date != week_id:
+                    old_sun_date = (week_date - timedelta(days=1)).strftime('%Y-%m-%d')
+                    if old_sun_date != sun_date:
+                        old_sun_events = list_events_on_date(service, old_sun_date)
+                        old_sun_event = find_event(old_sun_events, 'Sundavání Lanovka')
+                        if old_sun_event:
+                            delete_event(service, old_sun_event['id'])
+                            deleted += 1
+
                 if mon_sundavaci:
-                    sun_date = (datetime.strptime(mon_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
                     sun_setters = format_setters(mon_sundavaci)
                     sun_title = f"Sundavání Lanovka | {sun_setters}"
                     if mon_myti:
@@ -349,7 +360,6 @@ def sync_calendar(request):
                         created += 1
                 else:
                     # No sundavači — delete any existing Sundavání Lanovka event on that day
-                    sun_date = (datetime.strptime(mon_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
                     events = list_events_on_date(service, sun_date)
                     event = find_event(events, 'Sundavání Lanovka')
                     if event:
@@ -415,9 +425,20 @@ def sync_calendar(request):
                     create_event(service, title, wed_date, '07:15:00', '15:00:00')
                     created += 1
 
-                # Sundavání Limit (day before)
+                # Sundavání Limit (day before wed_date)
+                sun_date = (datetime.strptime(wed_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+
+                # If date was overridden, also clean up old sundavání from default date (wed_date_default - 1)
+                if wed_date != wed_date_default:
+                    old_sun_date = (datetime.strptime(wed_date_default, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+                    if old_sun_date != sun_date:
+                        old_sun_events = list_events_on_date(service, old_sun_date)
+                        old_sun_event = find_event(old_sun_events, 'Sundavání Limit')
+                        if old_sun_event:
+                            delete_event(service, old_sun_event['id'])
+                            deleted += 1
+
                 if wed_sundavaci:
-                    sun_date = (datetime.strptime(wed_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
                     sun_setters = format_setters(wed_sundavaci)
                     sun_title = f"Sundavání Limit | {sun_setters}"
                     if wed_myti:
@@ -435,7 +456,6 @@ def sync_calendar(request):
                         created += 1
                 else:
                     # No sundavači — delete any existing Sundavání Limit event
-                    sun_date = (datetime.strptime(wed_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
                     events = list_events_on_date(service, sun_date)
                     event = find_event(events, 'Sundavání Limit')
                     if event:
