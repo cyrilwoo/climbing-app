@@ -174,8 +174,8 @@ def update_event(service, event_id, summary):
 
 def format_setters(setters, lano=None):
     """Format setters list: 'Name1, Name2, ...' + lano if present"""
-    active = [s for s in (setters or []) if s]
-    if lano:
+    active = [s for s in (setters or []) if s and s != '__NULL__']
+    if lano and lano != '__NULL__':
         active.append(lano)
     if not active:
         return None
@@ -183,10 +183,22 @@ def format_setters(setters, lano=None):
 
 
 def firestore_value(val):
-    """Extract value from Firestore field wrapper"""
-    if val is None or isinstance(val, dict) and val.get('nullValue'):
+    """Extract value from Firestore field wrapper (REST API dict or native Python SDK type)"""
+    if val is None:
         return None
+    # Native Python SDK: list
+    if isinstance(val, list):
+        return [firestore_value(v) for v in val]
+    # Native Python SDK: string
+    if isinstance(val, str):
+        return None if val == '__NULL__' else val
+    # Native Python SDK: bool
+    if isinstance(val, bool):
+        return val
+    # REST API format: dict with type wrappers
     if isinstance(val, dict):
+        if val.get('nullValue') is not None:
+            return None
         if 'stringValue' in val:
             v = val['stringValue']
             return None if v == '__NULL__' else v
@@ -195,6 +207,10 @@ def firestore_value(val):
             return [firestore_value(v) for v in arr]
         if 'booleanValue' in val:
             return val['booleanValue']
+        if 'mapValue' in val:
+            # Sector override object: {sector: ..., isOff: ...}
+            fields = val['mapValue'].get('fields', {})
+            return {k: firestore_value(v) for k, v in fields.items()}
     return val
 
 
@@ -258,98 +274,162 @@ def sync_calendar(request):
             thu_date = (week_date + timedelta(days=3)).strftime('%Y-%m-%d')
 
             # Lanovka (Monday)
-            if cal_entry.get('mon'):
-                mon_sector = get_sector_name(cal_entry['mon'], False)
-                if mon_sector and not (mon_cancelled or mon_shifted):
-                    setters_str = format_setters(mon_setters, mon_lano)
-                    title = f"Lanovka — {mon_sector}"
-                    if setters_str:
-                        title += f" | {setters_str}"
+            mon_sector_code = cal_entry.get('mon')
+            # Check monSectorOverride from Firestore
+            mon_override = firestore_value(fw_data.get('monSectorOverride'))
+            if isinstance(mon_override, dict) and (mon_override.get('isOff') or mon_override.get('sector')):
+                if mon_override.get('isOff'):
+                    mon_sector_code = None  # overridden to off
+                else:
+                    # Overridden to specific sector name (already a label, not a code)
+                    mon_override_sector = mon_override.get('sector')
+                    if mon_override_sector:
+                        # Use override sector name directly
+                        mon_sector_code = '_OVERRIDE_'
+                        mon_sector_name_override = mon_override_sector
 
-                    events = list_events_on_date(service, mon_date)
-                    event = find_event(events, 'Lanovka')
+            if mon_sector_code and mon_sector_code != '_OVERRIDE_':
+                mon_sector = get_sector_name(mon_sector_code, False)
+            elif mon_sector_code == '_OVERRIDE_':
+                mon_sector = mon_sector_name_override
+            else:
+                mon_sector = None
+
+            if mon_sector and not (mon_cancelled or mon_shifted):
+                setters_str = format_setters(mon_setters, mon_lano)
+                title = f"Lanovka — {mon_sector}"
+                if setters_str:
+                    title += f" | {setters_str}"
+
+                events = list_events_on_date(service, mon_date)
+                event = find_event(events, 'Lanovka')
+
+                if event:
+                    if event.get('summary') != title:
+                        update_event(service, event['id'], title)
+                        updated += 1
+                else:
+                    create_event(service, title, mon_date, '07:15:00', '15:00:00')
+                    created += 1
+
+                # Sundavání Lanovka (day before)
+                if mon_sundavaci:
+                    sun_date = (week_date - timedelta(days=1)).strftime('%Y-%m-%d')
+                    sun_setters = format_setters(mon_sundavaci)
+                    sun_title = f"Sundavání Lanovka | {sun_setters}"
+                    if mon_myti:
+                        sun_title += f" | mytí: {mon_myti}"
+
+                    events = list_events_on_date(service, sun_date)
+                    event = find_event(events, 'Sundavání Lanovka')
 
                     if event:
-                        if event.get('summary') != title:
-                            update_event(service, event['id'], title)
+                        if event.get('summary') != sun_title:
+                            update_event(service, event['id'], sun_title)
                             updated += 1
                     else:
-                        create_event(service, title, mon_date, '07:15:00', '15:00:00')
+                        create_event(service, sun_title, sun_date, '20:00:00', '22:00:00')
                         created += 1
-
-                    # Sundavání Lanovka (day before)
-                    if mon_sundavaci:
-                        sun_date = (week_date - timedelta(days=1)).strftime('%Y-%m-%d')
-                        sun_setters = format_setters(mon_sundavaci)
-                        sun_title = f"Sundavání Lanovka | {sun_setters}"
-                        if mon_myti:
-                            sun_title += f" | mytí: {mon_myti}"
-
-                        events = list_events_on_date(service, sun_date)
-                        event = find_event(events, 'Sundavání Lanovka')
-
-                        if event:
-                            if event.get('summary') != sun_title:
-                                update_event(service, event['id'], sun_title)
-                                updated += 1
-                        else:
-                            create_event(service, sun_title, sun_date, '20:00:00', '22:00:00')
-                            created += 1
                 else:
-                    # Delete Lanovka event if cancelled/shifted
-                    if mon_cancelled or mon_shifted:
-                        events = list_events_on_date(service, mon_date)
-                        event = find_event(events, 'Lanovka')
-                        if event:
-                            delete_event(service, event['id'])
-                            deleted += 1
+                    # No sundavači — delete any existing Sundavání Lanovka event on that day
+                    sun_date = (week_date - timedelta(days=1)).strftime('%Y-%m-%d')
+                    events = list_events_on_date(service, sun_date)
+                    event = find_event(events, 'Sundavání Lanovka')
+                    if event:
+                        delete_event(service, event['id'])
+                        deleted += 1
+            else:
+                # No Lanovka this week — delete any wrong Lanovka event on mon_date
+                events = list_events_on_date(service, mon_date)
+                event = find_event(events, 'Lanovka')
+                if event:
+                    delete_event(service, event['id'])
+                    deleted += 1
+                # Also delete Sundavání Lanovka (day before)
+                sun_date = (week_date - timedelta(days=1)).strftime('%Y-%m-%d')
+                events = list_events_on_date(service, sun_date)
+                event = find_event(events, 'Sundavání Lanovka')
+                if event:
+                    delete_event(service, event['id'])
+                    deleted += 1
 
             # Limit (Wednesday/Thursday)
-            if cal_entry.get('wed') and cal_entry['wed'] != 'V':
-                wed_sector = get_sector_name(cal_entry['wed'], True)
-                if wed_sector and not (wed_cancelled or wed_shifted):
-                    setters_str = format_setters(wed_setters)
-                    title = f"Limit — {wed_sector}"
-                    if setters_str:
-                        title += f" | {setters_str}"
+            wed_sector_code = cal_entry.get('wed') if cal_entry.get('wed') != 'V' else None
+            # Check wedSectorOverride from Firestore
+            wed_override = firestore_value(fw_data.get('wedSectorOverride'))
+            if isinstance(wed_override, dict) and (wed_override.get('isOff') or wed_override.get('sector')):
+                if wed_override.get('isOff'):
+                    wed_sector_code = None
+                else:
+                    wed_override_sector = wed_override.get('sector')
+                    if wed_override_sector:
+                        wed_sector_code = '_OVERRIDE_'
+                        wed_sector_name_override = wed_override_sector
 
-                    events = list_events_on_date(service, wed_date)
-                    event = find_event(events, 'Limit')
+            if wed_sector_code and wed_sector_code != '_OVERRIDE_':
+                wed_sector = get_sector_name(wed_sector_code, True)
+            elif wed_sector_code == '_OVERRIDE_':
+                wed_sector = wed_sector_name_override
+            else:
+                wed_sector = None
+
+            if wed_sector and not (wed_cancelled or wed_shifted):
+                setters_str = format_setters(wed_setters)
+                title = f"Limit — {wed_sector}"
+                if setters_str:
+                    title += f" | {setters_str}"
+
+                events = list_events_on_date(service, wed_date)
+                event = find_event(events, 'Limit')
+
+                if event:
+                    if event.get('summary') != title:
+                        update_event(service, event['id'], title)
+                        updated += 1
+                else:
+                    create_event(service, title, wed_date, '07:15:00', '15:00:00')
+                    created += 1
+
+                # Sundavání Limit (day before)
+                if wed_sundavaci:
+                    sun_date = (datetime.strptime(wed_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+                    sun_setters = format_setters(wed_sundavaci)
+                    sun_title = f"Sundavání Limit | {sun_setters}"
+                    if wed_myti:
+                        sun_title += f" | mytí: {wed_myti}"
+
+                    events = list_events_on_date(service, sun_date)
+                    event = find_event(events, 'Sundavání Limit')
 
                     if event:
-                        if event.get('summary') != title:
-                            update_event(service, event['id'], title)
+                        if event.get('summary') != sun_title:
+                            update_event(service, event['id'], sun_title)
                             updated += 1
                     else:
-                        create_event(service, title, wed_date, '07:15:00', '15:00:00')
+                        create_event(service, sun_title, sun_date, '20:00:00', '22:00:00')
                         created += 1
-
-                    # Sundavání Limit (day before)
-                    if wed_sundavaci:
-                        sun_date = (datetime.strptime(wed_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
-                        sun_setters = format_setters(wed_sundavaci)
-                        sun_title = f"Sundavání Limit | {sun_setters}"
-                        if wed_myti:
-                            sun_title += f" | mytí: {wed_myti}"
-
-                        events = list_events_on_date(service, sun_date)
-                        event = find_event(events, 'Sundavání Limit')
-
-                        if event:
-                            if event.get('summary') != sun_title:
-                                update_event(service, event['id'], sun_title)
-                                updated += 1
-                        else:
-                            create_event(service, sun_title, sun_date, '20:00:00', '22:00:00')
-                            created += 1
                 else:
-                    # Delete Limit event if cancelled/shifted
-                    if wed_cancelled or wed_shifted:
-                        events = list_events_on_date(service, wed_date)
-                        event = find_event(events, 'Limit')
-                        if event:
-                            delete_event(service, event['id'])
-                            deleted += 1
+                    # No sundavači — delete any existing Sundavání Limit event
+                    sun_date = (datetime.strptime(wed_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+                    events = list_events_on_date(service, sun_date)
+                    event = find_event(events, 'Sundavání Limit')
+                    if event:
+                        delete_event(service, event['id'])
+                        deleted += 1
+            else:
+                # No Limit this week — delete any wrong Limit event on wed_date
+                events = list_events_on_date(service, wed_date)
+                event = find_event(events, 'Limit')
+                if event:
+                    delete_event(service, event['id'])
+                    deleted += 1
+                # Also delete Sundavání Limit (day before)
+                sun_date = (datetime.strptime(wed_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+                events = list_events_on_date(service, sun_date)
+                event = find_event(events, 'Sundavání Limit')
+                if event:
+                    delete_event(service, event['id'])
+                    deleted += 1
 
             # Tělocvična (Thursday)
             if cal_entry.get('thu'):
