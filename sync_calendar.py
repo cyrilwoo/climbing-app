@@ -232,7 +232,7 @@ def sync_calendar(request):
             try:
                 week_date = datetime.strptime(week_id, '%Y-%m-%d')
                 days_diff = (week_date - now).days
-                if -7 <= days_diff <= 90:
+                if -7 <= days_diff <= 130:
                     weeks_to_sync.append(week_id)
             except:
                 continue
@@ -417,19 +417,22 @@ def sync_calendar(request):
                         delete_event(service, event['id'])
                         deleted += 1
             else:
-                # No Limit this week — delete any wrong Limit event on wed_date
-                events = list_events_on_date(service, wed_date)
-                event = find_event(events, 'Limit')
-                if event:
-                    delete_event(service, event['id'])
-                    deleted += 1
-                # Also delete Sundavání Limit (day before)
-                sun_date = (datetime.strptime(wed_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
-                events = list_events_on_date(service, sun_date)
-                event = find_event(events, 'Sundavání Limit')
-                if event:
-                    delete_event(service, event['id'])
-                    deleted += 1
+                # No Limit this week — delete any wrong Limit event on both +2 and +3 days
+                # (old events could be at either date, e.g. Dětská was at +3, others at +2)
+                for delta in [2, 3]:
+                    check_date = (week_date + timedelta(days=delta)).strftime('%Y-%m-%d')
+                    events = list_events_on_date(service, check_date)
+                    event = find_event(events, 'Limit')
+                    if event:
+                        delete_event(service, event['id'])
+                        deleted += 1
+                    # Also delete Sundavání Limit (day before)
+                    sun_date = (week_date + timedelta(days=delta - 1)).strftime('%Y-%m-%d')
+                    events = list_events_on_date(service, sun_date)
+                    event = find_event(events, 'Sundavání Limit')
+                    if event:
+                        delete_event(service, event['id'])
+                        deleted += 1
 
             # Tělocvična (Thursday)
             if cal_entry.get('thu'):
