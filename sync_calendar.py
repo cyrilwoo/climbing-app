@@ -269,9 +269,18 @@ def sync_calendar(request):
 
             # Determine dates and sectors
             week_date = datetime.strptime(week_id, '%Y-%m-%d')
-            mon_date = week_id
-            wed_date = (week_date + timedelta(days=3 if cal_entry.get('wed') == 'D' else 2)).strftime('%Y-%m-%d')
-            thu_date = (week_date + timedelta(days=3)).strftime('%Y-%m-%d')
+
+            # Use _monDate / _wedDate / _thuDate from Firestore if present (user may have overridden dates)
+            # These fields are computed by the app as: override ?? default
+            raw_mon_date = firestore_value(fw_data.get('_monDate')) or firestore_value(fw_data.get('monDateOverride'))
+            raw_wed_date = firestore_value(fw_data.get('_wedDate')) or firestore_value(fw_data.get('wedDateOverride'))
+            raw_thu_date = firestore_value(fw_data.get('_thuDate')) or firestore_value(fw_data.get('thuDateOverride'))
+
+            # Fallback to computed defaults if Firestore doesn't have these fields
+            mon_date = raw_mon_date if (raw_mon_date and raw_mon_date != '__NULL__') else week_id
+            wed_date_default = (week_date + timedelta(days=3 if cal_entry.get('wed') == 'D' else 2)).strftime('%Y-%m-%d')
+            wed_date = raw_wed_date if (raw_wed_date and raw_wed_date != '__NULL__') else wed_date_default
+            thu_date = raw_thu_date if (raw_thu_date and raw_thu_date != '__NULL__') else (week_date + timedelta(days=3)).strftime('%Y-%m-%d')
 
             # Lanovka (Monday)
             mon_sector_code = cal_entry.get('mon')
@@ -301,6 +310,14 @@ def sync_calendar(request):
                 if setters_str:
                     title += f" | {setters_str}"
 
+                # If date was overridden, delete stale event from the default (Monday) date
+                if mon_date != week_id:
+                    old_events = list_events_on_date(service, week_id)
+                    old_event = find_event(old_events, 'Lanovka')
+                    if old_event and old_event.get('start', {}).get('dateTime', '').startswith(week_id):
+                        delete_event(service, old_event['id'])
+                        deleted += 1
+
                 events = list_events_on_date(service, mon_date)
                 event = find_event(events, 'Lanovka')
 
@@ -312,9 +329,9 @@ def sync_calendar(request):
                     create_event(service, title, mon_date, '07:15:00', '15:00:00')
                     created += 1
 
-                # Sundavání Lanovka (day before)
+                # Sundavání Lanovka (day before mon_date)
                 if mon_sundavaci:
-                    sun_date = (week_date - timedelta(days=1)).strftime('%Y-%m-%d')
+                    sun_date = (datetime.strptime(mon_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
                     sun_setters = format_setters(mon_sundavaci)
                     sun_title = f"Sundavání Lanovka | {sun_setters}"
                     if mon_myti:
@@ -332,7 +349,7 @@ def sync_calendar(request):
                         created += 1
                 else:
                     # No sundavači — delete any existing Sundavání Lanovka event on that day
-                    sun_date = (week_date - timedelta(days=1)).strftime('%Y-%m-%d')
+                    sun_date = (datetime.strptime(mon_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
                     events = list_events_on_date(service, sun_date)
                     event = find_event(events, 'Sundavání Lanovka')
                     if event:
@@ -378,6 +395,14 @@ def sync_calendar(request):
                 title = f"Limit — {wed_sector}"
                 if setters_str:
                     title += f" | {setters_str}"
+
+                # If date was overridden, delete stale event from the default (+2/+3) date
+                if wed_date != wed_date_default:
+                    old_events = list_events_on_date(service, wed_date_default)
+                    old_event = find_event(old_events, 'Limit')
+                    if old_event and old_event.get('start', {}).get('dateTime', '').startswith(wed_date_default):
+                        delete_event(service, old_event['id'])
+                        deleted += 1
 
                 events = list_events_on_date(service, wed_date)
                 event = find_event(events, 'Limit')
