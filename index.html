@@ -948,7 +948,8 @@
           <div className="p-3 space-y-3">
             {months.map(({ year, month }) => {
               // Compute occupancy for this month
-              let monFill = 0, monTotal = 0;
+              let monSetterFill = 0, monSetterTotal = 0;
+              let monLanoFill  = 0, monLanoTotal  = 0;
               let wedFill = 0, wedTotal = 0;
               let thuFill = 0, thuTotal = 0;
 
@@ -962,13 +963,15 @@
                 const effWed = wd.wedSectorOverride ?? calEntry?.wed ?? null;
                 const wOff = isDetskaWed(effWed?.sector) ? 3 : 2;
 
-                // Lanovka — Monday
+                // Lanovka — Monday (stavění + lano zvlášť)
                 if (effMon && !effMon.isOff) {
                   const sessionDate = new Date(ky, km - 1, kd);
                   if (sessionDate.getFullYear() === year && sessionDate.getMonth() === month) {
                     const maxSlots = getLanovkaSlotCount(effMon.sector);
-                    monTotal += maxSlots + 1; // +1 for lano
-                    monFill += (wd.monday || []).slice(0, maxSlots).filter(Boolean).length + (wd.mondayLano ? 1 : 0);
+                    monSetterTotal += maxSlots;
+                    monSetterFill  += (wd.monday || []).slice(0, maxSlots).filter(Boolean).length;
+                    monLanoTotal   += 1;
+                    monLanoFill    += wd.mondayLano ? 1 : 0;
                   }
                 }
                 // Limit — Wed (+2) or Thu (+3 for Dětská)
@@ -991,7 +994,8 @@
               });
 
               const pct = (f, t) => t ? Math.round(f / t * 100) : null;
-              const monPct = pct(monFill, monTotal);
+              const monSetterPct = pct(monSetterFill, monSetterTotal);
+              const monLanoPct   = pct(monLanoFill,   monLanoTotal);
               const wedPct = pct(wedFill, wedTotal);
               const thuPct = pct(thuFill, thuTotal);
               const monthLabel = new Date(year, month, 1).toLocaleString('cs-CZ', { month: 'long' });
@@ -1008,10 +1012,16 @@
               return (
                 <div key={`${year}-${month}`} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
                   <p className="text-xs font-black text-gray-800 mb-2 capitalize">{monthLabel} {year}</p>
-                  {monPct !== null && (
+                  {monSetterPct !== null && (
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs text-amber-700 font-semibold w-20 shrink-0">Lanovka</span>
-                      <Bar pct={monPct} color="bg-amber-400" />
+                      <Bar pct={monSetterPct} color="bg-amber-400" />
+                    </div>
+                  )}
+                  {monLanoPct !== null && (
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs text-amber-600 font-semibold w-20 shrink-0">🪢 Lano</span>
+                      <Bar pct={monLanoPct} color="bg-amber-600" />
                     </div>
                   )}
                   {wedPct !== null && (
@@ -1026,7 +1036,7 @@
                       <Bar pct={thuPct} color="bg-emerald-500" />
                     </div>
                   )}
-                  {monPct === null && wedPct === null && thuPct === null && (
+                  {monSetterPct === null && wedPct === null && thuPct === null && (
                     <p className="text-xs text-gray-400">Žádné stavění</p>
                   )}
                 </div>
@@ -1048,25 +1058,27 @@
             <h2 className="font-bold text-gray-900 text-sm">Statistiky</h2>
           </div>
           <div className="px-4 pt-2 pb-0 flex justify-center">
-            <div className="inline-grid" style={{gridTemplateColumns:'max-content 2.75rem 2.75rem', columnGap:'0.25rem'}}>
+            <div className="inline-grid" style={{gridTemplateColumns:'max-content 2.25rem 2.25rem 2.25rem', columnGap:'0.25rem'}}>
               <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide pb-1">Stavěč</span>
               <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-center pb-1 capitalize">{monthName.slice(0,3)}</span>
               <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-center pb-1">{now.getFullYear()}</span>
+              <span className="text-xs text-amber-500 font-semibold uppercase tracking-wide text-center pb-1" title="lano – rok">🪢</span>
               {sorted.map((name, i) => {
-                const s = stats[name] ?? { month: 0, year: 0 };
+                const s = stats[name] ?? { month: 0, year: 0, lanoMonth: 0, lanoYear: 0 };
                 const b = i < sorted.length - 1 ? 'border-b border-gray-50' : '';
                 return (
                   <React.Fragment key={name}>
                     <span className={`text-sm font-semibold text-gray-800 py-1.5 ${b}`}>{name}</span>
                     <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.month > 0 ? 'text-amber-600' : 'text-gray-300'}`}>{s.month}</span>
                     <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.year > 0 ? 'text-gray-700' : 'text-gray-300'}`}>{s.year}</span>
+                    <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.lanoYear > 0 ? 'text-amber-500' : 'text-gray-300'}`}>{s.lanoYear}</span>
                   </React.Fragment>
                 );
               })}
             </div>
           </div>
           <div className="px-4 py-3 text-xs text-gray-400 text-center">
-            stavění celkem
+            stavění · 🪢 lano (rok)
           </div>
         </div>
       );
@@ -1563,13 +1575,13 @@
         const thisYear  = now.getFullYear();
         const thisMonth = now.getMonth(); // 0-indexed
         const stats = {};
-        TEAM.forEach(n => { stats[n] = { month: 0, year: 0 }; });
+        TEAM.forEach(n => { stats[n] = { month: 0, year: 0, lanoMonth: 0, lanoYear: 0 }; });
 
         function countWeek(wd, defaultMonDate, calEntry) {
-          const effectiveMon = wd.monDateOverride ? new Date(wd.monDateOverride) : defaultMonDate;
+          const effectiveMon = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : defaultMonDate;
           const effWedSector = wd.wedSectorOverride?.sector ?? calEntry?.wed?.sector;
           const wOff = isDetskaWed(effWedSector) ? 3 : 2;
-          const effectiveWed = wd.wedDateOverride ? new Date(wd.wedDateOverride) : addDays(defaultMonDate, wOff);
+          const effectiveWed = wd.wedDateOverride ? new Date(wd.wedDateOverride + 'T12:00:00') : addDays(defaultMonDate, wOff);
           function tally(name, date) {
             if (!name || !stats[name]) return;
             if (date.getFullYear() === thisYear) {
@@ -1577,10 +1589,17 @@
               if (date.getMonth() === thisMonth) stats[name].month++;
             }
           }
+          function tallyLano(name, date) {
+            if (!name || !stats[name]) return;
+            if (date.getFullYear() === thisYear) {
+              stats[name].lanoYear++;
+              if (date.getMonth() === thisMonth) stats[name].lanoMonth++;
+            }
+          }
           (wd.monday || []).forEach(s => tally(s, effectiveMon));
-          tally(wd.mondayLano, effectiveMon);
+          tallyLano(wd.mondayLano, effectiveMon);  // lano zvlášť
           (wd.wednesday || []).forEach(s => tally(s, effectiveWed));
-          const effectiveThu = wd.thuDateOverride ? new Date(wd.thuDateOverride) : addDays(defaultMonDate, 3);
+          const effectiveThu = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(defaultMonDate, 3);
           (wd.thursday || []).forEach(s => tally(s, effectiveThu));
         }
 
