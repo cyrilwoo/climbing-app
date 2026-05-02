@@ -397,6 +397,7 @@
                 <div className="flex items-center gap-1 mt-0.5">
                   {editingDate ? (
                     <input type="date"
+                      key={`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
                       defaultValue={`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
                       className={`text-xs font-medium outline-none rounded px-1 py-0.5 w-32
                         ${isYellow ? 'bg-black/10 text-gray-900' : 'bg-white/10 text-white'}`}
@@ -793,7 +794,7 @@
       // Build monthly data from CAL
       const monthly = Array.from({length:12}, () => ({ lanovka:[], limit:[], gym:0 }));
       Object.entries(CAL).sort().forEach(([key, entry]) => {
-        const mon = new Date(key);
+        const mon = new Date(key + 'T12:00:00'); // T12:00:00 aby se ISO date neparsoval jako UTC (timezone shift)
         if (mon.getFullYear() !== 2026) return;
         const m = mon.getMonth();
         const d = n => mon.getDate() + n;
@@ -1116,6 +1117,7 @@
       const [drag,    setDrag]    = useState(null);  // { from, climber, session, idx? }
       const [firebaseReady, setFirebaseReady] = useState(false);
       const skipFirebaseWeeks = React.useRef(new Set());
+      const pendingFlushRef   = React.useRef(null);
 
       // ── Firestore helpers: null ↔ "__NULL__" ────────────────────────────────
       function toFirestore(weekData) {
@@ -1176,13 +1178,12 @@
       // ── Save to localStorage + Firestore when data changes ────────────────
       React.useEffect(() => {
         try { localStorage.setItem('climbing-setters', JSON.stringify(data)); } catch {}
-        window.__appData = data;
+        window.__appData = data; // debug: přístup z konzole
         if (!firebaseReady) return;
-        // Debounce Firestore writes
-        const t = setTimeout(() => {
-          Object.entries(data).forEach(([weekId, weekData]) => {
+        // Sestaví a zapíše všechny týdny do Firestore
+        function flushToFirestore(dataSnapshot) {
+          Object.entries(dataSnapshot).forEach(([weekId, weekData]) => {
             skipFirebaseWeeks.current.add(weekId);
-            // Derive effective sector + build dates for calendar sync
             const _monOvS = weekData.monSectorOverride;
             const calMon = (_monOvS != null && (_monOvS.isOff || _monOvS.sector)) ? _monOvS : (CAL[weekId]?.mon ?? null);
             const _wedOvS = weekData.wedSectorOverride;
@@ -1205,9 +1206,28 @@
             };
             db.collection('weeks').doc(weekId).set(toFirestore(enriched), { merge: true }).catch(() => {});
           });
+        }
+        // Uloží ref na aktuální flush — pro případ zavření tabu
+        pendingFlushRef.current = () => flushToFirestore(data);
+        // Debounce Firestore writes
+        const t = setTimeout(() => {
+          flushToFirestore(data);
+          pendingFlushRef.current = null;
         }, 800);
         return () => clearTimeout(t);
       }, [data, firebaseReady]);
+
+      // ── Flush při skrytí tabu (zavření okna, přepnutí tabu) ──────────────────
+      React.useEffect(() => {
+        const handleHide = () => {
+          if (document.visibilityState === 'hidden' && pendingFlushRef.current) {
+            pendingFlushRef.current();
+            pendingFlushRef.current = null;
+          }
+        };
+        document.addEventListener('visibilitychange', handleHide);
+        return () => document.removeEventListener('visibilitychange', handleHide);
+      }, []);
 
       const monday = addDays(getMonday(new Date()), offset * 7);
       const friday = addDays(monday, 4);
@@ -1222,9 +1242,10 @@
       // Dětská na Limitu se staví ve čtvrtek (+3), ostatní sektory ve středu (+2)
       const wedOffset = isDetskaWed(calWed?.sector) ? 3 : 2;
       // Custom date overrides (for competitions etc.)
-      const monDate = week.monDateOverride ? new Date(week.monDateOverride) : monday;
-      const wedDate = week.wedDateOverride ? new Date(week.wedDateOverride) : addDays(monday, wedOffset);
-      const thuDate = week.thuDateOverride ? new Date(week.thuDateOverride) : addDays(monday, 3);
+      // + 'T12:00:00' aby se ISO date-only string neparsoval jako UTC midnight (timezone off-by-one)
+      const monDate = week.monDateOverride ? new Date(week.monDateOverride + 'T12:00:00') : monday;
+      const wedDate = week.wedDateOverride ? new Date(week.wedDateOverride + 'T12:00:00') : addDays(monday, wedOffset);
+      const thuDate = week.thuDateOverride ? new Date(week.thuDateOverride + 'T12:00:00') : addDays(monday, 3);
       function setMonDate(iso) { setWeek({ ...week, monDateOverride: iso }); }
       function setWedDate(iso) { setWeek({ ...week, wedDateOverride: iso }); }
       function setThuDate(iso) { setWeek({ ...week, thuDateOverride: iso }); }
@@ -1237,6 +1258,11 @@
       }
       function shiftMonSector() {
         const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
+        // Varovat pokud příští týden má vlastní override (zamezí tichému přepsání)
+        const existingOverride = data[nextKey]?.monSectorOverride;
+        if (existingOverride && (existingOverride.isOff || existingOverride.sector)) {
+          if (!window.confirm(`Příští týden (${nextKey}) má již nastavenou sekci „${existingOverride.sector ?? '?'}". Přepsat?`)) return;
+        }
         // Only shift the sector/profile — setters/sundavači stay tied to their date (cleared here, not moved)
         setData(d => ({
           ...d,
@@ -1251,6 +1277,11 @@
       }
       function shiftWedSector() {
         const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
+        // Varovat pokud příští týden má vlastní override (zamezí tichému přepsání)
+        const existingOverride = data[nextKey]?.wedSectorOverride;
+        if (existingOverride && (existingOverride.isOff || existingOverride.sector)) {
+          if (!window.confirm(`Příští týden (${nextKey}) má již nastavenou sekci „${existingOverride.sector ?? '?'}". Přepsat?`)) return;
+        }
         // Only shift the sector/profile — setters/sundavači stay tied to their date (cleared here, not moved)
         setData(d => ({
           ...d,
@@ -1403,6 +1434,7 @@
       function clearWeek() {
         if (!window.confirm('Resetovat celý týden? Smažou se všichni stavěči, sundavači i případný posun/zrušení.')) return;
         setData(d => { const n={...d}; delete n[key]; return n; });
+        db.collection('weeks').doc(key).delete().catch(() => {}); // smazat i z Firestore
         setSel(null);
       }
       function toggleSundavac(session, name) {
@@ -1672,7 +1704,7 @@
             <div className="flex-1 min-w-0 space-y-4">
 
             {/* Řádky 1+2: Sundavání + Stavění — jeden scroll container */}
-            <div className="overflow-x-auto snap-x snap-mandatory lg:snap-none relative z-0">
+            <div className="overflow-x-auto snap-x snap-mandatory lg:snap-none relative z-0 lg:flex lg:justify-center">
               <div className="flex flex-col gap-4 w-fit">
 
                 {/* Řádek 1: Sundavání — zobraz jen pokud má týden stavění */}
@@ -1822,8 +1854,8 @@
             {/* Posunout / Smazat stavění — zřídka používané, dole */}
             {(calMon || calWed) && (
               <div className="flex gap-2 mt-2 flex-wrap">
-                {/* Lanovka — posunout */}
-                {calMon && !calMon.isOff && (
+                {/* Lanovka — posunout (jen pokud má pojmenovaný sektor) */}
+                {calMon && !calMon.isOff && calMon.sector && (
                   <button onClick={shiftMonSector}
                     className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
                       border border-amber-200 text-amber-600 hover:bg-amber-50 transition-colors">
@@ -1833,8 +1865,8 @@
                     </span>
                   </button>
                 )}
-                {/* Lanovka — smazat */}
-                {calMon && !calMon.isOff && (
+                {/* Lanovka — smazat (jen pokud má pojmenovaný sektor) */}
+                {calMon && !calMon.isOff && calMon.sector && (
                   <button onClick={cancelMonSector}
                     className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
                       border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
@@ -1857,8 +1889,8 @@
                     ↩ Obnovit Lanovka
                   </button>
                 )}
-                {/* Limit — posunout */}
-                {calWed && !calWed.isOff && (
+                {/* Limit — posunout (jen pokud má pojmenovaný sektor) */}
+                {calWed && !calWed.isOff && calWed.sector && (
                   <button onClick={shiftWedSector}
                     className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
                       border border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-colors">
@@ -1868,8 +1900,8 @@
                     </span>
                   </button>
                 )}
-                {/* Limit — smazat */}
-                {calWed && !calWed.isOff && (
+                {/* Limit — smazat (jen pokud má pojmenovaný sektor) */}
+                {calWed && !calWed.isOff && calWed.sector && (
                   <button onClick={cancelWedSector}
                     className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
                       border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
