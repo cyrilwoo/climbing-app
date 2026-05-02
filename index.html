@@ -1641,7 +1641,7 @@
 
           {/* Header */}
           <header className="bg-white border-b border-gray-200 fixed top-0 left-0 right-0 w-full z-50 shadow-sm">
-            <div className="max-w-2xl mx-auto px-4 pt-3 pb-2">
+            <div className="max-w-[60rem] mx-auto px-4 pt-3 pb-2">
               {/* Top row: title + navigation */}
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -1698,7 +1698,7 @@
             </div>
           </header>
 
-          <main className="max-w-none mx-auto px-4 py-5 pb-10 flex flex-col lg:flex-row gap-5 items-start">
+          <main className="max-w-[60rem] mx-auto px-4 py-5 pb-10 flex flex-col lg:flex-row gap-5 items-start">
 
             {/* Main content column */}
             <div className="flex-1 min-w-0 space-y-4">
@@ -1711,7 +1711,7 @@
                 {((calMon != null && !calMon.isOff) || (calWed != null && !calWed.isOff)) && (
                 <div className="flex gap-4">
                   {calMon != null && !calMon.isOff && (
-                  <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
+                  <div className="w-[calc(100vw-2rem)] lg:w-80 flex-shrink-0 snap-start">
                     <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
                       sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
                       onToggleSundavac={name => toggleSundavac('monday', name)}
@@ -1719,20 +1719,20 @@
                   </div>
                   )}
                   {calWed != null && !calWed.isOff && (
-                  <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
+                  <div className="w-[calc(100vw-2rem)] lg:w-80 flex-shrink-0 snap-start">
                     <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
                       sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
                       onToggleSundavac={name => toggleSundavac('wednesday', name)}
                       onToggleMyti={name => toggleMyti('wednesday', name)} />
                   </div>
                   )}
-                  {calThu && <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0" />}
+                  {calThu && <div className="w-[calc(100vw-2rem)] lg:w-80 flex-shrink-0" />}
                 </div>
                 )}
 
                 {/* Řádek 2: Stavění */}
                 <div className="flex gap-4">
-                  <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
+                  <div className="w-[calc(100vw-2rem)] lg:w-80 flex-shrink-0 snap-start">
                     <SessionCard
                       session="monday" day="Pondělí" date={monDate} theme="yellow"
                       slots={week.monday} lanoSlot={week.mondayLano} calInfo={calMon}
@@ -1750,7 +1750,7 @@
                       nextSector={getNextSector(key, 'mon')}
                     />
                   </div>
-                  <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
+                  <div className="w-[calc(100vw-2rem)] lg:w-80 flex-shrink-0 snap-start">
                     <SessionCard
                       session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} theme="dark"
                       slots={week.wednesday} calInfo={calWed}
@@ -1766,7 +1766,7 @@
                     />
                   </div>
                   {calThu && (
-                    <div className="w-[calc(100vw-2rem)] lg:w-72 flex-shrink-0 snap-start">
+                    <div className="w-[calc(100vw-2rem)] lg:w-80 flex-shrink-0 snap-start">
                       <SessionCard
                         session="thursday" day="Čtvrtek" date={thuDate} theme="green"
                         slots={week.thursday || E4()} calInfo={calThu}
@@ -1826,7 +1826,7 @@
                 }
               </div>
 
-              {/* Stats — mobile only, right below setter chips */}
+              {/* Stats — mobile only, na desktopu jsou v pravém sidebaru */}
               <div className="lg:hidden px-4 pb-2 space-y-3">
                 <MonthlyOccupancy data={data} />
                 <StatsPanel stats={computeStats()} team={team} />
