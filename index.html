@@ -1062,7 +1062,7 @@
               <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide pb-1">Stavěč</span>
               <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-center pb-1 capitalize">{monthName.slice(0,3)}</span>
               <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-center pb-1">{now.getFullYear()}</span>
-              <span className="text-xs text-amber-500 font-semibold uppercase tracking-wide text-center pb-1" title="lano – rok">L</span>
+              <span className="text-xs text-amber-500 font-semibold uppercase tracking-wide text-center pb-1 pl-3" title="lano – rok">L</span>
               {sorted.map((name, i) => {
                 const s = stats[name] ?? { month: 0, year: 0, lanoMonth: 0, lanoYear: 0 };
                 const b = i < sorted.length - 1 ? 'border-b border-gray-50' : '';
@@ -1071,7 +1071,7 @@
                     <span className={`text-sm font-semibold text-gray-800 py-1.5 ${b}`}>{name}</span>
                     <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.month > 0 ? 'text-amber-600' : 'text-gray-300'}`}>{s.month}</span>
                     <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.year > 0 ? 'text-gray-700' : 'text-gray-300'}`}>{s.year}</span>
-                    <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.lanoYear > 0 ? 'text-amber-500' : 'text-gray-300'}`}>{s.lanoYear}</span>
+                    <span className={`text-center text-sm tabular-nums font-bold py-1.5 pl-3 ${b} ${s.lanoYear > 0 ? 'text-amber-500' : 'text-gray-300'}`}>{s.lanoYear}</span>
                   </React.Fragment>
                 );
               })}
@@ -1719,8 +1719,11 @@
 
           <main className="px-4 py-5 pb-10 flex flex-col lg:flex-row gap-5 items-start">
 
+            {/* Invisible spacer: mirrors stats width → cards appear centered */}
+            <div className="hidden lg:block lg:w-64 lg:flex-shrink-0" />
+
             {/* Main content column */}
-            <div className="flex-1 min-w-0 space-y-4 lg:max-w-[680px]">
+            <div className="flex-1 min-w-0 space-y-4 lg:max-w-[680px] lg:mx-auto">
 
             {/* Řádky 1+2: Sundavání + Stavění — jeden scroll container */}
             <div className="overflow-x-auto snap-x snap-mandatory lg:overflow-visible lg:snap-none relative z-0">
