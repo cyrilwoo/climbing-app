@@ -1002,42 +1002,42 @@
 
               const Bar = ({ pct, color }) => pct === null ? null : (
                 <div className="flex items-center gap-1.5">
-                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
                   </div>
-                  <span className="text-xs font-bold tabular-nums w-7 text-right text-gray-600">{pct}%</span>
+                  <span className="text-sm font-bold tabular-nums w-9 text-right text-gray-600">{pct}%</span>
                 </div>
               );
 
               return (
-                <div key={`${year}-${month}`} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
-                  <p className="text-xs font-black text-gray-800 mb-2 capitalize">{monthLabel} {year}</p>
+                <div key={`${year}-${month}`} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+                  <p className="text-sm font-black text-gray-800 mb-2 capitalize">{monthLabel} {year}</p>
                   {monSetterPct !== null && (
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-amber-700 font-semibold w-20 shrink-0">Lanovka</span>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-sm text-amber-700 font-semibold w-24 shrink-0">Lanovka</span>
                       <Bar pct={monSetterPct} color="bg-amber-400" />
                     </div>
                   )}
                   {monLanoPct !== null && (
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-amber-600 font-semibold w-20 shrink-0">Lano</span>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-sm text-amber-600 font-semibold w-24 shrink-0">Lano</span>
                       <Bar pct={monLanoPct} color="bg-amber-600" />
                     </div>
                   )}
                   {wedPct !== null && (
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-pink-700 font-semibold w-20 shrink-0">Limit</span>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-sm text-pink-700 font-semibold w-24 shrink-0">Limit</span>
                       <Bar pct={wedPct} color="bg-pink-500" />
                     </div>
                   )}
                   {thuPct !== null && (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-emerald-700 font-semibold w-20 shrink-0">Tělocvična</span>
+                      <span className="text-sm text-emerald-700 font-semibold w-24 shrink-0">Tělocvična</span>
                       <Bar pct={thuPct} color="bg-emerald-500" />
                     </div>
                   )}
                   {monSetterPct === null && wedPct === null && thuPct === null && (
-                    <p className="text-xs text-gray-400">Žádné stavění</p>
+                    <p className="text-sm text-gray-400">Žádné stavění</p>
                   )}
                 </div>
               );
@@ -1960,7 +1960,7 @@
 
             {/* Stats sidebar */}
             <div className="lg:w-64 lg:flex-shrink-0 lg:sticky lg:top-20 space-y-3">
-              <div className="hidden lg:block">
+              <div className="hidden lg:block space-y-6">
               {(() => {
                 const today = new Date(); today.setHours(0,0,0,0);
                 const fmtDate = d => d.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
@@ -1978,9 +1978,9 @@
                   const wedDate = wd.wedDateOverride ? new Date(wd.wedDateOverride + 'T12:00:00') : addDays(monday, wedOff);
                   const thuDate = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(monday, 3);
                   const sessions = [
-                    calMon && !calMon.isOff ? { date: monDate, label: 'Lanovka', sector: calMon.sector, cl: 'text-amber-600', cs: 'text-amber-900' } : null,
-                    calWed && !calWed.isOff ? { date: wedDate, label: 'Limit',    sector: calWed.sector, cl: 'text-pink-600',  cs: 'text-pink-900'  } : null,
-                    calThu && !calThu.isOff ? { date: thuDate, label: 'Tělocv.',  sector: calThu.sector, cl: 'text-emerald-600', cs: 'text-emerald-900' } : null,
+                    calMon && !calMon.isOff ? { date: monDate, label: 'Lanovka', sector: calMon.sector, color: 'text-amber-700' } : null,
+                    calWed && !calWed.isOff ? { date: wedDate, label: 'Limit',    sector: calWed.sector, color: 'text-pink-700'  } : null,
+                    calThu && !calThu.isOff ? { date: thuDate, label: 'Tělocv.',  sector: calThu.sector, color: 'text-emerald-700' } : null,
                   ].filter(Boolean).filter(s => s.date >= today).sort((a,b) => a.date - b.date);
                   for (const s of sessions) { if (upcoming.length < 3) upcoming.push(s); }
                 }
@@ -1990,8 +1990,8 @@
                     {upcoming.length === 0 && <div className="text-xs text-gray-400">Žádné stavění</div>}
                     {upcoming.map((s, i) => (
                       <div key={i} className="space-y-0.5">
-                        <div className={`text-xs font-semibold ${s.cl}`}>{fmtDate(s.date)} {s.label}</div>
-                        <div className={`text-xs font-black leading-tight ${s.cs}`}>{s.sector}</div>
+                        <div className={`text-xs font-semibold ${s.color}`}>{fmtDate(s.date)} {s.label}</div>
+                        <div className={`text-xs font-black leading-tight ${s.color}`}>{s.sector}</div>
                       </div>
                     ))}
                   </div>
