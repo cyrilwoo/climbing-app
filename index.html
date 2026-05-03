@@ -1690,18 +1690,23 @@
               {(() => {
                 const monMax = calMon?.sector && !calMon.isOff ? getLanovkaSlotCount(calMon.sector) : 0;
                 const wedMax = calWed?.sector && !calWed.isOff ? getWedSlotCount(calWed.sector) : 0;
-                const monFill = monMax ? (week.monday||[]).slice(0,monMax).filter(Boolean).length + (week.mondayLano ? 1 : 0) : 0;
-                const monTot  = monMax ? monMax + 1 : 0;
+                const monSetterFill = monMax ? (week.monday||[]).slice(0,monMax).filter(Boolean).length : 0;
+                const monLanoFill   = (calMon?.sector && !calMon.isOff) ? (week.mondayLano ? 1 : 0) : 0;
                 const wedFill = wedMax ? (week.wednesday||[]).slice(0,wedMax).filter(Boolean).length : 0;
                 const thuFill = (week.thursday||[]).slice(0,2).filter(Boolean).length;
-                const monPct  = monTot ? Math.round(monFill/monTot*100) : 0;
+                const monSetterPct = monMax ? Math.round(monSetterFill/monMax*100) : 0;
+                const monLanoPct   = (calMon?.sector && !calMon.isOff) ? Math.round(monLanoFill*100) : 0;
                 const wedPct  = wedMax ? Math.round(wedFill/wedMax*100) : 0;
                 const thuPct  = calThu ? Math.round(thuFill/2*100) : 0;
                 return (
-                  <div className="flex items-center justify-center gap-2 mt-2">
+                  <div className="flex items-center justify-center flex-wrap gap-2 mt-2">
                     <span className={`text-sm font-black px-3 py-1 rounded-full
-                      ${monMax && monFill===monTot ? 'bg-amber-500 text-white' : monMax ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
-                      Lanovka {monPct}%
+                      ${monMax && monSetterFill===monMax ? 'bg-amber-500 text-white' : monMax ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
+                      Lanovka {monSetterPct}%
+                    </span>
+                    <span className={`text-sm font-black px-3 py-1 rounded-full
+                      ${calMon?.sector && !calMon.isOff && monLanoFill===1 ? 'bg-amber-600 text-white' : calMon?.sector && !calMon.isOff ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400'}`}>
+                      Lano {monLanoPct}%
                     </span>
                     <span className={`text-sm font-black px-3 py-1 rounded-full
                       ${wedMax && wedFill===wedMax ? 'bg-pink-600 text-white' : wedMax ? 'bg-zinc-800 text-white' : 'bg-gray-100 text-gray-400'}`}>
