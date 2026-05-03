@@ -1060,18 +1060,18 @@
           <div className="px-4 pt-2 pb-0">
             <div className="inline-grid w-full" style={{gridTemplateColumns:'1fr 2.75rem 2.75rem 2.75rem', columnGap:'0.375rem'}}>
               <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide pb-1">Stavěč</span>
-              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-center pb-1 capitalize">{monthName.slice(0,3)}</span>
-              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-center pb-1">{now.getFullYear()}</span>
-              <span className="text-xs text-amber-500 font-semibold uppercase tracking-wide text-center pb-1 pl-3" title="lano – rok">L</span>
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-right pb-1 capitalize">{monthName.slice(0,3)}</span>
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-right pb-1">{now.getFullYear()}</span>
+              <span className="text-xs text-amber-500 font-semibold uppercase tracking-wide text-right pb-1 pl-3" title="lano – rok">L</span>
               {sorted.map((name, i) => {
                 const s = stats[name] ?? { month: 0, year: 0, lanoMonth: 0, lanoYear: 0 };
                 const b = i < sorted.length - 1 ? 'border-b border-gray-50' : '';
                 return (
                   <React.Fragment key={name}>
                     <span className={`text-sm font-semibold text-gray-800 py-1.5 ${b}`}>{name}</span>
-                    <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.month > 0 ? 'text-amber-600' : 'text-gray-300'}`}>{s.month}</span>
-                    <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.year > 0 ? 'text-gray-700' : 'text-gray-300'}`}>{s.year}</span>
-                    <span className={`text-center text-sm tabular-nums font-bold py-1.5 pl-3 ${b} ${s.lanoYear > 0 ? 'text-amber-500' : 'text-gray-300'}`}>{s.lanoYear}</span>
+                    <span className={`text-right text-sm tabular-nums font-bold py-1.5 ${b} ${s.month > 0 ? 'text-amber-600' : 'text-gray-300'}`}>{s.month}</span>
+                    <span className={`text-right text-sm tabular-nums font-bold py-1.5 ${b} ${s.year > 0 ? 'text-gray-700' : 'text-gray-300'}`}>{s.year}</span>
+                    <span className={`text-right text-sm tabular-nums font-bold py-1.5 pl-3 ${b} ${s.lanoYear > 0 ? 'text-amber-500' : 'text-gray-300'}`}>{s.lanoYear}</span>
                   </React.Fragment>
                 );
               })}
@@ -1093,19 +1093,19 @@
           <div className="px-4 pt-4 pb-2 border-b border-gray-100">
             <h2 className="font-bold text-gray-900 text-sm">Sundavání + Mytí</h2>
           </div>
-          <div className="px-4 pt-2 pb-0 flex justify-center">
-            <div className="inline-grid" style={{gridTemplateColumns:'max-content 2.25rem 2.25rem', columnGap:'0.25rem'}}>
-              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide pb-1"></span>
-              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-center pb-1">S</span>
-              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-center pb-1">M</span>
+          <div className="px-4 pt-2 pb-0">
+            <div className="inline-grid w-full" style={{gridTemplateColumns:'1fr 2.75rem 2.75rem', columnGap:'0.375rem'}}>
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide pb-1">Stavěč</span>
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-right pb-1">S</span>
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide text-right pb-1">M</span>
               {sorted.map((name, i) => {
                 const s = stats[name] ?? { sundYear: 0, mytiYear: 0 };
                 const b = i < sorted.length - 1 ? 'border-b border-gray-50' : '';
                 return (
                   <React.Fragment key={name}>
                     <span className={`text-sm font-semibold text-gray-800 py-1.5 ${b}`}>{name}</span>
-                    <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.sundYear > 0 ? 'text-pink-600' : 'text-gray-300'}`}>{s.sundYear}</span>
-                    <span className={`text-center text-sm tabular-nums font-bold py-1.5 ${b} ${s.mytiYear > 0 ? 'text-blue-500' : 'text-gray-300'}`}>{s.mytiYear}</span>
+                    <span className={`text-right text-sm tabular-nums font-bold py-1.5 ${b} ${s.sundYear > 0 ? 'text-pink-600' : 'text-gray-300'}`}>{s.sundYear}</span>
+                    <span className={`text-right text-sm tabular-nums font-bold py-1.5 ${b} ${s.mytiYear > 0 ? 'text-blue-500' : 'text-gray-300'}`}>{s.mytiYear}</span>
                   </React.Fragment>
                 );
               })}
