@@ -1705,17 +1705,19 @@
                       Lanovka {monSetterPct}%
                     </span>
                     <span className={`text-sm font-black px-3 py-1 rounded-full
-                      ${calMon?.sector && !calMon.isOff && monLanoFill===1 ? 'bg-amber-600 text-white' : calMon?.sector && !calMon.isOff ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400'}`}>
+                      ${calMon?.sector && !calMon.isOff && monLanoFill===1 ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-400'}`}>
                       Lano {monLanoPct}%
                     </span>
                     <span className={`text-sm font-black px-3 py-1 rounded-full
                       ${wedMax && wedFill===wedMax ? 'bg-pink-600 text-white' : wedMax ? 'bg-zinc-800 text-white' : 'bg-gray-100 text-gray-400'}`}>
                       Limit {wedPct}%
                     </span>
-                    <span className={`text-sm font-black px-3 py-1 rounded-full
-                      ${calThu && thuFill===2 ? 'bg-emerald-600 text-white' : calThu ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-400'}`}>
-                      Tělocvična {thuPct}%
-                    </span>
+                    {calThu && (
+                      <span className={`text-sm font-black px-3 py-1 rounded-full
+                        ${thuFill===2 ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                        Tělocvična {thuPct}%
+                      </span>
+                    )}
                   </div>
                 );
               })()}
