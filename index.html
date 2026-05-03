@@ -1729,25 +1729,25 @@
             <div className="overflow-x-auto snap-x snap-mandatory lg:overflow-visible lg:snap-none relative z-0">
               <div className="flex flex-col gap-4 w-fit lg:w-full">
 
-                {/* Řádek 1: Sundavání — zobraz jen pokud má týden stavění */}
+                {/* Řádek 1: Sundavání — zobraz jen pokud má týden stavění; sloupce zarovnané se stavěním */}
                 {((calMon != null && !calMon.isOff) || (calWed != null && !calWed.isOff)) && (
                 <div className="flex gap-4">
-                  {calMon != null && !calMon.isOff && (
                   <div className="w-[calc(100vw-2rem)] flex-shrink-0 snap-start lg:flex-1 lg:min-w-0">
-                    <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
-                      sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
-                      onToggleSundavac={name => toggleSundavac('monday', name)}
-                      onToggleMyti={name => toggleMyti('monday', name)} />
+                    {calMon != null && !calMon.isOff && (
+                      <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
+                        sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
+                        onToggleSundavac={name => toggleSundavac('monday', name)}
+                        onToggleMyti={name => toggleMyti('monday', name)} />
+                    )}
                   </div>
-                  )}
-                  {calWed != null && !calWed.isOff && (
                   <div className="w-[calc(100vw-2rem)] flex-shrink-0 snap-start lg:flex-1 lg:min-w-0">
-                    <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
-                      sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
-                      onToggleSundavac={name => toggleSundavac('wednesday', name)}
-                      onToggleMyti={name => toggleMyti('wednesday', name)} />
+                    {calWed != null && !calWed.isOff && (
+                      <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
+                        sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
+                        onToggleSundavac={name => toggleSundavac('wednesday', name)}
+                        onToggleMyti={name => toggleMyti('wednesday', name)} />
+                    )}
                   </div>
-                  )}
                   {calThu && <div className="w-[calc(100vw-2rem)] flex-shrink-0 lg:flex-1 lg:min-w-0" />}
                 </div>
                 )}
