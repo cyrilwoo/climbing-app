@@ -95,6 +95,8 @@
     const L5 = { sector: 'Dole kolmice + převis',        setters: [], lano: null };
     const TG = { sector: 'Tělocvična', setters: [] };
     const isDetskaWed = s => s?.toLowerCase().includes('dět') || s?.toLowerCase().includes('det');
+    // Sektory Limitu — pro modal "Přidat závod"
+    const LIMIT_SECTORS = ['Dětská', 'Přední převis', 'Zadní převis', 'Kolmice'];
     const CAL = {
       // ── LEDEN–BŘEZEN: Lanovka bez sektoru, Limit ještě nezačal ───
       '2026-01-05': { mon: M },
@@ -554,17 +556,23 @@
     }
 
     // ── ClimberChip ──────────────────────────────────────────────────────────
-    function ClimberChip({ name, isSelected, inMon, inWed, onClick, onRemove, onDragStart }) {
+    function ClimberChip({ name, isSelected, inMon, inWed, isHost, onClick, onRemove, onDragStart }) {
       return (
         <div draggable onDragStart={onDragStart} onClick={onClick}
           className={`group flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full border
             text-sm cursor-pointer transition-all duration-150 select-none
             ${isSelected
               ? 'bg-gray-900 border-gray-800 text-white shadow-md scale-[1.03]'
-              : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300 hover:shadow-sm'
+              : isHost
+                ? 'bg-pink-50 border-pink-200 text-pink-800 hover:border-pink-300 hover:shadow-sm'
+                : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300 hover:shadow-sm'
             }`}>
           <UserIcon c="w-5 h-5 flex-shrink-0 opacity-50" />
-          <span className="font-semibold">{name}</span>
+          <span className={`font-semibold ${isHost ? 'italic' : ''}`}>{name}</span>
+          {isHost && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider
+              ${isSelected ? 'bg-pink-400/30 text-white' : 'bg-pink-200 text-pink-700'}`}>Host</span>
+          )}
           {inMon && (
             <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold
               ${isSelected ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>Po</span>
@@ -1014,19 +1022,19 @@
                   <p className="text-sm font-black text-gray-800 mb-2 capitalize">{monthLabel} {year}</p>
                   {monSetterPct !== null && (
                     <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-sm text-amber-700 font-semibold w-24 shrink-0">Lanovka</span>
+                      <span className="text-sm text-amber-500 font-semibold w-24 shrink-0">Lanovka</span>
                       <Bar pct={monSetterPct} color="bg-amber-400" />
                     </div>
                   )}
                   {monLanoPct !== null && (
                     <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-sm text-amber-600 font-semibold w-24 shrink-0">Lano</span>
+                      <span className="text-sm text-amber-500 font-semibold w-24 shrink-0">Lano</span>
                       <Bar pct={monLanoPct} color="bg-amber-600" />
                     </div>
                   )}
                   {wedPct !== null && (
                     <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-sm text-pink-700 font-semibold w-24 shrink-0">Limit</span>
+                      <span className="text-sm text-pink-500 font-semibold w-24 shrink-0">Limit</span>
                       <Bar pct={wedPct} color="bg-pink-500" />
                     </div>
                   )}
@@ -1069,7 +1077,7 @@
                 return (
                   <React.Fragment key={name}>
                     <span className={`text-sm font-semibold text-gray-800 py-1.5 pr-3 ${b}`}>{name}</span>
-                    <span className={`text-right text-sm tabular-nums font-bold py-1.5 ${b} ${s.month > 0 ? 'text-amber-600' : 'text-gray-300'}`}>{s.month}</span>
+                    <span className={`text-right text-sm tabular-nums font-bold py-1.5 ${b} ${s.month > 0 ? 'text-amber-500' : 'text-gray-300'}`}>{s.month}</span>
                     <span className={`text-right text-sm tabular-nums font-bold py-1.5 ${b} ${s.year > 0 ? 'text-gray-700' : 'text-gray-300'}`}>{s.year}</span>
                     <span className={`text-right text-sm tabular-nums font-bold py-1.5 pl-3 ${b} ${s.lanoYear > 0 ? 'text-amber-500' : 'text-gray-300'}`}>{s.lanoYear}</span>
                   </React.Fragment>
@@ -1104,7 +1112,7 @@
                 return (
                   <React.Fragment key={name}>
                     <span className={`text-sm font-semibold text-gray-800 py-1.5 pr-3 ${b}`}>{name}</span>
-                    <span className={`text-right text-sm tabular-nums font-bold py-1.5 ${b} ${s.sundYear > 0 ? 'text-pink-600' : 'text-gray-300'}`}>{s.sundYear}</span>
+                    <span className={`text-right text-sm tabular-nums font-bold py-1.5 ${b} ${s.sundYear > 0 ? 'text-pink-500' : 'text-gray-300'}`}>{s.sundYear}</span>
                     <span className={`text-right text-sm tabular-nums font-bold py-1.5 ${b} ${s.mytiYear > 0 ? 'text-blue-500' : 'text-gray-300'}`}>{s.mytiYear}</span>
                   </React.Fragment>
                 );
@@ -1118,17 +1126,497 @@
       );
     }
 
+    // ── RacesPanel — obsazenost slotů závodů a dostavby ──────────────────────
+    function RacesPanel({ races }) {
+      const fmtShort = iso => {
+        const d = new Date(iso + 'T12:00:00');
+        return `${d.getDate()}.${d.getMonth()+1}.`;
+      };
+      const today = new Date(); today.setHours(0,0,0,0);
+      // Zploštíme závod + jeho dostavba dny do jednoho seznamu rovnocenných položek
+      const items = [];
+      Object.values(races || {}).forEach(race => {
+        if (!race?.date) return;
+        items.push({ kind: 'race', race, date: race.date });
+        (race.dostavba || []).forEach((day, idx) => {
+          if (day?.date) items.push({ kind: 'dostavba', race, day, idx, date: day.date });
+        });
+      });
+      items.sort((a, b) => a.date.localeCompare(b.date) || (a.kind === 'race' ? -1 : 1));
+      if (items.length === 0) return null;
+      return (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-4 pt-4 pb-2 border-b border-gray-100">
+            <h2 className="font-bold text-gray-900 text-sm">Závody</h2>
+          </div>
+          <div className="p-3 space-y-2.5">
+            {items.map((it, i) => {
+              const isRace = it.kind === 'race';
+              const total  = isRace ? (it.race.slotCount || 0) : (it.day.slotCount || 0);
+              const setters = isRace ? it.race.setters : it.day.setters;
+              const filled = (setters || []).slice(0, total).filter(Boolean).length;
+              const pct    = total ? Math.round(filled / total * 100) : 0;
+              const allFilled = total > 0 && filled === total;
+              const itemDate = new Date(it.date + 'T12:00:00');
+              const isPast = itemDate < today;
+              return (
+                <div key={`${it.kind}-${it.date}-${i}`}
+                  className={`rounded-xl border px-3 py-2.5 transition-opacity
+                    ${isPast ? 'border-gray-100 bg-gray-50 opacity-60' : 'border-pink-200 bg-pink-50/40'}`}>
+                  <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                    {isRace ? (
+                      <p className={`text-sm font-black truncate
+                        ${it.race.name ? 'text-pink-500 uppercase tracking-wide' : 'text-gray-500 italic'}`}>
+                        {it.race.name || '(bez názvu)'}
+                      </p>
+                    ) : (
+                      <p className="text-sm font-black truncate uppercase tracking-wide">
+                        <span className="text-pink-500">Dostavba</span>
+                        {it.race.name && (
+                          <span className="text-gray-400 font-bold tracking-normal normal-case ml-1">· {it.race.name}</span>
+                        )}
+                      </p>
+                    )}
+                    <span className="text-xs font-semibold text-gray-500 tabular-nums shrink-0">{fmtShort(it.date)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-500 ${allFilled ? 'bg-pink-600' : 'bg-pink-400'}`}
+                        style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className={`text-sm font-bold tabular-nums w-10 text-right
+                      ${allFilled ? 'text-pink-500' : 'text-gray-600'}`}>
+                      {filled}/{total}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ── DatePickerCalendar (Limit brand) ─────────────────────────────────────
+    function DatePickerCalendar({ value, onChange }) {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const initial = value ? new Date(value + 'T12:00:00') : today;
+      const [month, setMonth] = useState(new Date(initial.getFullYear(), initial.getMonth(), 1));
+      const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const firstWeekday = ((new Date(month).getDay() + 6) % 7); // Po=0, Ne=6
+      const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+      const cells = [];
+      for (let i = 0; i < firstWeekday; i++) cells.push(null);
+      for (let i = 1; i <= daysInMonth; i++) cells.push(new Date(month.getFullYear(), month.getMonth(), i));
+      const monthLabel = month.toLocaleString('cs-CZ', { month: 'long', year: 'numeric' });
+      const dayLabels = ['Po','Út','St','Čt','Pá','So','Ne'];
+      return (
+        <div className="bg-zinc-900 rounded-xl p-3 border border-zinc-800">
+          <div className="flex items-center justify-between mb-3">
+            <button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth()-1, 1))}
+              className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400">
+              <ChevronLeft c="w-4 h-4" />
+            </button>
+            <p className="text-sm font-black text-white capitalize tracking-wide">{monthLabel}</p>
+            <button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth()+1, 1))}
+              className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400">
+              <ChevronRight c="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {dayLabels.map(d => (
+              <span key={d} className="text-center text-[10px] font-black text-zinc-500 uppercase tracking-widest pb-1">{d}</span>
+            ))}
+            {cells.map((d, i) => {
+              if (!d) return <span key={i} />;
+              const isToday    = d.getTime() === today.getTime();
+              const isPast     = d < today;
+              const isSelected = value === iso(d);
+              return (
+                <button key={i} onClick={() => !isPast && onChange(iso(d))} disabled={isPast}
+                  className={`aspect-square rounded-lg text-sm font-bold transition-colors
+                    ${isSelected ? 'bg-pink-600 text-white ring-2 ring-pink-400'
+                      : isPast ? 'text-zinc-700 cursor-not-allowed'
+                      : isToday ? 'bg-zinc-800 text-pink-400 hover:bg-zinc-700'
+                      : 'text-zinc-300 hover:bg-zinc-800'}`}>
+                  {d.getDate()}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ── AddRaceModal (Limit brand) ───────────────────────────────────────────
+    function AddRaceModal({ onClose, onSave, existingRaceDates }) {
+      const [name,           setName]          = useState('');
+      const [date,           setDate]          = useState(null);
+      const [sectors,        setSectors]       = useState([]);
+      const [slotCount,      setSlotCount]     = useState(4);
+      const [dostavbaCount,  setDostavbaCount] = useState(0);
+      const [dostavbaDays,   setDostavbaDays]  = useState([]);
+      const valid = date && sectors.length > 0 && slotCount > 0
+        && dostavbaDays.every(d => d.sectors.length > 0 && d.slotCount > 0);
+      const dateConflict = date && existingRaceDates.has(date);
+      const toggleSector = s => setSectors(curr => curr.includes(s) ? curr.filter(x => x !== s) : [...curr, s]);
+      const isoDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+      // Když se mění datum nebo počet dostavby — pře-vygeneruj dostavba dny s defaulty
+      // (datum = race + 2 + i; profily a počet stavěčů zachová z předchozího stavu)
+      React.useEffect(() => {
+        if (!date || dostavbaCount === 0) {
+          if (dostavbaDays.length !== 0) setDostavbaDays([]);
+          return;
+        }
+        setDostavbaDays(prev => {
+          const out = [];
+          for (let i = 0; i < dostavbaCount; i++) {
+            const def = addDays(new Date(date + 'T12:00:00'), 2 + i);
+            out.push({
+              date: prev[i]?.date ?? isoDate(def),
+              sectors: prev[i]?.sectors ?? [...sectors],
+              slotCount: prev[i]?.slotCount ?? 4,
+            });
+          }
+          return out;
+        });
+      }, [date, dostavbaCount]);
+
+      const shiftDostavbaDay = (idx, delta) => {
+        setDostavbaDays(prev => prev.map((d, i) => {
+          if (i !== idx) return d;
+          const newDate = addDays(new Date(d.date + 'T12:00:00'), delta);
+          // nedovol jít na/před datum závodu
+          if (date && isoDate(newDate) <= date) return d;
+          return { ...d, date: isoDate(newDate) };
+        }));
+      };
+      const setDostavbaSlots = (idx, n) =>
+        setDostavbaDays(prev => prev.map((d, i) => i === idx ? { ...d, slotCount: n } : d));
+      const toggleDostavbaSector = (idx, s) =>
+        setDostavbaDays(prev => prev.map((d, i) => i === idx
+          ? { ...d, sectors: d.sectors.includes(s) ? d.sectors.filter(x => x !== s) : [...d.sectors, s] }
+          : d));
+
+      const handleSave = () => {
+        if (!valid || dateConflict) return;
+        onSave({ name: name.trim(), date, sectors, slotCount, dostavbaDays });
+      };
+      return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+          <div className="relative bg-zinc-950 text-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-zinc-800 shadow-2xl">
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4 border-b border-zinc-800 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black tracking-widest text-pink-500 leading-none">PŘIDAT ZÁVOD</h2>
+                <p className="text-[11px] uppercase tracking-widest text-zinc-500 mt-2 font-bold">Limit Boulder</p>
+              </div>
+              <button onClick={onClose} className="p-2 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white">
+                <X c="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-6">
+              {/* Name */}
+              <section>
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">1 · Název závodu <span className="text-zinc-600 font-bold normal-case tracking-normal">(volitelné)</span></h3>
+                <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={40}
+                  placeholder="např. CB OPEN 2026"
+                  className="w-full px-3.5 py-3 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 focus:ring-pink-500 focus:ring-2 outline-none text-pink-400 text-sm font-black uppercase tracking-wider placeholder-zinc-600 placeholder:font-medium placeholder:normal-case placeholder:tracking-normal" />
+              </section>
+
+              {/* Date */}
+              <section>
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">2 · Datum</h3>
+                <DatePickerCalendar value={date} onChange={setDate} />
+                {dateConflict && (
+                  <p className="text-xs text-pink-400 font-bold mt-2">⚠ V tento den už závod je.</p>
+                )}
+              </section>
+
+              {/* Sectors */}
+              <section>
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">3 · Profily ({sectors.length})</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {LIMIT_SECTORS.map(s => {
+                    const active = sectors.includes(s);
+                    return (
+                      <button key={s} onClick={() => toggleSector(s)}
+                        className={`px-3 py-3 rounded-xl text-sm font-black uppercase tracking-wide transition-all
+                          ${active
+                            ? 'bg-pink-600 text-white ring-2 ring-pink-400'
+                            : 'bg-zinc-900 text-zinc-300 ring-1 ring-zinc-800 hover:ring-zinc-700 hover:bg-zinc-800'}`}>
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* Slot count */}
+              <section>
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">4 · Počet stavěčů</h3>
+                <div className="grid grid-cols-8 gap-1.5">
+                  {[1,2,3,4,5,6,7,8].map(n => {
+                    const active = slotCount === n;
+                    return (
+                      <button key={n} onClick={() => setSlotCount(n)}
+                        className={`aspect-square rounded-xl text-base font-black tabular-nums transition-all
+                          ${active
+                            ? 'bg-pink-600 text-white ring-2 ring-pink-400'
+                            : 'bg-zinc-900 text-zinc-300 ring-1 ring-zinc-800 hover:ring-zinc-700 hover:bg-zinc-800'}`}>
+                        {n}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* Dostavba */}
+              <section>
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">5 · Dostavba <span className="text-zinc-600 font-bold normal-case tracking-normal">(volitelné)</span></h3>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[0,1,2,3].map(n => {
+                    const active = dostavbaCount === n;
+                    return (
+                      <button key={n} onClick={() => setDostavbaCount(n)}
+                        className={`aspect-[2.5/1] rounded-xl text-sm font-black uppercase tabular-nums transition-all
+                          ${active
+                            ? 'bg-pink-600 text-white ring-2 ring-pink-400'
+                            : 'bg-zinc-900 text-zinc-300 ring-1 ring-zinc-800 hover:ring-zinc-700 hover:bg-zinc-800'}`}>
+                        {n === 0 ? 'Žádná' : n === 1 ? '1 den' : `${n} dny`}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {dostavbaDays.length > 0 && (
+                  <div className="mt-4 space-y-3">
+                    {dostavbaDays.map((day, i) => {
+                      const d = new Date(day.date + 'T12:00:00');
+                      const wd = d.toLocaleString('cs-CZ', { weekday: 'short' });
+                      const wdCap = wd.charAt(0).toUpperCase() + wd.slice(1);
+                      const dayLabel = `${wdCap} ${d.getDate()}.${d.getMonth()+1}.`;
+                      return (
+                        <div key={i} className="bg-zinc-900 rounded-xl p-3 ring-1 ring-zinc-800 space-y-3">
+                          {/* Day header + date shift */}
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Den {i+1}</span>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => shiftDostavbaDay(i, -1)}
+                                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400">
+                                <ChevronLeft c="w-3.5 h-3.5" />
+                              </button>
+                              <span className="text-sm font-black text-white tabular-nums px-2">{dayLabel}</span>
+                              <button onClick={() => shiftDostavbaDay(i, +1)}
+                                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400">
+                                <ChevronRight c="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          {/* Slot count */}
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5">Stavěči</p>
+                            <div className="grid grid-cols-8 gap-1">
+                              {[1,2,3,4,5,6,7,8].map(n => {
+                                const active = day.slotCount === n;
+                                return (
+                                  <button key={n} onClick={() => setDostavbaSlots(i, n)}
+                                    className={`aspect-square rounded-lg text-sm font-black tabular-nums transition-all
+                                      ${active
+                                        ? 'bg-pink-600 text-white ring-1 ring-pink-400'
+                                        : 'bg-zinc-950 text-zinc-400 ring-1 ring-zinc-800 hover:ring-zinc-700 hover:text-zinc-200'}`}>
+                                    {n}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          {/* Sectors */}
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5">Profily ({day.sectors.length})</p>
+                            <div className="grid grid-cols-2 gap-1.5">
+                              {LIMIT_SECTORS.map(s => {
+                                const active = day.sectors.includes(s);
+                                return (
+                                  <button key={s} onClick={() => toggleDostavbaSector(i, s)}
+                                    className={`px-2 py-2 rounded-lg text-xs font-black uppercase tracking-wide transition-all
+                                      ${active
+                                        ? 'bg-pink-600 text-white ring-1 ring-pink-400'
+                                        : 'bg-zinc-950 text-zinc-400 ring-1 ring-zinc-800 hover:ring-zinc-700 hover:text-zinc-200'}`}>
+                                    {s}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-zinc-800 flex items-center justify-end gap-3 bg-zinc-950 sticky bottom-0">
+              <button onClick={onClose}
+                className="px-4 py-2 rounded-xl text-sm font-bold text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors">
+                Zrušit
+              </button>
+              <button onClick={handleSave} disabled={!valid || dateConflict}
+                className="px-6 py-2.5 rounded-xl bg-pink-600 text-white text-sm font-black tracking-widest uppercase hover:bg-pink-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                Přidat závod
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── RaceCard (Limit brand) ───────────────────────────────────────────────
+    // Karta závodu nebo dostavby. Pro dostavbu předej `kind="dostavba"` + `day` (1-indexed).
+    function RaceCard({ race, day, sectors, slotCount, setters, kind = 'race', sel,
+                        onSlotClick, onDragStartSlot, onDragOverSlot, onDropSlot, onDelete }) {
+      const isDostavba = kind === 'dostavba';
+      const dateIso = isDostavba ? day.date : race.date;
+      const date = new Date(dateIso + 'T12:00:00');
+      const rawDay = date.toLocaleString('cs-CZ', { weekday: 'long' });
+      const displayDay = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
+      const useSectors = isDostavba ? (day.sectors || []) : (sectors ?? race.sectors ?? []);
+      const total = isDostavba ? (day.slotCount || 0) : (slotCount ?? race.slotCount ?? 0);
+      const useSetters = isDostavba ? (day.setters || []) : (setters ?? race.setters ?? []);
+      const filled = useSetters.slice(0, total).filter(Boolean).length;
+      const allFilled = total > 0 && filled === total;
+      const sectorActive = new Set();
+      useSectors.forEach(s => { getLimitSectors(s).forEach(id => sectorActive.add(id)); });
+      const slotProps = {
+        sel,
+        emptyBg: 'border-zinc-200 hover:border-pink-400 hover:bg-zinc-50',
+        filledBg: 'bg-zinc-50 border-zinc-200',
+        filledText: 'text-zinc-800',
+        numEmpty: 'bg-zinc-100 text-zinc-400',
+        selRing: 'ring-2 ring-pink-400 ring-offset-1',
+        onDragOver: onDragOverSlot,
+      };
+      const limitSteps = [
+        { id: 1, label: 'Dětská' },
+        { id: 2, label: 'Přední převis' },
+        { id: 3, label: 'Zadní převis' },
+        { id: 4, label: 'Kolmice' },
+      ];
+      return (
+        <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-200 relative">
+          {/* Delete (jen na hlavní kartě závodu) */}
+          {!isDostavba && onDelete && (
+            <button onClick={onDelete} title="Smazat závod"
+              className="absolute top-2.5 right-2.5 z-10 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-800/90 text-pink-400 hover:bg-pink-600 hover:text-white transition-colors">
+              <X c="w-3 h-3" />
+              <span className="text-[10px] font-black uppercase tracking-widest">Smazat</span>
+            </button>
+          )}
+
+          {/* Header */}
+          <div className="bg-[#1e1e20] p-4 min-h-[13rem] flex flex-col justify-between text-white">
+            <div className="flex items-start justify-between gap-3 pr-24">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-xl font-black leading-none">{displayDay}</h3>
+                <p className="text-sm font-medium text-white/50 mt-0.5">{fmtFull(date)}</p>
+                {isDostavba ? (
+                  <>
+                    {race.name && (
+                      <h4 className="mt-2 text-base font-black tracking-tight text-pink-500/80 leading-tight break-words uppercase">
+                        {race.name}
+                      </h4>
+                    )}
+                    <span className="inline-block mt-1 text-sm font-black tracking-widest text-pink-500">DOSTAVBA · LIMIT</span>
+                  </>
+                ) : race.name ? (
+                  <>
+                    <h4 className="mt-2 text-2xl font-black tracking-tight text-pink-500 leading-tight break-words uppercase">
+                      {race.name}
+                    </h4>
+                    <span className="inline-block mt-1 text-[10px] font-black tracking-widest text-pink-400/60 uppercase">Závod · Limit</span>
+                  </>
+                ) : (
+                  <span className="inline-block mt-2 text-sm font-black tracking-widest text-pink-500">ZÁVOD · LIMIT</span>
+                )}
+              </div>
+            </div>
+
+            {/* Sector badges */}
+            <div className="mt-3 grid grid-cols-4 gap-1.5">
+              {limitSteps.map(({ id, label }) => (
+                <div key={id} className={`rounded-lg py-2.5 px-1 text-center
+                  ${sectorActive.has(id) ? 'bg-pink-600 ring-1 ring-pink-400' : 'bg-white/5 ring-1 ring-white/10'}`}>
+                  <div className={`text-xs font-black leading-tight
+                    ${sectorActive.has(id) ? 'text-white' : 'text-white/30'}`}>
+                    {label}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Progress */}
+            <div className="mt-3 flex items-center gap-2.5">
+              <div className="flex-1 bg-white/10 rounded-full h-1.5">
+                <div className="bg-[#e6007e] rounded-full h-1.5 transition-all duration-500"
+                  style={{ width: `${total ? (filled / total) * 100 : 0}%` }} />
+              </div>
+              <span className={`text-xs font-bold tabular-nums ${allFilled ? 'text-[#e6007e]' : 'text-white/60'}`}>
+                {allFilled && '✓ '}{filled}/{total}
+              </span>
+            </div>
+          </div>
+
+          {/* Slots */}
+          <div className="p-3 space-y-2">
+            {Array.from({ length: total }).map((_, i) => {
+              const name = useSetters[i] ?? null;
+              return (
+                <Slot key={i} num={i+1} name={name} {...slotProps}
+                  onClick={() => onSlotClick(i)}
+                  onDragStart={() => onDragStartSlot(i, name)}
+                  onDrop={() => onDropSlot(i)} />
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
     // ── App ──────────────────────────────────────────────────────────────────
     function App() {
-      const [team,    setTeam]    = useState(TEAM);
+      const [team,    setTeam]    = useState(() => {
+        try {
+          const s = localStorage.getItem('climbing-team');
+          if (s) {
+            const arr = JSON.parse(s);
+            if (Array.isArray(arr) && arr.length) return arr;
+          }
+        } catch {}
+        return TEAM;
+      });
+      const [hostInput,  setHostInput]  = useState('');
+      const [addingHost, setAddingHost] = useState(false);
+      const hostInputRef = React.useRef(null);
       const [offset,  setOffset]  = useState(0);
       const [data,    setData]    = useState(() => {
         try { const s = localStorage.getItem('climbing-setters'); return s ? JSON.parse(s) : {}; } catch { return {}; }
       });
+      const [races,   setRaces]   = useState(() => {
+        try { const s = localStorage.getItem('climbing-races'); return s ? JSON.parse(s) : {}; } catch { return {}; }
+      });
       const [sel,     setSel]     = useState(null);
       const [drag,    setDrag]    = useState(null);  // { from, climber, session, idx? }
+      const [showAddRace, setShowAddRace] = useState(false);
       const [firebaseReady, setFirebaseReady] = useState(false);
       const skipFirebaseWeeks = React.useRef(new Set());
+      const skipFirebaseRaces = React.useRef(new Set());
+      const skipFirebaseTeam  = React.useRef(false);
       const pendingFlushRef   = React.useRef(null);
 
       // ── Firestore helpers: null ↔ "__NULL__" ────────────────────────────────
@@ -1184,7 +1672,58 @@
             return JSON.stringify(merged) !== JSON.stringify(prev) ? merged : prev;
           });
         });
-        return () => unsub();
+
+        // Races: počáteční fetch + real-time listener
+        db.collection('races').get().then(snapshot => {
+          if (!snapshot.empty) {
+            const loaded = {};
+            snapshot.forEach(doc => { loaded[doc.id] = fromFirestore(doc.data()); });
+            setRaces(prev => ({ ...prev, ...loaded }));
+          }
+        }).catch(() => {});
+
+        // Team (sdílený seznam stavěčů + hostů) — počáteční fetch + listener
+        db.collection('team').doc('roster').get().then(doc => {
+          if (doc.exists) {
+            const d = doc.data();
+            if (Array.isArray(d?.names) && d.names.length > 0) {
+              setTeam(d.names);
+            }
+          }
+        }).catch(() => {});
+        const unsubR = db.collection('races').onSnapshot(snapshot => {
+          const loaded = {};
+          const removed = [];
+          snapshot.docChanges().forEach(change => {
+            const doc = change.doc;
+            if (change.type === 'removed') { removed.push(doc.id); return; }
+            if (skipFirebaseRaces.current.has(doc.id)) {
+              skipFirebaseRaces.current.delete(doc.id);
+              return;
+            }
+            loaded[doc.id] = fromFirestore(doc.data());
+          });
+          if (Object.keys(loaded).length === 0 && removed.length === 0) return;
+          setRaces(prev => {
+            const merged = { ...prev, ...loaded };
+            removed.forEach(id => { delete merged[id]; });
+            return JSON.stringify(merged) !== JSON.stringify(prev) ? merged : prev;
+          });
+        });
+
+        // Team listener — propaguje hosty a změny týmu mezi uživateli
+        const unsubT = db.collection('team').doc('roster').onSnapshot(doc => {
+          if (skipFirebaseTeam.current) {
+            skipFirebaseTeam.current = false;
+            return;
+          }
+          if (!doc.exists) return;
+          const d = doc.data();
+          if (!Array.isArray(d?.names)) return;
+          setTeam(prev => JSON.stringify(prev) !== JSON.stringify(d.names) ? d.names : prev);
+        });
+
+        return () => { unsub(); unsubR(); unsubT(); };
       }, []);
 
       // ── Save to localStorage + Firestore when data changes ────────────────
@@ -1229,6 +1768,20 @@
         return () => clearTimeout(t);
       }, [data, firebaseReady]);
 
+      // ── Save races to localStorage + Firestore ────────────────────────────
+      React.useEffect(() => {
+        try { localStorage.setItem('climbing-races', JSON.stringify(races)); } catch {}
+        if (!firebaseReady) return;
+        function flushRaces(snap) {
+          Object.entries(snap).forEach(([raceId, raceData]) => {
+            skipFirebaseRaces.current.add(raceId);
+            db.collection('races').doc(raceId).set(toFirestore(raceData), { merge: true }).catch(() => {});
+          });
+        }
+        const t = setTimeout(() => flushRaces(races), 800);
+        return () => clearTimeout(t);
+      }, [races, firebaseReady]);
+
       // ── Flush při skrytí tabu (zavření okna, přepnutí tabu) ──────────────────
       React.useEffect(() => {
         const handleHide = () => {
@@ -1250,6 +1803,44 @@
       const _wedOv = week.wedSectorOverride;
       const calWed = (_wedOv != null && (_wedOv.isOff || _wedOv.sector)) ? _wedOv : (CAL[key]?.wed ?? null);
       const calThu = CAL[key]?.thu ?? null;
+
+      // Závod NEBO dostavba, které mohou nahradit standardní Stavění sloty (Mon Lanovka / Wed Limit) když jsou zrušené.
+      // Algoritmus: shromáždíme všechny race-day a dostavba-day položky v týdnu, pro každý zrušený slot
+      // hledáme nejdřív shodu day-of-week (Mon=1, Wed=3, Thu=4 pro Dětská), pak fallback na cokoli.
+      const _wkStartIso = weekKey(monday);
+      const _wkEndIso   = weekKey(addDays(monday, 6));
+      const _allWeekItems = [];
+      Object.values(races || {}).forEach(race => {
+        if (!race?.date) return;
+        if (race.date >= _wkStartIso && race.date <= _wkEndIso) {
+          _allWeekItems.push({ kind: 'race', race, date: race.date });
+        }
+        (race.dostavba || []).forEach((day, dIdx) => {
+          if (day?.date && day.date >= _wkStartIso && day.date <= _wkEndIso) {
+            _allWeekItems.push({ kind: 'dostavba', race, day, dIdx, date: day.date });
+          }
+        });
+      });
+      _allWeekItems.sort((a, b) => a.date.localeCompare(b.date));
+      const _monCancelled = week?.monSectorOverride?.isOff === true;
+      const _wedCancelled = week?.wedSectorOverride?.isOff === true;
+      const _wedDayMatch  = isDetskaWed(CAL[key]?.wed?.sector) ? 4 : 3;
+      const _pool = [..._allWeekItems];
+      const _consume = pred => {
+        for (let i = 0; i < _pool.length; i++) {
+          if (pred(_pool[i])) return _pool.splice(i, 1)[0];
+        }
+        return null;
+      };
+      const _dayOf = it => new Date(it.date + 'T12:00:00').getDay();
+      // Wed slot bere přednost (Limit) — je to obvyklejší případ pro závod
+      const wedReplacement = _wedCancelled
+        ? (_consume(it => _dayOf(it) === _wedDayMatch) || _consume(() => true))
+        : null;
+      const monReplacement = _monCancelled
+        ? (_consume(it => _dayOf(it) === 1) || _consume(() => true))
+        : null;
+      const _remainingWeekItems = _pool;
 
       // Dětská na Limitu se staví ve čtvrtek (+3), ostatní sektory ve středu (+2)
       const wedOffset = isDetskaWed(calWed?.sector) ? 3 : 2;
@@ -1459,6 +2050,70 @@
         setWeek({ ...week, [fld]: week[fld] === name ? null : name });
       }
 
+      // ── Race handlers ─────────────────────────────────────────────────────
+      function addRace({ name, date, sectors, slotCount, dostavbaDays }) {
+        setRaces(r => ({ ...r, [date]: {
+          date, name: name || '', sectors, slotCount,
+          setters: Array.from({ length: slotCount }, () => null),
+          sundavaci: [], myti: null,
+          dostavba: (dostavbaDays || []).map(d => ({
+            date: d.date,
+            sectors: d.sectors,
+            slotCount: d.slotCount,
+            setters: Array.from({ length: d.slotCount }, () => null),
+          })),
+        }}));
+        setShowAddRace(false);
+      }
+      function deleteRace(date) {
+        if (!window.confirm('Opravdu smazat tento závod (včetně dostavby)?')) return;
+        setRaces(r => { const n = { ...r }; delete n[date]; return n; });
+        db.collection('races').doc(date).delete().catch(() => {});
+      }
+      function onRaceSlotClick(date, idx) {
+        const race = races[date]; if (!race) return;
+        const arr = race.setters || [];
+        if (arr[idx]) {
+          const next = arr.map((s, i) => i === idx ? null : s);
+          setRaces(r => ({ ...r, [date]: { ...r[date], setters: next } }));
+          if (sel === arr[idx]) setSel(null);
+        } else if (sel) {
+          if (arr.includes(sel)) return;
+          const next = arr.map((s, i) => i === idx ? sel : s);
+          setRaces(r => ({ ...r, [date]: { ...r[date], setters: next } }));
+        }
+      }
+      function onDostavbaSlotClick(raceDate, dIdx, slotIdx) {
+        const race = races[raceDate]; if (!race) return;
+        const day = race.dostavba?.[dIdx]; if (!day) return;
+        const arr = day.setters || [];
+        const updateDay = newSetters => setRaces(r => {
+          const cur = r[raceDate]; if (!cur) return r;
+          const newDostavba = (cur.dostavba || []).map((d, i) => i === dIdx ? { ...d, setters: newSetters } : d);
+          return { ...r, [raceDate]: { ...cur, dostavba: newDostavba } };
+        });
+        if (arr[slotIdx]) {
+          updateDay(arr.map((s, i) => i === slotIdx ? null : s));
+          if (sel === arr[slotIdx]) setSel(null);
+        } else if (sel) {
+          if (arr.includes(sel)) return; // duplicate within same dostavba day
+          updateDay(arr.map((s, i) => i === slotIdx ? sel : s));
+        }
+      }
+      function toggleRaceSundavac(date, name) {
+        setRaces(r => {
+          const race = r[date]; if (!race) return r;
+          const curr = race.sundavaci || [];
+          return { ...r, [date]: { ...race, sundavaci: curr.includes(name) ? curr.filter(x => x !== name) : [...curr, name] } };
+        });
+      }
+      function toggleRaceMyti(date, name) {
+        setRaces(r => {
+          const race = r[date]; if (!race) return r;
+          return { ...r, [date]: { ...race, myti: race.myti === name ? null : name } };
+        });
+      }
+
       // ── Click ─────────────────────────────────────────────────────────────
       function onSlotClick(session, idx) {
         if ((week[session] || E4())[idx]) remove(session, idx);
@@ -1476,6 +2131,30 @@
       }
 
       // ── Team management ───────────────────────────────────────────────────
+      // Persist team do localStorage + Firestore (sdílený seznam včetně hostů)
+      React.useEffect(() => {
+        try { localStorage.setItem('climbing-team', JSON.stringify(team)); } catch {}
+        if (!firebaseReady) return;
+        const t = setTimeout(() => {
+          skipFirebaseTeam.current = true;
+          db.collection('team').doc('roster').set({ names: team }).catch(() => {});
+        }, 800);
+        return () => clearTimeout(t);
+      }, [team, firebaseReady]);
+
+      // Přidání hostujícího stavěče
+      function confirmHost() {
+        const trimmed = hostInput.trim();
+        if (!trimmed) { setAddingHost(false); setHostInput(''); return; }
+        // duplicitní jméno ignorujeme
+        if (!team.includes(trimmed)) setTeam(t => [...t, trimmed]);
+        setHostInput('');
+        setAddingHost(false);
+      }
+      function cancelHost() { setHostInput(''); setAddingHost(false); }
+      // Auto-focus inputu, když se otevře
+      React.useEffect(() => { if (addingHost) hostInputRef.current?.focus(); }, [addingHost]);
+
       function deleteClimber(name) {
         setTeam(t => t.filter(x => x !== name));
         if (sel === name) setSel(null);
@@ -1618,6 +2297,24 @@
             countWeek(data[k], new Date(y, m-1, d), null);
           }
         });
+        // Závody — počítáme stavěče do roční/měsíční statistiky (závod + dostavba)
+        const tallyRaceSetters = (setters, raceDate) => {
+          (setters || []).forEach(name => {
+            if (!name || !stats[name]) return;
+            if (raceDate.getFullYear() === thisYear) {
+              stats[name].year++;
+              if (raceDate.getMonth() === thisMonth) stats[name].month++;
+            }
+          });
+        };
+        Object.values(races || {}).forEach(race => {
+          if (!race?.date) return;
+          tallyRaceSetters(race.setters, new Date(race.date + 'T12:00:00'));
+          (race.dostavba || []).forEach(day => {
+            if (!day?.date) return;
+            tallyRaceSetters(day.setters, new Date(day.date + 'T12:00:00'));
+          });
+        });
         return stats;
       }
 
@@ -1650,6 +2347,13 @@
           (wd.wednesdaySundavaci || []).forEach(n => tally(n, sundWed, 'sund'));
           tally(wd.wednesdayMyti, sundWed, 'myti');
         });
+        // Závody — sundavání den před závodem
+        Object.values(races || {}).forEach(race => {
+          if (!race?.date) return;
+          const sundDate = addDays(new Date(race.date + 'T12:00:00'), -1);
+          (race.sundavaci || []).forEach(n => tally(n, sundDate, 'sund'));
+          tally(race.myti, sundDate, 'myti');
+        });
         return stats;
       }
 
@@ -1663,9 +2367,11 @@
             <div className="max-w-[60rem] mx-auto px-4 pt-3 pb-2">
               {/* Top row: title + navigation */}
               <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-base font-bold text-gray-900 leading-none">Stavění</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Týdenní plán stavěčů</p>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="min-w-0">
+                    <p className="text-base font-bold text-gray-900 leading-none">Stavění</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Týdenní plán stavěčů</p>
+                  </div>
                 </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button onClick={() => setOffset(o => o-1)}
@@ -1688,26 +2394,57 @@
               </div>
               {/* Second row: fill indicators */}
               {(() => {
-                const monMax = calMon?.sector && !calMon.isOff ? getLanovkaSlotCount(calMon.sector) : 0;
-                const wedMax = calWed?.sector && !calWed.isOff ? getWedSlotCount(calWed.sector) : 0;
-                const monSetterFill = monMax ? (week.monday||[]).slice(0,monMax).filter(Boolean).length : 0;
-                const monLanoFill   = (calMon?.sector && !calMon.isOff) ? (week.mondayLano ? 1 : 0) : 0;
-                const wedFill = wedMax ? (week.wednesday||[]).slice(0,wedMax).filter(Boolean).length : 0;
+                // Pomocná: spočítá fill ze závodu/dostavby (replacement objektu)
+                const replFill = repl => {
+                  if (!repl) return null;
+                  const total = repl.kind === 'race' ? (repl.race.slotCount || 0) : (repl.day.slotCount || 0);
+                  const setters = repl.kind === 'race' ? (repl.race.setters || []) : (repl.day.setters || []);
+                  const filled = setters.slice(0, total).filter(Boolean).length;
+                  return { total, filled };
+                };
+
+                // Lanovka — pokud Mon nahrazuje závod/dostavba, ukazatel reflektuje obsazenost závodu
+                let monMax, monSetterFill;
+                if (monReplacement) {
+                  const r = replFill(monReplacement);
+                  monMax = r.total; monSetterFill = r.filled;
+                } else {
+                  monMax = calMon?.sector && !calMon.isOff ? getLanovkaSlotCount(calMon.sector) : 0;
+                  monSetterFill = monMax ? (week.monday||[]).slice(0,monMax).filter(Boolean).length : 0;
+                }
+                const monLanoFill = (calMon?.sector && !calMon.isOff && !monReplacement) ? (week.mondayLano ? 1 : 0) : 0;
+
+                // Limit — pokud Wed nahrazuje závod/dostavba, ukazatel reflektuje obsazenost závodu
+                let wedMax, wedFill;
+                if (wedReplacement) {
+                  const r = replFill(wedReplacement);
+                  wedMax = r.total; wedFill = r.filled;
+                } else {
+                  wedMax = calWed?.sector && !calWed.isOff ? getWedSlotCount(calWed.sector) : 0;
+                  wedFill = wedMax ? (week.wednesday||[]).slice(0,wedMax).filter(Boolean).length : 0;
+                }
+
                 const thuFill = (week.thursday||[]).slice(0,2).filter(Boolean).length;
                 const monSetterPct = monMax ? Math.round(monSetterFill/monMax*100) : 0;
-                const monLanoPct   = (calMon?.sector && !calMon.isOff) ? Math.round(monLanoFill*100) : 0;
+                const monLanoPct   = (calMon?.sector && !calMon.isOff && !monReplacement) ? Math.round(monLanoFill*100) : 0;
                 const wedPct  = wedMax ? Math.round(wedFill/wedMax*100) : 0;
                 const thuPct  = calThu ? Math.round(thuFill/2*100) : 0;
+                const monIsRace = !!monReplacement;
+                const wedIsRace = !!wedReplacement;
                 return (
                   <div className="flex items-center justify-center flex-wrap gap-2 mt-2">
                     <span className={`text-sm font-black px-3 py-1 rounded-full
-                      ${monMax && monSetterFill===monMax ? 'bg-amber-500 text-white' : monMax ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
+                      ${monIsRace
+                        ? (monSetterFill === monMax && monMax ? 'bg-pink-600 text-white' : monMax ? 'bg-zinc-800 text-white' : 'bg-gray-100 text-gray-400')
+                        : monMax && monSetterFill===monMax ? 'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900' : monMax ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
                       Lanovka {monSetterPct}%
                     </span>
-                    <span className={`text-sm font-black px-3 py-1 rounded-full
-                      ${calMon?.sector && !calMon.isOff && monLanoFill===1 ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                      Lano {monLanoPct}%
-                    </span>
+                    {!monIsRace && (
+                      <span className={`text-sm font-black px-3 py-1 rounded-full
+                        ${calMon?.sector && !calMon.isOff && monLanoFill===1 ? 'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900' : 'bg-gray-100 text-gray-400'}`}>
+                        Lano {monLanoPct}%
+                      </span>
+                    )}
                     <span className={`text-sm font-black px-3 py-1 rounded-full
                       ${wedMax && wedFill===wedMax ? 'bg-pink-600 text-white' : wedMax ? 'bg-zinc-800 text-white' : 'bg-gray-100 text-gray-400'}`}>
                       Limit {wedPct}%
@@ -1736,67 +2473,96 @@
             <div className="overflow-x-auto snap-x snap-mandatory lg:overflow-visible lg:snap-none relative z-0">
               <div className="flex flex-col gap-4 w-fit lg:w-full">
 
-                {/* Řádek 1: Sundavání — zobraz jen pokud má týden stavění; sloupce zarovnané se stavěním */}
-                {((calMon != null && !calMon.isOff) || (calWed != null && !calWed.isOff)) && (
-                <div className="flex gap-4">
-                  <div className="w-[calc(100vw-2rem)] flex-shrink-0 snap-start lg:flex-1 lg:min-w-0">
-                    {calMon != null && !calMon.isOff && (
-                      <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
-                        sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
-                        onToggleSundavac={name => toggleSundavac('monday', name)}
-                        onToggleMyti={name => toggleMyti('monday', name)} />
-                    )}
-                  </div>
-                  <div className="w-[calc(100vw-2rem)] flex-shrink-0 snap-start lg:flex-1 lg:min-w-0">
-                    {calWed != null && !calWed.isOff && (
-                      <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
-                        sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
-                        onToggleSundavac={name => toggleSundavac('wednesday', name)}
-                        onToggleMyti={name => toggleMyti('wednesday', name)} />
-                    )}
-                  </div>
-                  {calThu && <div className="w-[calc(100vw-2rem)] flex-shrink-0 lg:flex-1 lg:min-w-0" />}
-                </div>
-                )}
+                {/* Slot-based render: každý slot má Sundavání nahoře + Stavění dole, vázané pozičně */}
+                {(() => {
+                  const cardClass = "w-[calc(100vw-2rem)] flex-shrink-0 snap-start lg:w-auto lg:flex-1 lg:min-w-0";
+                  const renderRaceSund = race => (
+                    <SundavaniCard
+                      session={`race-${race.date}`} theme="dark"
+                      date={addDays(new Date(race.date + 'T12:00:00'), -1)}
+                      sundavaci={race.sundavaci || []} myti={race.myti || null}
+                      onToggleSundavac={n => toggleRaceSundavac(race.date, n)}
+                      onToggleMyti={n => toggleRaceMyti(race.date, n)} />
+                  );
+                  const renderReplacementStavba = repl => (
+                    <RaceCard
+                      kind={repl.kind}
+                      race={repl.race}
+                      day={repl.day}
+                      sel={sel}
+                      onSlotClick={i => repl.kind === 'race'
+                        ? onRaceSlotClick(repl.race.date, i)
+                        : onDostavbaSlotClick(repl.race.date, repl.dIdx, i)}
+                      onDragStartSlot={() => {}}
+                      onDragOverSlot={e => e.preventDefault()}
+                      onDropSlot={() => {}}
+                      onDelete={repl.kind === 'race' ? () => deleteRace(repl.race.date) : undefined} />
+                  );
 
-                {/* Řádek 2: Stavění */}
-                <div className="flex gap-4">
-                  <div className="w-[calc(100vw-2rem)] flex-shrink-0 snap-start lg:flex-1 lg:min-w-0">
-                    <SessionCard
-                      session="monday" day="Pondělí" date={monDate} theme="yellow"
-                      slots={week.monday} lanoSlot={week.mondayLano} calInfo={calMon}
-                      sel={sel}
-                      onSlotClick={i => onSlotClick('monday', i)}
-                      onDragStartSlot={(i,n) => onDragStartSlot('monday',i,n)}
-                      onDragOverSlot={e => e.preventDefault()}
-                      onDropSlot={i => onDropSlot('monday', i)}
-                      onLanoClick={onLanoClick}
-                      onDragStartLano={onDragStartLano}
-                      onDropLano={onDropLano}
-                      onClear={() => clearSession('monday')}
-                      onDateChange={setMonDate}
-                      onShift={shiftMonSector}
-                      nextSector={getNextSector(key, 'mon')}
-                    />
-                  </div>
-                  <div className="w-[calc(100vw-2rem)] flex-shrink-0 snap-start lg:flex-1 lg:min-w-0">
-                    <SessionCard
-                      session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} theme="dark"
-                      slots={week.wednesday} calInfo={calWed}
-                      sel={sel}
-                      onSlotClick={i => onSlotClick('wednesday', i)}
-                      onDragStartSlot={(i,n) => onDragStartSlot('wednesday',i,n)}
-                      onDragOverSlot={e => e.preventDefault()}
-                      onDropSlot={i => onDropSlot('wednesday', i)}
-                      onClear={() => clearSession('wednesday')}
-                      onDateChange={setWedDate}
-                      onShift={shiftWedSector}
-                      nextSector={getNextSector(key, 'wed')}
-                    />
-                  </div>
-                  {calThu && (
-                    <div className="w-[calc(100vw-2rem)] flex-shrink-0 snap-start lg:flex-1 lg:min-w-0">
-                      <SessionCard
+                  const slots = [];
+                  // Mon
+                  if (monReplacement) {
+                    slots.push({
+                      stavba: renderReplacementStavba(monReplacement),
+                      sundavani: monReplacement.kind === 'race' ? renderRaceSund(monReplacement.race) : null,
+                    });
+                  } else {
+                    slots.push({
+                      stavba: <SessionCard
+                        session="monday" day="Pondělí" date={monDate} theme="yellow"
+                        slots={week.monday} lanoSlot={week.mondayLano} calInfo={calMon}
+                        sel={sel}
+                        onSlotClick={i => onSlotClick('monday', i)}
+                        onDragStartSlot={(i,n) => onDragStartSlot('monday',i,n)}
+                        onDragOverSlot={e => e.preventDefault()}
+                        onDropSlot={i => onDropSlot('monday', i)}
+                        onLanoClick={onLanoClick}
+                        onDragStartLano={onDragStartLano}
+                        onDropLano={onDropLano}
+                        onClear={() => clearSession('monday')}
+                        onDateChange={setMonDate}
+                        onShift={shiftMonSector}
+                        nextSector={getNextSector(key, 'mon')} />,
+                      sundavani: (calMon != null && !calMon.isOff)
+                        ? <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
+                            sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
+                            onToggleSundavac={name => toggleSundavac('monday', name)}
+                            onToggleMyti={name => toggleMyti('monday', name)} />
+                        : null,
+                    });
+                  }
+                  // Wed
+                  if (wedReplacement) {
+                    slots.push({
+                      stavba: renderReplacementStavba(wedReplacement),
+                      sundavani: wedReplacement.kind === 'race' ? renderRaceSund(wedReplacement.race) : null,
+                    });
+                  } else {
+                    slots.push({
+                      stavba: <SessionCard
+                        session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} theme="dark"
+                        slots={week.wednesday} calInfo={calWed}
+                        sel={sel}
+                        onSlotClick={i => onSlotClick('wednesday', i)}
+                        onDragStartSlot={(i,n) => onDragStartSlot('wednesday',i,n)}
+                        onDragOverSlot={e => e.preventDefault()}
+                        onDropSlot={i => onDropSlot('wednesday', i)}
+                        onClear={() => clearSession('wednesday')}
+                        onDateChange={setWedDate}
+                        onShift={shiftWedSector}
+                        nextSector={getNextSector(key, 'wed')} />,
+                      sundavani: (calWed != null && !calWed.isOff)
+                        ? <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
+                            sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
+                            onToggleSundavac={name => toggleSundavac('wednesday', name)}
+                            onToggleMyti={name => toggleMyti('wednesday', name)} />
+                        : null,
+                    });
+                  }
+                  // Thu (jen pokud je v týdnu)
+                  if (calThu) {
+                    slots.push({
+                      stavba: <SessionCard
                         session="thursday" day="Čtvrtek" date={thuDate} theme="green"
                         slots={week.thursday || E4()} calInfo={calThu}
                         sel={sel}
@@ -1805,11 +2571,62 @@
                         onDragOverSlot={e => e.preventDefault()}
                         onDropSlot={i => onDropSlot('thursday', i)}
                         onClear={() => clearSession('thursday')}
-                        onDateChange={setThuDate}
-                      />
-                    </div>
-                  )}
-                </div>
+                        onDateChange={setThuDate} />,
+                      sundavani: null,
+                    });
+                  }
+                  // Extras — neumístěné race/dostavba dny — připojeny jako další sloty do stejného řádku
+                  _remainingWeekItems.forEach(item => {
+                    if (item.kind === 'race') {
+                      slots.push({
+                        stavba: <RaceCard
+                          race={item.race}
+                          sel={sel}
+                          onSlotClick={i => onRaceSlotClick(item.race.date, i)}
+                          onDragStartSlot={() => {}}
+                          onDragOverSlot={e => e.preventDefault()}
+                          onDropSlot={() => {}}
+                          onDelete={() => deleteRace(item.race.date)} />,
+                        sundavani: renderRaceSund(item.race),
+                      });
+                    } else {
+                      slots.push({
+                        stavba: <RaceCard
+                          kind="dostavba"
+                          race={item.race}
+                          day={item.day}
+                          sel={sel}
+                          onSlotClick={i => onDostavbaSlotClick(item.race.date, item.dIdx, i)}
+                          onDragStartSlot={() => {}}
+                          onDragOverSlot={e => e.preventDefault()}
+                          onDropSlot={() => {}} />,
+                        sundavani: null,
+                      });
+                    }
+                  });
+
+                  const hasSundavani = slots.some(s => s.sundavani != null);
+                  return (
+                    <>
+                      {hasSundavani && (
+                        <div className="flex gap-4 lg:flex-wrap lg:justify-center items-start">
+                          {slots.map((s, i) => (
+                            <div key={`sund-${i}`} className={cardClass}>
+                              {s.sundavani}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-4 lg:flex-wrap lg:justify-center items-start">
+                        {slots.map((s, i) => (
+                          <div key={`stav-${i}`} className={cardClass}>
+                            {s.stavba}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
 
               </div>
             </div>
@@ -1833,11 +2650,6 @@
                         <Check c="w-3 h-3" />{sel}
                       </span>
                     )}
-                    <button onClick={clearWeek}
-                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors py-1">
-                      <RotateCcw c="w-3.5 h-3.5" />
-                      Resetovat týden
-                    </button>
                   </div>
                 </div>
               </div>
@@ -1848,16 +2660,44 @@
                       isSelected={sel === name}
                       inMon={isMonday(name)}
                       inWed={isWednesday(name)}
+                      isHost={!TEAM.includes(name)}
                       onClick={() => onChipClick(name)}
                       onRemove={() => deleteClimber(name)}
                       onDragStart={() => onDragStartPool(name)} />
                   ))
                 }
+                {/* Host — přidání hostujícího stavěče */}
+                {addingHost ? (
+                  <form onSubmit={e => { e.preventDefault(); confirmHost(); }}
+                    className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full border border-pink-400 bg-pink-50 shadow-sm">
+                    <UserIcon c="w-5 h-5 flex-shrink-0 text-pink-400" />
+                    <input ref={hostInputRef} type="text" value={hostInput}
+                      onChange={e => setHostInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') cancelHost(); }}
+                      placeholder="Jméno hosta…" maxLength={30}
+                      className="text-sm font-semibold italic bg-transparent outline-none w-28 text-pink-800 placeholder-pink-400 placeholder:font-medium placeholder:not-italic" />
+                    <button type="submit" disabled={!hostInput.trim()} title="Přidat"
+                      className="p-1 rounded-full text-pink-600 hover:bg-pink-100 disabled:opacity-30 disabled:hover:bg-transparent">
+                      <Check c="w-4 h-4" />
+                    </button>
+                    <button type="button" onClick={cancelHost} title="Zrušit"
+                      className="p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+                      <X c="w-3.5 h-3.5" />
+                    </button>
+                  </form>
+                ) : (
+                  <button onClick={() => setAddingHost(true)} title="Přidat hostujícího stavěče"
+                    className="inline-flex items-center gap-1.5 pl-2.5 pr-3 py-1.5 rounded-full border border-dashed border-pink-300 text-pink-600 text-sm font-semibold hover:bg-pink-50 hover:border-pink-400 transition-colors">
+                    <Plus c="w-3.5 h-3.5" />
+                    Host
+                  </button>
+                )}
               </div>
 
               {/* Stats — mobile only, na desktopu jsou v pravém sidebaru */}
               <div className="lg:hidden px-4 pb-2 space-y-3">
                 <MonthlyOccupancy data={data} />
+                <RacesPanel races={races} />
                 <StatsPanel stats={computeStats()} team={team} />
                 <RemovalStatsPanel stats={computeRemovalStats()} />
               </div>
@@ -1877,84 +2717,77 @@
               )}
             </div>
 
-            {/* Year plan */}
-            <YearPlan />
-
-            {/* Posunout / Smazat stavění — zřídka používané, dole */}
-            {(calMon || calWed) && (
-              <div className="flex gap-2 mt-2 flex-wrap">
-                {/* Lanovka — posunout (jen pokud má pojmenovaný sektor) */}
-                {calMon && !calMon.isOff && calMon.sector && (
-                  <button onClick={shiftMonSector}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
-                      border border-amber-200 text-amber-600 hover:bg-amber-50 transition-colors">
-                    Posunout — {calMon.sector}
-                    <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-lg font-black">
-                      → {fmt(addDays(monday, 7))}
-                    </span>
-                  </button>
-                )}
-                {/* Lanovka — smazat (jen pokud má pojmenovaný sektor) */}
-                {calMon && !calMon.isOff && calMon.sector && (
-                  <button onClick={cancelMonSector}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
-                      border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
-                    Smazat stavění — {calMon.sector}
-                  </button>
-                )}
-                {/* Lanovka — vrátit po posunu */}
-                {week.monSectorOverride?.sector === 'Volný týden' && week.monSavedSetters && (
-                  <button onClick={undoMonShift}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
-                      border border-amber-200 text-amber-600 hover:bg-amber-50 transition-colors">
-                    ↩ Vrátit Lanovka
-                  </button>
-                )}
-                {/* Lanovka — vrátit po smazání */}
-                {week.monCancelledSetters && (
-                  <button onClick={undoMonCancel}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
-                      border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
-                    ↩ Obnovit Lanovka
-                  </button>
-                )}
-                {/* Limit — posunout (jen pokud má pojmenovaný sektor) */}
-                {calWed && !calWed.isOff && calWed.sector && (
-                  <button onClick={shiftWedSector}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
-                      border border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-colors">
-                    Posunout — {calWed.sector}
-                    <span className="bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-lg font-black">
-                      → {fmt(addDays(monday, 7))}
-                    </span>
-                  </button>
-                )}
-                {/* Limit — smazat (jen pokud má pojmenovaný sektor) */}
-                {calWed && !calWed.isOff && calWed.sector && (
-                  <button onClick={cancelWedSector}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
-                      border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
-                    Smazat stavění — {calWed.sector}
-                  </button>
-                )}
-                {/* Limit — vrátit po posunu */}
-                {week.wedSectorOverride?.sector === 'Volný týden' && week.wedSavedSetters && (
-                  <button onClick={undoWedShift}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
-                      border border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-colors">
-                    ↩ Vrátit Limit
-                  </button>
-                )}
-                {/* Limit — vrátit po smazání */}
-                {week.wedCancelledSetters && (
-                  <button onClick={undoWedCancel}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold
-                      border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
-                    ↩ Obnovit Limit
-                  </button>
-                )}
+            {/* Year plan (Rotace + Roční kalendář) — collapsible, defaultně sbalené */}
+            <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <summary className="px-4 py-3 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors list-none">
+                <span className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                  <span className="text-gray-400 text-xs uppercase tracking-widest">Rotace + Roční plán</span>
+                </span>
+                <span className="text-gray-400 text-xs font-semibold group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <div className="px-4 pb-4 border-t border-gray-100">
+                <YearPlan />
               </div>
-            )}
+            </details>
+
+            {/* ── Široké action butony úplně dole — každá akce na celou šířku ──── */}
+            {(() => {
+              const monLanShift  = calMon && !calMon.isOff && calMon.sector;
+              const monLanCancel = calMon && !calMon.isOff && calMon.sector;
+              const monLanUndoShift  = week.monSectorOverride?.sector === 'Volný týden' && week.monSavedSetters;
+              const monLanUndoCancel = !!week.monCancelledSetters;
+              const wedLimShift  = calWed && !calWed.isOff && calWed.sector;
+              const wedLimCancel = calWed && !calWed.isOff && calWed.sector;
+              const wedLimUndoShift  = week.wedSectorOverride?.sector === 'Volný týden' && week.wedSavedSetters;
+              const wedLimUndoCancel = !!week.wedCancelledSetters;
+              const nextWk = fmt(addDays(monday, 7));
+
+              // Poloviční tlačítko (flex-1 → 50% když jsou 2, plná šířka když 1)
+              const halfBtn = (key, cls, onClick, icon, action, sector, suffix) => (
+                <button key={key} onClick={onClick}
+                  title={`${action}${sector ? ' ' + sector : ''}${suffix ? ' ' + suffix : ''}`}
+                  className={`flex-1 min-w-0 px-3 py-3.5 rounded-2xl text-sm font-black uppercase tracking-wide transition-colors flex items-center justify-center gap-1.5 shadow-sm ${cls}`}>
+                  <span className="text-base leading-none flex-shrink-0">{icon}</span>
+                  <span className="flex-shrink-0">{action}</span>
+                  {sector && <span className="font-bold normal-case tracking-normal truncate min-w-0">"{sector}"</span>}
+                  {suffix && <span className="opacity-80 flex-shrink-0">{suffix}</span>}
+                </button>
+              );
+
+              const hasLanovkaActions = monLanShift || monLanCancel || monLanUndoShift || monLanUndoCancel;
+              const hasLimitActions   = wedLimShift || wedLimCancel || wedLimUndoShift || wedLimUndoCancel;
+
+              return (
+                <div className="space-y-2">
+                  {/* LANOVKA — žluté butony (gradient z karty Lanovky) vedle sebe */}
+                  {hasLanovkaActions && (
+                    <div className="flex gap-2">
+                      {monLanShift      && halfBtn('lan-shift',      'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', shiftMonSector,  '↪', 'Posun',        calMon.sector, `→ ${nextWk}`)}
+                      {monLanCancel     && halfBtn('lan-cancel',     'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', cancelMonSector, '✕', 'Smazat',       calMon.sector, null)}
+                      {monLanUndoShift  && halfBtn('lan-undoshift',  'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', undoMonShift,    '↩', 'Vrátit posun', null,          null)}
+                      {monLanUndoCancel && halfBtn('lan-undocancel', 'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', undoMonCancel,   '↩', 'Obnovit',      null,          null)}
+                    </div>
+                  )}
+
+                  {/* LIMIT — černé butony vedle sebe */}
+                  {hasLimitActions && (
+                    <div className="flex gap-2">
+                      {wedLimShift      && halfBtn('lim-shift',      'bg-zinc-900 text-white hover:bg-zinc-800',     shiftWedSector,  '↪', 'Posun',        calWed.sector, `→ ${nextWk}`)}
+                      {wedLimCancel     && halfBtn('lim-cancel',     'bg-zinc-900 text-white hover:bg-zinc-800',     cancelWedSector, '✕', 'Smazat',       calWed.sector, null)}
+                      {wedLimUndoShift  && halfBtn('lim-undoshift',  'bg-zinc-700 text-zinc-200 hover:bg-zinc-600',  undoWedShift,    '↩', 'Vrátit posun', null,          null)}
+                      {wedLimUndoCancel && halfBtn('lim-undocancel', 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600',  undoWedCancel,   '↩', 'Obnovit',      null,          null)}
+                    </div>
+                  )}
+
+                  {/* + Přidat závod — vystředěný dole, plná šířka */}
+                  <button onClick={() => setShowAddRace(true)}
+                    className="w-full px-5 py-4 rounded-2xl bg-gradient-to-br from-pink-600 to-pink-700 hover:from-pink-500 hover:to-pink-600 text-white text-sm font-black uppercase tracking-widest shadow-sm transition-colors flex items-center justify-center gap-2">
+                    <span className="text-lg leading-none">+</span>
+                    <span>Přidat závod</span>
+                  </button>
+                </div>
+              );
+            })()}
 
             </div>{/* end main content column */}
 
@@ -1978,26 +2811,31 @@
                   const wedDate = wd.wedDateOverride ? new Date(wd.wedDateOverride + 'T12:00:00') : addDays(monday, wedOff);
                   const thuDate = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(monday, 3);
                   const sessions = [
-                    calMon && !calMon.isOff ? { date: monDate, label: 'Lanovka', sector: calMon.sector, color: 'text-amber-700' } : null,
-                    calWed && !calWed.isOff ? { date: wedDate, label: 'Limit',    sector: calWed.sector, color: 'text-pink-700'  } : null,
-                    calThu && !calThu.isOff ? { date: thuDate, label: 'Tělocv.',  sector: calThu.sector, color: 'text-emerald-700' } : null,
+                    calMon && !calMon.isOff ? { date: monDate, label: 'Lanovka', sector: calMon.sector, color: 'text-amber-500' } : null,
+                    calWed && !calWed.isOff ? { date: wedDate, label: 'Limit',    sector: calWed.sector, color: 'text-pink-500'  } : null,
+                    calThu && !calThu.isOff ? { date: thuDate, label: 'Tělocv.',  sector: calThu.sector, color: 'text-emerald-500' } : null,
                   ].filter(Boolean).filter(s => s.date >= today).sort((a,b) => a.date - b.date);
                   for (const s of sessions) { if (upcoming.length < 3) upcoming.push(s); }
                 }
                 return (
-                  <div className="rounded-2xl bg-amber-50 ring-1 ring-amber-200 p-3 space-y-2">
-                    <div className="text-xs font-black text-amber-700 uppercase tracking-wide">Nadcházející</div>
-                    {upcoming.length === 0 && <div className="text-xs text-gray-400">Žádné stavění</div>}
-                    {upcoming.map((s, i) => (
-                      <div key={i} className="space-y-0.5">
-                        <div className={`text-xs font-semibold ${s.color}`}>{fmtDate(s.date)} {s.label}</div>
-                        <div className={`text-xs font-black leading-tight ${s.color}`}>{s.sector}</div>
-                      </div>
-                    ))}
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="px-4 pt-4 pb-2 border-b border-gray-100">
+                      <h2 className="font-bold text-gray-900 text-sm">Nadcházející</h2>
+                    </div>
+                    <div className="p-3 space-y-2">
+                      {upcoming.length === 0 && <div className="text-xs text-gray-400">Žádné stavění</div>}
+                      {upcoming.map((s, i) => (
+                        <div key={i} className="space-y-0.5">
+                          <div className={`text-xs font-semibold ${s.color}`}>{fmtDate(s.date)} {s.label}</div>
+                          <div className={`text-xs font-black leading-tight ${s.color}`}>{s.sector}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 );
               })()}
               <MonthlyOccupancy data={data} />
+              <RacesPanel races={races} />
               </div>
               <div className="hidden lg:block space-y-3">
                 <StatsPanel stats={computeStats()} team={team} />
@@ -2006,6 +2844,14 @@
             </div>
 
           </main>
+
+          {/* Modal: Přidat závod */}
+          {showAddRace && (
+            <AddRaceModal
+              existingRaceDates={new Set(Object.keys(races || {}))}
+              onClose={() => setShowAddRace(false)}
+              onSave={addRace} />
+          )}
         </div>
       );
     }
