@@ -450,11 +450,11 @@
               </button>
             </div>
 
-            {/* Sector label */}
+            {/* Sector label — výška sjednocena s Limit sektor gridem */}
             {calInfo?.sector && !calInfo.isOff && isYellow && (
-              <div className="mt-3 rounded-xl px-3 py-4 flex items-center justify-center min-h-[3.5rem] bg-black/10 ring-1 ring-black/10">
+              <div className="mt-3 rounded-lg px-3 py-2.5 flex items-center justify-center bg-black/10 ring-1 ring-black/10">
                 <span className={`font-black text-center leading-tight tracking-tight break-words w-full text-amber-900
-                  ${calInfo.sector.length > 20 ? 'text-lg' : calInfo.sector.length > 12 ? 'text-xl' : 'text-2xl'}`}>
+                  ${calInfo.sector.length > 20 ? 'text-sm' : calInfo.sector.length > 12 ? 'text-base' : 'text-lg'}`}>
                   {calInfo.sector}
                 </span>
               </div>
