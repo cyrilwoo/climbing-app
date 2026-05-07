@@ -2742,11 +2742,11 @@
               const wedLimUndoCancel = !!week.wedCancelledSetters;
               const nextWk = fmt(addDays(monday, 7));
 
-              // Poloviční tlačítko (flex-1 → 50% když jsou 2, plná šířka když 1)
-              const halfBtn = (key, cls, onClick, icon, action, sector, suffix) => (
+              // Tlačítko na celou šířku svého sloupce (uvnitř wall sloupce)
+              const wallBtn = (key, cls, onClick, icon, action, sector, suffix) => (
                 <button key={key} onClick={onClick}
                   title={`${action}${sector ? ' ' + sector : ''}${suffix ? ' ' + suffix : ''}`}
-                  className={`flex-1 min-w-0 px-3 py-3.5 rounded-2xl text-sm font-black uppercase tracking-wide transition-colors flex items-center justify-center gap-1.5 shadow-sm ${cls}`}>
+                  className={`w-full min-w-0 px-3 py-3.5 rounded-2xl text-sm font-black uppercase tracking-wide transition-colors flex items-center justify-center gap-1.5 shadow-sm ${cls}`}>
                   <span className="text-base leading-none flex-shrink-0">{icon}</span>
                   <span className="flex-shrink-0">{action}</span>
                   {sector && <span className="font-bold normal-case tracking-normal truncate min-w-0">"{sector}"</span>}
@@ -2759,23 +2759,27 @@
 
               return (
                 <div className="space-y-2">
-                  {/* LANOVKA — žluté butony (gradient z karty Lanovky) vedle sebe */}
-                  {hasLanovkaActions && (
-                    <div className="flex gap-2">
-                      {monLanShift      && halfBtn('lan-shift',      'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', shiftMonSector,  '↪', 'Posun',        calMon.sector, `→ ${nextWk}`)}
-                      {monLanCancel     && halfBtn('lan-cancel',     'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', cancelMonSector, '✕', 'Smazat',       calMon.sector, null)}
-                      {monLanUndoShift  && halfBtn('lan-undoshift',  'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', undoMonShift,    '↩', 'Vrátit posun', null,          null)}
-                      {monLanUndoCancel && halfBtn('lan-undocancel', 'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', undoMonCancel,   '↩', 'Obnovit',      null,          null)}
-                    </div>
-                  )}
-
-                  {/* LIMIT — černé butony vedle sebe */}
-                  {hasLimitActions && (
-                    <div className="flex gap-2">
-                      {wedLimShift      && halfBtn('lim-shift',      'bg-zinc-900 text-white hover:bg-zinc-800',     shiftWedSector,  '↪', 'Posun',        calWed.sector, `→ ${nextWk}`)}
-                      {wedLimCancel     && halfBtn('lim-cancel',     'bg-zinc-900 text-white hover:bg-zinc-800',     cancelWedSector, '✕', 'Smazat',       calWed.sector, null)}
-                      {wedLimUndoShift  && halfBtn('lim-undoshift',  'bg-zinc-700 text-zinc-200 hover:bg-zinc-600',  undoWedShift,    '↩', 'Vrátit posun', null,          null)}
-                      {wedLimUndoCancel && halfBtn('lim-undocancel', 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600',  undoWedCancel,   '↩', 'Obnovit',      null,          null)}
+                  {/* Lanovka vlevo, Limit vpravo (na desktopu vedle sebe; na mobilu pod sebou) */}
+                  {(hasLanovkaActions || hasLimitActions) && (
+                    <div className="flex flex-col lg:flex-row gap-2">
+                      {/* LANOVKA sloupec — žluté butony pod sebou */}
+                      {hasLanovkaActions && (
+                        <div className="flex-1 space-y-2">
+                          {monLanShift      && wallBtn('lan-shift',      'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', shiftMonSector,  '↪', 'Posun',        calMon.sector, `→ ${nextWk}`)}
+                          {monLanCancel     && wallBtn('lan-cancel',     'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', cancelMonSector, '✕', 'Smazat',       calMon.sector, null)}
+                          {monLanUndoShift  && wallBtn('lan-undoshift',  'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', undoMonShift,    '↩', 'Vrátit posun', null,          null)}
+                          {monLanUndoCancel && wallBtn('lan-undocancel', 'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', undoMonCancel,   '↩', 'Obnovit',      null,          null)}
+                        </div>
+                      )}
+                      {/* LIMIT sloupec — černé butony pod sebou */}
+                      {hasLimitActions && (
+                        <div className="flex-1 space-y-2">
+                          {wedLimShift      && wallBtn('lim-shift',      'bg-zinc-900 text-white hover:bg-zinc-800',     shiftWedSector,  '↪', 'Posun',        calWed.sector, `→ ${nextWk}`)}
+                          {wedLimCancel     && wallBtn('lim-cancel',     'bg-zinc-900 text-white hover:bg-zinc-800',     cancelWedSector, '✕', 'Smazat',       calWed.sector, null)}
+                          {wedLimUndoShift  && wallBtn('lim-undoshift',  'bg-zinc-700 text-zinc-200 hover:bg-zinc-600',  undoWedShift,    '↩', 'Vrátit posun', null,          null)}
+                          {wedLimUndoCancel && wallBtn('lim-undocancel', 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600',  undoWedCancel,   '↩', 'Obnovit',      null,          null)}
+                        </div>
+                      )}
                     </div>
                   )}
 
