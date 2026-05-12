@@ -2589,7 +2589,8 @@
 
                 {/* Slot-based render: každý slot má Sundavání nahoře + Stavění dole, vázané pozičně */}
                 {(() => {
-                  const cardClass = "w-[calc(100vw-2rem)] flex-shrink-0 snap-start lg:w-auto lg:flex-1 lg:min-w-0";
+                  // Max 3 karty vedle sebe (každá 1/3 šířky); 4. a další wrapuje na další řádek a vystředí se
+                  const cardClass = "w-[calc(100vw-2rem)] flex-shrink-0 snap-start lg:w-auto lg:flex-shrink lg:flex-grow-0 lg:basis-[calc((100%-2rem)/3)] lg:max-w-[calc((100%-2rem)/3)]";
                   const renderRaceSund = race => (
                     <SundavaniCard
                       session={`race-${race.date}`} theme="dark"
