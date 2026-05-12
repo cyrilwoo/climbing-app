@@ -161,6 +161,73 @@
       '2026-12-14': { mon: L5, wed: K },
       '2026-12-21': { mon: L1, wed: V, thu: TG },
       '2026-12-28': { mon: L2, wed: D },
+      // ══════════════════════════════════════════════════════════════
+      // ROK 2027 — pokračování rotace (Lanovka cyklus L1-L5, Limit D-P-Z-K-V, Tělocvična každé 4 týdny)
+      // ══════════════════════════════════════════════════════════════
+      // ── LEDEN 2027 ───────────────────────────────────────────────
+      '2027-01-04': { mon: L3, wed: P },
+      '2027-01-11': { mon: L4, wed: Z },
+      '2027-01-18': { mon: L5, wed: K, thu: TG },
+      '2027-01-25': { mon: L1, wed: V },
+      // ── ÚNOR 2027 ────────────────────────────────────────────────
+      '2027-02-01': { mon: L2, wed: D },
+      '2027-02-08': { mon: L3, wed: P },
+      '2027-02-15': { mon: L4, wed: Z, thu: TG },
+      '2027-02-22': { mon: L5, wed: K },
+      // ── BŘEZEN 2027 ──────────────────────────────────────────────
+      '2027-03-01': { mon: L1, wed: V },
+      '2027-03-08': { mon: L2, wed: D },
+      '2027-03-15': { mon: L3, wed: P, thu: TG },
+      '2027-03-22': { mon: L4, wed: Z },
+      '2027-03-29': { mon: L5, wed: K },
+      // ── DUBEN 2027 ───────────────────────────────────────────────
+      '2027-04-05': { mon: L1, wed: V },
+      '2027-04-12': { mon: L2, wed: D, thu: TG },
+      '2027-04-19': { mon: L3, wed: P },
+      '2027-04-26': { mon: L4, wed: Z },
+      // ── KVĚTEN 2027 ──────────────────────────────────────────────
+      '2027-05-03': { mon: L5, wed: K },
+      '2027-05-10': { mon: L1, wed: V, thu: TG },
+      '2027-05-17': { mon: L2, wed: D },
+      '2027-05-24': { mon: L3, wed: P },
+      '2027-05-31': { mon: L4, wed: Z },
+      // ── ČERVEN 2027 ──────────────────────────────────────────────
+      '2027-06-07': { mon: L5, wed: K, thu: TG },
+      '2027-06-14': { mon: L1, wed: V },
+      '2027-06-21': { mon: L2, wed: D },
+      '2027-06-28': { mon: L3, wed: P },
+      // ── ČERVENEC 2027 — střídavě Lanovka / Limit ────────────────
+      '2027-07-05': { mon: L4, thu: TG },
+      '2027-07-12': {            wed: Z  },
+      '2027-07-19': { mon: L5          },
+      '2027-07-26': {            wed: K  },
+      // ── SRPEN 2027 — střídavě Lanovka / Limit ───────────────────
+      '2027-08-02': { mon: L1, thu: TG },
+      '2027-08-09': {            wed: D  },
+      '2027-08-16': { mon: L2          },
+      '2027-08-23': {            wed: P  },
+      '2027-08-30': { mon: L3, thu: TG },
+      // ── ZÁŘÍ 2027 ────────────────────────────────────────────────
+      '2027-09-06': { mon: L4, wed: Z },
+      '2027-09-13': { mon: L5, wed: K },
+      '2027-09-20': { mon: L1, wed: V },
+      '2027-09-27': { mon: L2, wed: D, thu: TG },
+      // ── ŘÍJEN 2027 ───────────────────────────────────────────────
+      '2027-10-04': { mon: L3, wed: P },
+      '2027-10-11': { mon: L4, wed: Z },
+      '2027-10-18': { mon: L5, wed: K },
+      '2027-10-25': { mon: L1, wed: V, thu: TG },
+      // ── LISTOPAD 2027 ────────────────────────────────────────────
+      '2027-11-01': { mon: L2, wed: D },
+      '2027-11-08': { mon: L3, wed: P },
+      '2027-11-15': { mon: L4, wed: Z },
+      '2027-11-22': { mon: L5, wed: K, thu: TG },
+      '2027-11-29': { mon: L1, wed: V },
+      // ── PROSINEC 2027 ────────────────────────────────────────────
+      '2027-12-06': { mon: L2, wed: D },
+      '2027-12-13': { mon: L3, wed: P },
+      '2027-12-20': { mon: L4, wed: Z, thu: TG },
+      '2027-12-27': { mon: L5, wed: K },
     };
 
     // Returns the next non-off CAL entry for venue ('mon'|'wed') after weekKey
@@ -799,11 +866,20 @@
         { label:'Volno',         day:'—'       },
       ];
 
+      // Dostupné roky jsou roky, pro které existují CAL entries
+      const availableYears = Array.from(new Set(
+        Object.keys(CAL).map(k => Number(k.slice(0, 4)))
+      )).sort();
+      const [year, setYear] = useState(() => {
+        const nowYear = new Date().getFullYear();
+        return availableYears.includes(nowYear) ? nowYear : availableYears[0];
+      });
+
       // Build monthly data from CAL
       const monthly = Array.from({length:12}, () => ({ lanovka:[], limit:[], gym:0 }));
       Object.entries(CAL).sort().forEach(([key, entry]) => {
         const mon = new Date(key + 'T12:00:00'); // T12:00:00 aby se ISO date neparsoval jako UTC (timezone shift)
-        if (mon.getFullYear() !== 2026) return;
+        if (mon.getFullYear() !== year) return;
         const m = mon.getMonth();
         const d = n => mon.getDate() + n;
         const dayName = d => d.toLocaleString('cs-CZ', { weekday: 'long' });
@@ -822,6 +898,21 @@
 
       return (
         <div className="mt-2 space-y-5">
+          {/* Year selector */}
+          {availableYears.length > 1 && (
+            <div className="flex items-center justify-center gap-2">
+              {availableYears.map(y => (
+                <button key={y} onClick={() => setYear(y)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-black tabular-nums transition-colors
+                    ${year === y
+                      ? 'bg-gray-900 text-white'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                  {y}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Rotation keys */}
           <div className="grid grid-cols-2 gap-4">
             {/* Lanovka */}
