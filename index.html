@@ -287,6 +287,8 @@
     // ── SundavaniCard ─────────────────────────────────────────────────────────
     function SundavaniCard({ session, theme, date, sundavaci, myti, onToggleSundavac, onToggleMyti }) {
       const isYellow = theme === 'yellow';
+      // Defenzivní: data z Firestore mohou mít chybějící pole (sundavaci undefined)
+      const safeSundavaci = Array.isArray(sundavaci) ? sundavaci : [];
       const rawDay = date.toLocaleString('cs-CZ', { weekday: 'long' });
       const displayDay = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
       const isGreen = theme === 'green';
@@ -314,7 +316,7 @@
                 {REMOVAL_TEAM.filter(n => n !== 'Terezka').map(name => (
                   <button key={name} onClick={() => onToggleSundavac(name)}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all
-                      ${sundavaci.includes(name) ? activeBg + ' border-transparent' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-100'}`}>
+                      ${safeSundavaci.includes(name) ? activeBg + ' border-transparent' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-100'}`}>
                     {name}
                   </button>
                 ))}
@@ -2111,12 +2113,12 @@
       function assign(climber, session, idx) {
 
         if (session === 'mondayLano') {
-          if (week.mondayLano !== null) return false;
+          if (week.mondayLano != null) return false; // != handles both null a undefined
           setWeek({ ...week, mondayLano: climber });
           return true;
         }
         const arr = week[session] || E4();
-        if (arr[idx] !== null) return false;
+        if (arr[idx] != null) return false; // != handles null i undefined
         if (arr.includes(climber)) return false;
         setWeek({ ...week, [session]: arr.map((s,i) => i === idx ? climber : s) });
         return true;
@@ -2320,19 +2322,19 @@
         } else if (from === 'lano') {
           // lano → regular slot
           const dstArr = week[session] || E4();
-          if (dstArr[idx] !== null) return;
+          if (dstArr[idx] != null) return;
           setWeek({ ...week, mondayLano: null,
             [session]: dstArr.map((s,i) => i===idx ? climber : s) });
         } else {
           const dstArr = week[session] || E4();
           const srcArr = week[src] || E4();
           if (src === session) {
-            if (idx === srcIdx || dstArr[idx] !== null) return;
+            if (idx === srcIdx || dstArr[idx] != null) return;
             const s = [...dstArr]; s[srcIdx]=null; s[idx]=climber;
             setWeek({ ...week, [session]: s });
           } else {
             // cross-session drag: remove from source, assign to target in one update
-            if (dstArr[idx] !== null) return;
+            if (dstArr[idx] != null) return;
             if (dstArr.includes(climber)) return;
             const newSrc = [...srcArr]; newSrc[srcIdx] = null;
             const newDst = [...dstArr]; newDst[idx] = climber;
@@ -2347,7 +2349,7 @@
         if (from === 'pool') {
           assign(climber, 'mondayLano', 0);
         } else if (from === 'slot') {
-          if (week.mondayLano !== null) return;
+          if (week.mondayLano != null) return; // != handles both null a undefined
           const s = [...(week[src] || E4())]; s[srcIdx] = null;
           setWeek({ ...week, [src]: s, mondayLano: climber });
         }
