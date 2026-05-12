@@ -1930,7 +1930,9 @@
       _allWeekItems.sort((a, b) => a.date.localeCompare(b.date));
       const _monCancelled = week?.monSectorOverride?.isOff === true;
       const _wedCancelled = week?.wedSectorOverride?.isOff === true;
-      const _wedDayMatch  = isDetskaWed(CAL[key]?.wed?.sector) ? 4 : 3;
+      // Day-of-week (JS getDay: Ne=0, Po=1, ..., So=6) Lanovka a Limit dle aktuálního rozvrhu
+      const _monDayMatch = 1 + lanovkaOffset(monday);                          // 1=Po nebo 2=Út
+      const _wedDayMatch = 1 + limitOffset(monday, CAL[key]?.wed?.sector);     // 3=St nebo 4=Čt
       const _pool = [..._allWeekItems];
       const _consume = pred => {
         for (let i = 0; i < _pool.length; i++) {
@@ -1944,7 +1946,7 @@
         ? (_consume(it => _dayOf(it) === _wedDayMatch) || _consume(() => true))
         : null;
       const monReplacement = _monCancelled
-        ? (_consume(it => _dayOf(it) === 1) || _consume(() => true))
+        ? (_consume(it => _dayOf(it) === _monDayMatch) || _consume(() => true))
         : null;
       const _remainingWeekItems = _pool;
 
