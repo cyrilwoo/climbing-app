@@ -435,11 +435,13 @@
       const isGreen  = theme === 'green';
       const rawDay = date.toLocaleString('cs-CZ', { weekday: 'long' });
       const displayDay = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
+      // Defenzivní: data z Firestore mohou mít chybějící pole (např. týden má jen monday bez wednesday)
+      const safeSlots = Array.isArray(slots) ? slots : [null, null, null, null];
       // Slot count: Tělocvična=2, Lanovka=variable, Limit=variable
       const maxSlots = calInfo?.sector && !calInfo.isOff
         ? (isGreen ? 2 : isYellow ? getLanovkaSlotCount(calInfo.sector) : getWedSlotCount(calInfo.sector))
-        : slots.length;
-      const visibleSlots = slots.slice(0, maxSlots);
+        : safeSlots.length;
+      const visibleSlots = safeSlots.slice(0, maxSlots);
       const filled = visibleSlots.filter(Boolean).length + (lanoSlot && calInfo != null ? 1 : 0);
       const total  = maxSlots + (lanoSlot !== undefined && calInfo != null ? 1 : 0);
       const allFilled = filled === total;
