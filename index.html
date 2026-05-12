@@ -97,6 +97,19 @@
     const isDetskaWed = s => s?.toLowerCase().includes('dět') || s?.toLowerCase().includes('det');
     // Sektory Limitu — pro modal "Přidat závod"
     const LIMIT_SECTORS = ['Dětská', 'Přední převis', 'Zadní převis', 'Kolmice'];
+    // ── Rozvrh dnů: od září 2026 se Lanovka staví v úterý, Limit ve čtvrtek (vždy) ──
+    // Před zářím 2026: Lanovka pondělí (+0), Limit středa (+2) nebo čtvrtek pro Dětskou (+3).
+    function isNewSchedule(monday) {
+      const y = monday.getFullYear();
+      return y > 2026 || (y === 2026 && monday.getMonth() >= 8); // září = index 8
+    }
+    function lanovkaOffset(monday) {
+      return isNewSchedule(monday) ? 1 : 0;
+    }
+    function limitOffset(monday, sectorName) {
+      if (isNewSchedule(monday)) return 3;
+      return isDetskaWed(sectorName) ? 3 : 2;
+    }
     const CAL = {
       // ── LEDEN–BŘEZEN: Lanovka bez sektoru, Limit ještě nezačal ───
       '2026-01-05': { mon: M },
@@ -880,14 +893,14 @@
       Object.entries(CAL).sort().forEach(([key, entry]) => {
         const mon = new Date(key + 'T12:00:00'); // T12:00:00 aby se ISO date neparsoval jako UTC (timezone shift)
         if (mon.getFullYear() !== year) return;
-        const m = mon.getMonth();
-        const d = n => mon.getDate() + n;
         const dayName = d => d.toLocaleString('cs-CZ', { weekday: 'long' });
-        if (entry.mon && !entry.mon.isOff && entry.mon.sector)
-          monthly[m].lanovka.push({ day: mon.getDate(), dayName: dayName(mon), sector: entry.mon.sector });
+        if (entry.mon && !entry.mon.isOff && entry.mon.sector) {
+          const lanD = addDays(mon, lanovkaOffset(mon));
+          monthly[lanD.getMonth()].lanovka.push({ day: lanD.getDate(), dayName: dayName(lanD), sector: entry.mon.sector });
+        }
         if (entry.wed && !entry.wed.isOff && entry.wed.sector) {
-          const wOff = isDetskaWed(entry.wed.sector) ? 3 : 2;
-          const wedD = new Date(mon); wedD.setDate(wedD.getDate() + wOff);
+          const wOff = limitOffset(mon, entry.wed.sector);
+          const wedD = addDays(mon, wOff);
           monthly[wedD.getMonth()].limit.push({ day: wedD.getDate(), dayName: dayName(wedD), sector: entry.wed.sector });
         }
         if (entry.thu) {
@@ -1060,11 +1073,12 @@
                 // Respect sector overrides (shifted/cancelled weeks count as isOff)
                 const effMon = wd.monSectorOverride ?? calEntry?.mon ?? null;
                 const effWed = wd.wedSectorOverride ?? calEntry?.wed ?? null;
-                const wOff = isDetskaWed(effWed?.sector) ? 3 : 2;
+                const wOff = limitOffset(monDate, effWed?.sector);
+                const lOff = lanovkaOffset(monDate);
 
-                // Lanovka — Monday (stavění + lano zvlášť)
+                // Lanovka — pondělí (do srpna 2026) / úterý (od září 2026)
                 if (effMon && !effMon.isOff) {
-                  const sessionDate = new Date(ky, km - 1, kd);
+                  const sessionDate = addDays(monDate, lOff);
                   if (sessionDate.getFullYear() === year && sessionDate.getMonth() === month) {
                     const maxSlots = getLanovkaSlotCount(effMon.sector);
                     monSetterTotal += maxSlots;
@@ -1832,13 +1846,14 @@
             const calWed = (_wedOvS != null && (_wedOvS.isOff || _wedOvS.sector)) ? _wedOvS : (CAL[weekId]?.wed ?? null);
             const calThu = CAL[weekId]?.thu ?? null;
             const monBase = new Date(weekId + 'T12:00:00');
-            const wOff = isDetskaWed(calWed?.sector) ? 3 : 2;
+            const wOff = limitOffset(monBase, calWed?.sector);
+            const lOff = lanovkaOffset(monBase);
             const enriched = {
               ...weekData,
               _monSector: (calMon && !calMon.isOff && calMon.sector) ? calMon.sector : null,
               _wedSector: (calWed && !calWed.isOff && calWed.sector) ? calWed.sector : null,
               _thuSector: (calThu && !calThu.isOff && calThu.sector) ? calThu.sector : null,
-              _monDate:   weekData.monDateOverride || weekId,
+              _monDate:   weekData.monDateOverride || toIso(addDays(monBase, lOff)),
               _wedDate:   weekData.wedDateOverride || toIso(addDays(monBase, wOff)),
               _thuDate:   weekData.thuDateOverride || toIso(addDays(monBase, 3)),
               _monCancelled: weekData.monCancelledSetters != null ? true : null,
@@ -1933,11 +1948,12 @@
         : null;
       const _remainingWeekItems = _pool;
 
-      // Dětská na Limitu se staví ve čtvrtek (+3), ostatní sektory ve středu (+2)
-      const wedOffset = isDetskaWed(calWed?.sector) ? 3 : 2;
+      // Den stavění: Lanovka pondělí/úterý (od září 2026), Limit středa/čtvrtek (od září 2026 vždy čtvrtek)
+      const monOffset = lanovkaOffset(monday);
+      const wedOffset = limitOffset(monday, calWed?.sector);
       // Custom date overrides (for competitions etc.)
       // + 'T12:00:00' aby se ISO date-only string neparsoval jako UTC midnight (timezone off-by-one)
-      const monDate = week.monDateOverride ? new Date(week.monDateOverride + 'T12:00:00') : monday;
+      const monDate = week.monDateOverride ? new Date(week.monDateOverride + 'T12:00:00') : addDays(monday, monOffset);
       const wedDate = week.wedDateOverride ? new Date(week.wedDateOverride + 'T12:00:00') : addDays(monday, wedOffset);
       const thuDate = week.thuDateOverride ? new Date(week.thuDateOverride + 'T12:00:00') : addDays(monday, 3);
       function setMonDate(iso) { setWeek({ ...week, monDateOverride: iso }); }
@@ -2348,9 +2364,9 @@
         TEAM.forEach(n => { stats[n] = { month: 0, year: 0, lanoMonth: 0, lanoYear: 0 }; });
 
         function countWeek(wd, defaultMonDate, calEntry) {
-          const effectiveMon = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : defaultMonDate;
+          const effectiveMon = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : addDays(defaultMonDate, lanovkaOffset(defaultMonDate));
           const effWedSector = wd.wedSectorOverride?.sector ?? calEntry?.wed?.sector;
-          const wOff = isDetskaWed(effWedSector) ? 3 : 2;
+          const wOff = limitOffset(defaultMonDate, effWedSector);
           const effectiveWed = wd.wedDateOverride ? new Date(wd.wedDateOverride + 'T12:00:00') : addDays(defaultMonDate, wOff);
           function tally(name, date) {
             if (!name || !stats[name]) return;
@@ -2426,12 +2442,13 @@
         const allKeys = new Set(Object.keys(data));
         allKeys.forEach(k => {
           const [y, m, d] = k.split('-').map(Number);
-          const monDate = new Date(y, m-1, d);
+          const monBase = new Date(y, m-1, d);  // pondělí týdne (week start)
           const wd = data[k];
           const effWedSector = wd.wedSectorOverride?.sector ?? CAL[k]?.wed?.sector;
-          const wOff = isDetskaWed(effWedSector) ? 3 : 2;
-          const wedDate = wd.wedDateOverride ? new Date(wd.wedDateOverride) : addDays(monDate, wOff);
-          const sundMon = addDays(wd.monDateOverride ? new Date(wd.monDateOverride) : monDate, -1);
+          const wOff = limitOffset(monBase, effWedSector);
+          const wedDate = wd.wedDateOverride ? new Date(wd.wedDateOverride) : addDays(monBase, wOff);
+          const lanDate = wd.monDateOverride ? new Date(wd.monDateOverride) : addDays(monBase, lanovkaOffset(monBase));
+          const sundMon = addDays(lanDate, -1);
           const sundWed = addDays(wedDate, -1);
           (wd.mondaySundavaci || []).forEach(n => tally(n, sundMon, 'sund'));
           tally(wd.mondayMyti, sundMon, 'myti');
@@ -2901,8 +2918,9 @@
                   const calMon = wd.monSectorOverride ?? CAL[k]?.mon ?? null;
                   const calWed = wd.wedSectorOverride ?? CAL[k]?.wed ?? null;
                   const calThu = CAL[k]?.thu ?? null;
-                  const wedOff = isDetskaWed(calWed?.sector) ? 3 : 2;
-                  const monDate = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : monday;
+                  const wedOff = limitOffset(monday, calWed?.sector);
+                  const monOff = lanovkaOffset(monday);
+                  const monDate = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : addDays(monday, monOff);
                   const wedDate = wd.wedDateOverride ? new Date(wd.wedDateOverride + 'T12:00:00') : addDays(monday, wedOff);
                   const thuDate = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(monday, 3);
                   const sessions = [
