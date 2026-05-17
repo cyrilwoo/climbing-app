@@ -794,8 +794,9 @@
     function getWedSlotCount(sectorName) {
       if (!sectorName) return 4;
       const s = sectorName.toLowerCase();
-      if (s.includes('přev') || s.includes('prev')) return 3; // 3 setters for převis
-      return 4; // Dětská and Kolmice: 4 setters
+      if (s.includes('zadní') || s.includes('zadni')) return 4; // Zadní převis: 4 stavěči
+      if (s.includes('přev') || s.includes('prev')) return 3;   // Přední převis: 3 stavěči
+      return 4; // Dětská a Kolmice: 4 stavěči
     }
     function getLanovkaSlotCount(sector) {
       if (!sector) return 4;
@@ -1242,10 +1243,14 @@
         return `${d.getDate()}.${d.getMonth()+1}.`;
       };
       const today = new Date(); today.setHours(0,0,0,0);
+      // Závod se v panelu objeví až 3 měsíce před svým datem (vzdálenější budoucí závody skryté)
+      const cutoff = new Date(today); cutoff.setMonth(cutoff.getMonth() + 3);
       // Zploštíme závod + jeho dostavba dny do jednoho seznamu rovnocenných položek
       const items = [];
       Object.values(races || {}).forEach(race => {
         if (!race?.date) return;
+        const rd = new Date(race.date + 'T12:00:00');
+        if (rd > cutoff) return; // závod je dál než 3 měsíce v budoucnu — zatím nezobrazovat
         items.push({ kind: 'race', race, date: race.date });
         (race.dostavba || []).forEach((day, idx) => {
           if (day?.date) items.push({ kind: 'dostavba', race, day, idx, date: day.date });
