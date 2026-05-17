@@ -44,6 +44,8 @@
     );
     const ChevronLeft  = ({c}) => <Ico className={c}><polyline points="15 18 9 12 15 6"/></Ico>;
     const ChevronRight = ({c}) => <Ico className={c}><polyline points="9 18 15 12 9 6"/></Ico>;
+    const ChevronsLeft  = ({c}) => <Ico className={c}><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></Ico>;
+    const ChevronsRight = ({c}) => <Ico className={c}><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></Ico>;
     const Plus         = ({c}) => <Ico className={c}><path d="M5 12h14"/><path d="M12 5v14"/></Ico>;
     const X            = ({c}) => <Ico className={c}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></Ico>;
     const UserIcon     = ({c}) => <Ico className={c}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Ico>;
@@ -1050,10 +1052,11 @@
     }
 
     // ── MonthlyOccupancy ─────────────────────────────────────────────────
-    function MonthlyOccupancy({ data }) {
-      const now = new Date();
+    function MonthlyOccupancy({ data, viewMonday }) {
+      // Zobrazené 3 měsíce vychází z týdne, na který se uživatel právě dívá
+      const base = viewMonday instanceof Date ? viewMonday : new Date();
       const months = [0, 1, 2].map(offset => {
-        const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+        const d = new Date(base.getFullYear(), base.getMonth() + offset, 1);
         return { year: d.getFullYear(), month: d.getMonth() }; // 0-indexed
       });
 
@@ -1913,6 +1916,14 @@
       const friday = addDays(monday, 4);
       const key    = weekKey(monday);
       const week   = data[key] ?? initWeek(key);
+      // Skok o měsíc — přepočítá offset (v týdnech) na týden cílového měsíce
+      function shiftMonth(delta) {
+        const t = new Date(monday);
+        t.setMonth(t.getMonth() + delta);
+        const targetMonday = getMonday(t);
+        const base = getMonday(new Date());
+        setOffset(Math.round((targetMonday.getTime() - base.getTime()) / (7 * 86400000)));
+      }
       const _monOv = week.monSectorOverride;
       const calMon = (_monOv != null && (_monOv.isOff || _monOv.sector)) ? _monOv : (CAL[key]?.mon ?? null);
       const _wedOv = week.wedSectorOverride;
@@ -2492,12 +2503,16 @@
                     <p className="text-xs text-gray-400 mt-0.5">Týdenní plán stavěčů</p>
                   </div>
                 </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button onClick={() => setOffset(o => o-1)}
-                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors">
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                <button onClick={() => shiftMonth(-1)} title="O měsíc zpět"
+                  className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
+                  <ChevronsLeft c="w-5 h-5" />
+                </button>
+                <button onClick={() => setOffset(o => o-1)} title="O týden zpět"
+                  className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors">
                   <ChevronLeft c="w-5 h-5" />
                 </button>
-                <div className="text-center min-w-[138px] px-1">
+                <div className="text-center min-w-[124px] px-1">
                   <p className="text-sm font-bold text-gray-900 tabular-nums">
                     {fmt(monday)} – {fmt(friday)}{friday.getFullYear()}
                   </p>
@@ -2505,9 +2520,13 @@
                     {isNow ? 'Aktuální týden' : `Týden ${offset>0?'+':''}${offset}`}
                   </p>
                 </div>
-                <button onClick={() => setOffset(o => o+1)}
-                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors">
+                <button onClick={() => setOffset(o => o+1)} title="O týden vpřed"
+                  className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors">
                   <ChevronRight c="w-5 h-5" />
+                </button>
+                <button onClick={() => shiftMonth(1)} title="O měsíc vpřed"
+                  className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
+                  <ChevronsRight c="w-5 h-5" />
                 </button>
               </div>
               </div>
@@ -2816,7 +2835,7 @@
 
               {/* Stats — mobile only, na desktopu jsou v pravém sidebaru */}
               <div className="lg:hidden px-4 pb-2 space-y-3">
-                <MonthlyOccupancy data={data} />
+                <MonthlyOccupancy data={data} viewMonday={monday} />
                 <RacesPanel races={races} />
                 <StatsPanel stats={computeStats()} team={team} />
                 <RemovalStatsPanel stats={computeRemovalStats()} />
@@ -2959,7 +2978,7 @@
                   </div>
                 );
               })()}
-              <MonthlyOccupancy data={data} />
+              <MonthlyOccupancy data={data} viewMonday={monday} />
               <RacesPanel races={races} />
               </div>
               <div className="hidden lg:block space-y-3">
