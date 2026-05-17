@@ -2866,7 +2866,7 @@
               const wallBtn = (key, cls, onClick, icon, action, sector, suffix) => (
                 <button key={key} onClick={onClick}
                   title={`${action}${sector ? ' ' + sector : ''}${suffix ? ' ' + suffix : ''}`}
-                  className={`flex-1 min-w-0 px-3 py-3.5 rounded-2xl text-sm font-black uppercase tracking-wide transition-colors flex items-center justify-center gap-1.5 shadow-sm ${cls}`}>
+                  className={`w-full min-w-0 px-3 py-3 rounded-xl text-sm font-black uppercase tracking-wide transition-colors flex items-center justify-center gap-1.5 shadow-sm ${cls}`}>
                   <span className="text-base leading-none flex-shrink-0">{icon}</span>
                   <span className="flex-shrink-0">{action}</span>
                   {sector && <span className="font-bold normal-case tracking-normal truncate min-w-0">"{sector}"</span>}
@@ -2879,21 +2879,21 @@
 
               return (
                 <div className="space-y-2">
-                  {/* Lanovka vlevo, Limit vpravo. Buttony Posun+Smazat vedle sebe v rámci stěny. */}
+                  {/* Lanovka vlevo, Limit vpravo. Buttony Posun/Smazat pod sebou v rámci stěny. */}
                   {(hasLanovkaActions || hasLimitActions) && (
                     <div className="flex flex-col lg:flex-row gap-2">
-                      {/* LANOVKA — Posun + Smazat vedle sebe (žluté gradient) */}
+                      {/* LANOVKA — Posun + Smazat pod sebou (žluté gradient) */}
                       {hasLanovkaActions && (
-                        <div className="flex-1 flex gap-2">
+                        <div className="flex-1 flex flex-col gap-2">
                           {monLanShift      && wallBtn('lan-shift',      'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', shiftMonSector,  '↪', 'Posun',        calMon.sector, `→ ${nextWk}`)}
                           {monLanCancel     && wallBtn('lan-cancel',     'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', cancelMonSector, '✕', 'Smazat',       calMon.sector, null)}
                           {monLanUndoShift  && wallBtn('lan-undoshift',  'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', undoMonShift,    '↩', 'Vrátit posun', null,          null)}
                           {monLanUndoCancel && wallBtn('lan-undocancel', 'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', undoMonCancel,   '↩', 'Obnovit',      null,          null)}
                         </div>
                       )}
-                      {/* LIMIT — Posun + Smazat vedle sebe (černé) */}
+                      {/* LIMIT — Posun + Smazat pod sebou (černé) */}
                       {hasLimitActions && (
-                        <div className="flex-1 flex gap-2">
+                        <div className="flex-1 flex flex-col gap-2">
                           {wedLimShift      && wallBtn('lim-shift',      'bg-zinc-900 text-white hover:bg-zinc-800',     shiftWedSector,  '↪', 'Posun',        calWed.sector, `→ ${nextWk}`)}
                           {wedLimCancel     && wallBtn('lim-cancel',     'bg-zinc-900 text-white hover:bg-zinc-800',     cancelWedSector, '✕', 'Smazat',       calWed.sector, null)}
                           {wedLimUndoShift  && wallBtn('lim-undoshift',  'bg-zinc-700 text-zinc-200 hover:bg-zinc-600',  undoWedShift,    '↩', 'Vrátit posun', null,          null)}
@@ -2905,7 +2905,7 @@
 
                   {/* + Přidat závod — vystředěný dole, plná šířka */}
                   <button onClick={() => setShowAddRace(true)}
-                    className="w-full px-5 py-4 rounded-2xl bg-gradient-to-br from-pink-600 to-pink-700 hover:from-pink-500 hover:to-pink-600 text-white text-sm font-black uppercase tracking-widest shadow-sm transition-colors flex items-center justify-center gap-2">
+                    className="w-full px-5 py-3.5 rounded-xl bg-gradient-to-br from-pink-600 to-pink-700 hover:from-pink-500 hover:to-pink-600 text-white text-sm font-black uppercase tracking-widest shadow-sm transition-colors flex items-center justify-center gap-2">
                     <span className="text-lg leading-none">+</span>
                     <span>Přidat závod</span>
                   </button>
