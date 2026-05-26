@@ -77,6 +77,12 @@
     // ── Team & constants ─────────────────────────────────────────────────────
     const TEAM = ['Cyril', 'Vašek', 'Morčák', 'Kuba', 'Máza', 'Sebastián'];
     const REMOVAL_TEAM = ['Áďa', 'Korchy', 'Míví', 'Kuba D.', 'Kuba M.', 'Terezka'];
+    // Kanonický tým je vždy přítomen — chrání před nechtěným smazáním člena přes UI/sync.
+    function withCoreTeam(arr) {
+      const base = Array.isArray(arr) ? arr.filter(x => typeof x === 'string') : [];
+      const extras = base.filter(n => !TEAM.includes(n));
+      return [...TEAM, ...extras];
+    }
     const E4   = () => [null, null, null, null];
 
     // ── Plán stavění 2026 ────────────────────────────────────────────────────
@@ -107,6 +113,16 @@
     }
     function lanovkaOffset(monday) {
       return isNewSchedule(monday) ? 1 : 0;
+    }
+    // Od června 2026 se na Lanovce staví lano jen jednou za 14 dní.
+    // Referenční týden s lanem: 2026-05-25 (poslední týdenní kadence) → potom 06-08, 06-22, 07-06 …
+    // 2026-06-01 (první červnový týden) je první týden bez lana.
+    function hasLanoBuild(monday) {
+      const juneStart = new Date(2026, 5, 1).getTime();
+      if (monday.getTime() < juneStart) return true;
+      const ref = new Date(2026, 5, 8).getTime();
+      const days = Math.round((monday.getTime() - ref) / 86400000);
+      return ((days % 14) + 14) % 14 === 0;
     }
     function limitOffset(monday, sectorName) {
       if (isNewSchedule(monday)) return 3;
@@ -140,7 +156,7 @@
       '2026-05-25': { mon: L5, wed: K },
       // ── ČERVEN ───────────────────────────────────────────────────
       '2026-06-01': { mon: L1, wed: V },
-      '2026-06-08': { mon: L2, wed: D, thu: TG },
+      '2026-06-08': { mon: L2, wed: D },
       '2026-06-15': { mon: L3, wed: P },
       '2026-06-22': { mon: L4, wed: Z },
       '2026-06-29': { mon: L5, wed: K },
@@ -207,7 +223,7 @@
       '2027-05-24': { mon: L3, wed: P },
       '2027-05-31': { mon: L4, wed: Z },
       // ── ČERVEN 2027 ──────────────────────────────────────────────
-      '2027-06-07': { mon: L5, wed: K, thu: TG },
+      '2027-06-07': { mon: L5, wed: K },
       '2027-06-14': { mon: L1, wed: V },
       '2027-06-21': { mon: L2, wed: D },
       '2027-06-28': { mon: L3, wed: P },
@@ -940,6 +956,7 @@
               <div>
                 <p className="text-xs font-black text-amber-800 uppercase tracking-wider">Lanovka — rotace</p>
                 <p className="text-xs text-amber-600 mt-1">Leden–červen + září–prosinec: každý týden v pondělí. Červenec–srpen: střídá se s Limitem.</p>
+                <p className="text-xs text-amber-700 mt-1 font-semibold">Lano: od června 2026 jen 1× za 14 dní. První červnový týden (1.–7. 6.) bez lana, dál sudé týdny (8. 6., 22. 6., …).</p>
               </div>
               {lanovkaKey.map(r => (
                 <div key={r.n} className="flex items-center gap-2 py-1.5 border-b border-amber-100 last:border-0">
@@ -1091,8 +1108,10 @@
                     const maxSlots = getLanovkaSlotCount(effMon.sector);
                     monSetterTotal += maxSlots;
                     monSetterFill  += (wd.monday || []).slice(0, maxSlots).filter(Boolean).length;
-                    monLanoTotal   += 1;
-                    monLanoFill    += wd.mondayLano ? 1 : 0;
+                    if (hasLanoBuild(monDate)) {
+                      monLanoTotal += 1;
+                      monLanoFill  += wd.mondayLano ? 1 : 0;
+                    }
                   }
                 }
                 // Limit — Wed (+2) or Thu (+3 for Dětská)
@@ -1712,10 +1731,10 @@
           const s = localStorage.getItem('climbing-team');
           if (s) {
             const arr = JSON.parse(s);
-            if (Array.isArray(arr) && arr.length) return arr;
+            if (Array.isArray(arr) && arr.length) return withCoreTeam(arr);
           }
         } catch {}
-        return TEAM;
+        return [...TEAM];
       });
       const [hostInput,  setHostInput]  = useState('');
       const [addingHost, setAddingHost] = useState(false);
@@ -1804,7 +1823,7 @@
           if (doc.exists) {
             const d = doc.data();
             if (Array.isArray(d?.names) && d.names.length > 0) {
-              setTeam(d.names);
+              setTeam(withCoreTeam(d.names));
             }
           }
         }).catch(() => {});
@@ -1837,7 +1856,8 @@
           if (!doc.exists) return;
           const d = doc.data();
           if (!Array.isArray(d?.names)) return;
-          setTeam(prev => JSON.stringify(prev) !== JSON.stringify(d.names) ? d.names : prev);
+          const merged = withCoreTeam(d.names);
+          setTeam(prev => JSON.stringify(prev) !== JSON.stringify(merged) ? merged : prev);
         });
 
         return () => { unsub(); unsubR(); unsubT(); };
@@ -2577,7 +2597,7 @@
                         : monMax && monSetterFill===monMax ? 'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900' : monMax ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
                       Lanovka {monSetterPct}%
                     </span>
-                    {!monIsRace && (
+                    {!monIsRace && hasLanoBuild(monday) && (
                       <span className={`text-sm font-black px-3 py-1 rounded-full
                         ${calMon?.sector && !calMon.isOff && monLanoFill===1 ? 'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900' : 'bg-gray-100 text-gray-400'}`}>
                         Lano {monLanoPct}%
@@ -2649,7 +2669,7 @@
                     slots.push({
                       stavba: <SessionCard
                         session="monday" day="Pondělí" date={monDate} theme="yellow"
-                        slots={week.monday} lanoSlot={week.mondayLano} calInfo={calMon}
+                        slots={week.monday} lanoSlot={hasLanoBuild(monday) ? week.mondayLano : undefined} calInfo={calMon}
                         sel={sel}
                         onSlotClick={i => onSlotClick('monday', i)}
                         onDragStartSlot={(i,n) => onDragStartSlot('monday',i,n)}
