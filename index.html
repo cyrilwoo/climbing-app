@@ -2191,12 +2191,20 @@
       }
       function toggleSundavac(session, name) {
         const fld = session === 'monday' ? 'mondaySundavaci' : 'wednesdaySundavaci';
-        const curr = week[fld] || [];
-        setWeek({ ...week, [fld]: curr.includes(name) ? curr.filter(x => x !== name) : [...curr, name] });
+        // Funkční forma — bere nejnovější stav, aby rychlé kliky za sebou nepřepisovaly jeden druhého.
+        setData(d => {
+          const w = d[key] ?? week;
+          const curr = w[fld] || [];
+          const next = curr.includes(name) ? curr.filter(x => x !== name) : [...curr, name];
+          return { ...d, [key]: { ...w, [fld]: next } };
+        });
       }
       function toggleMyti(session, name) {
         const fld = session === 'monday' ? 'mondayMyti' : 'wednesdayMyti';
-        setWeek({ ...week, [fld]: week[fld] === name ? null : name });
+        setData(d => {
+          const w = d[key] ?? week;
+          return { ...d, [key]: { ...w, [fld]: w[fld] === name ? null : name } };
+        });
       }
 
       // ── Race handlers ─────────────────────────────────────────────────────
