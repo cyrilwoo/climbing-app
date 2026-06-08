@@ -1998,11 +1998,19 @@
       const monDate = week.monDateOverride ? new Date(week.monDateOverride + 'T12:00:00') : addDays(monday, monOffset);
       const wedDate = week.wedDateOverride ? new Date(week.wedDateOverride + 'T12:00:00') : addDays(monday, wedOffset);
       const thuDate = week.thuDateOverride ? new Date(week.thuDateOverride + 'T12:00:00') : addDays(monday, 3);
-      function setMonDate(iso) { setWeek({ ...week, monDateOverride: iso }); }
-      function setWedDate(iso) { setWeek({ ...week, wedDateOverride: iso }); }
-      function setThuDate(iso) { setWeek({ ...week, thuDateOverride: iso }); }
+      function setMonDate(iso) { setWeek(w => ({ ...w, monDateOverride: iso })); }
+      function setWedDate(iso) { setWeek(w => ({ ...w, wedDateOverride: iso })); }
+      function setThuDate(iso) { setWeek(w => ({ ...w, thuDateOverride: iso })); }
 
-      function setWeek(w) { setData(d => ({ ...d, [key]: w })); }
+      // setWeek bere buď hodnotu nebo funkční updater (w → nový w).
+      // Funkční forma je race-safe pro rychlé kliky za sebou (čte nejnovější stav z setData).
+      function setWeek(updater) {
+        setData(d => {
+          const curr = d[key] ?? week;
+          const next = typeof updater === 'function' ? updater(curr) : updater;
+          return { ...d, [key]: next };
+        });
+      }
 
       // ── Posunout stavění (odložit o 7 dní) ────────────────────────────────
       function toIso(d) {
@@ -2147,39 +2155,45 @@
 
       // ── Assign / remove ───────────────────────────────────────────────────
       function assign(climber, session, idx) {
-
         if (session === 'mondayLano') {
           if (week.mondayLano != null) return false; // != handles both null a undefined
-          setWeek({ ...week, mondayLano: climber });
+          setWeek(w => w.mondayLano != null ? w : { ...w, mondayLano: climber });
           return true;
         }
         const arr = week[session] || E4();
         if (arr[idx] != null) return false; // != handles null i undefined
         if (arr.includes(climber)) return false;
-        setWeek({ ...week, [session]: arr.map((s,i) => i === idx ? climber : s) });
+        setWeek(w => {
+          const cur = w[session] || E4();
+          if (cur[idx] != null || cur.includes(climber)) return w;
+          return { ...w, [session]: cur.map((s,i) => i === idx ? climber : s) };
+        });
         return true;
       }
 
       function remove(session, idx) {
         if (session === 'mondayLano') {
           const c = week.mondayLano;
-          setWeek({ ...week, mondayLano: null });
+          setWeek(w => ({ ...w, mondayLano: null }));
           if (sel === c) setSel(null);
           return;
         }
         const arr = week[session] || E4();
         const c = arr[idx];
-        setWeek({ ...week, [session]: arr.map((s,i) => i === idx ? null : s) });
+        setWeek(w => {
+          const cur = w[session] || E4();
+          return { ...w, [session]: cur.map((s,i) => i === idx ? null : s) };
+        });
         if (sel === c) setSel(null);
       }
 
       function clearSession(session) {
         if (session === 'monday') {
-          setWeek({ ...week, monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null });
+          setWeek(w => ({ ...w, monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null }));
         } else if (session === 'wednesday') {
-          setWeek({ ...week, wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null });
+          setWeek(w => ({ ...w, wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null }));
         } else {
-          setWeek({ ...week, thursday: E4() });
+          setWeek(w => ({ ...w, thursday: E4() }));
         }
         setSel(null);
       }
@@ -2191,20 +2205,14 @@
       }
       function toggleSundavac(session, name) {
         const fld = session === 'monday' ? 'mondaySundavaci' : 'wednesdaySundavaci';
-        // Funkční forma — bere nejnovější stav, aby rychlé kliky za sebou nepřepisovaly jeden druhého.
-        setData(d => {
-          const w = d[key] ?? week;
+        setWeek(w => {
           const curr = w[fld] || [];
-          const next = curr.includes(name) ? curr.filter(x => x !== name) : [...curr, name];
-          return { ...d, [key]: { ...w, [fld]: next } };
+          return { ...w, [fld]: curr.includes(name) ? curr.filter(x => x !== name) : [...curr, name] };
         });
       }
       function toggleMyti(session, name) {
         const fld = session === 'monday' ? 'mondayMyti' : 'wednesdayMyti';
-        setData(d => {
-          const w = d[key] ?? week;
-          return { ...d, [key]: { ...w, [fld]: w[fld] === name ? null : name } };
-        });
+        setWeek(w => ({ ...w, [fld]: w[fld] === name ? null : name }));
       }
 
       // ── Race handlers ─────────────────────────────────────────────────────
@@ -2365,24 +2373,34 @@
           assign(climber, session, idx);
         } else if (from === 'lano') {
           // lano → regular slot
-          const dstArr = week[session] || E4();
-          if (dstArr[idx] != null) return;
-          setWeek({ ...week, mondayLano: null,
-            [session]: dstArr.map((s,i) => i===idx ? climber : s) });
+          if ((week[session] || E4())[idx] != null) return;
+          setWeek(w => {
+            const dst = w[session] || E4();
+            if (dst[idx] != null) return w;
+            return { ...w, mondayLano: null, [session]: dst.map((s,i) => i===idx ? climber : s) };
+          });
         } else {
           const dstArr = week[session] || E4();
-          const srcArr = week[src] || E4();
           if (src === session) {
             if (idx === srcIdx || dstArr[idx] != null) return;
-            const s = [...dstArr]; s[srcIdx]=null; s[idx]=climber;
-            setWeek({ ...week, [session]: s });
+            setWeek(w => {
+              const cur = w[session] || E4();
+              if (cur[idx] != null) return w;
+              const s = [...cur]; s[srcIdx]=null; s[idx]=climber;
+              return { ...w, [session]: s };
+            });
           } else {
             // cross-session drag: remove from source, assign to target in one update
             if (dstArr[idx] != null) return;
             if (dstArr.includes(climber)) return;
-            const newSrc = [...srcArr]; newSrc[srcIdx] = null;
-            const newDst = [...dstArr]; newDst[idx] = climber;
-            setWeek({ ...week, [src]: newSrc, [session]: newDst });
+            setWeek(w => {
+              const dst = w[session] || E4();
+              const src2 = w[src] || E4();
+              if (dst[idx] != null || dst.includes(climber)) return w;
+              const newSrc = [...src2]; newSrc[srcIdx] = null;
+              const newDst = [...dst];  newDst[idx]    = climber;
+              return { ...w, [src]: newSrc, [session]: newDst };
+            });
           }
         }
       }
@@ -2394,8 +2412,11 @@
           assign(climber, 'mondayLano', 0);
         } else if (from === 'slot') {
           if (week.mondayLano != null) return; // != handles both null a undefined
-          const s = [...(week[src] || E4())]; s[srcIdx] = null;
-          setWeek({ ...week, [src]: s, mondayLano: climber });
+          setWeek(w => {
+            if (w.mondayLano != null) return w;
+            const s = [...(w[src] || E4())]; s[srcIdx] = null;
+            return { ...w, [src]: s, mondayLano: climber };
+          });
         }
       }
       function onDropPool() {
