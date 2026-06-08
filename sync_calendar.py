@@ -218,7 +218,7 @@ def format_setters(setters, lano=None):
     if active:
         parts.append(', '.join(active))
     if lano and lano != '__NULL__':
-        parts.append(f"lano-stavěč: {lano}")
+        parts.append(f"lano: {lano}")
     return ' | '.join(parts) if parts else None
 
 
