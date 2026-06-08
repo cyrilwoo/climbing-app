@@ -1,92 +1,102 @@
-# Deploy Sync Calendar na Firebase Cloud Functions
+# Deploy synccalendar (Cloud Run + Cloud Scheduler)
 
-Tento script synchronizuje Google Calendar s aktuálním CAL z aplikace. Běží 3× denně (6:30, 12:30, 18:30) automaticky bez potřeby tvého počítače.
+`sync_calendar.py` synchronizuje plánovač s Google Calendar `teamlanovka@gmail.com`.
+Běží jako **Cloud Run service `synccalendar`** v projektu `climbing-app-d0074`
+(region `europe-west1`) a Cloud Scheduler ho volá 3× denně.
 
-## Krok 1: Nastav Cloud Scheduler trigger
+> ⚠️ **Push do GitHubu sám o sobě nestačí.** Cloud Run drží snapshot kódu —
+> po každé změně `sync_calendar.py`, `requirements.txt` nebo `Dockerfile` musíš
+> ručně redeployovat (viz níže).
+>
+> Naopak změny v `index.html` (zejména v `CAL`) se projeví **bez redeploye** —
+> funkce při každém běhu fetchuje `index.html` z `raw.githubusercontent.com`.
 
-1. Jdi na [Google Cloud Console](https://console.cloud.google.com/)
-2. Vyber projekt **climbing-app-d0074**
-3. Jdi na **Cloud Scheduler** (hledej v horní liště)
-4. Klikni **CREATE JOB**
-5. Vyplň:
-   - **Name**: `climbing-calendar-sync`
-   - **Frequency**: `30 6,12,18 * * *` (6:30, 12:30, 18:30 CET)
-   - **Timezone**: Europe/Prague
-   - **Execution timeout**: 540 seconds
-6. **CONTINUE**
-7. Vyber typ: **HTTP**
-8. URL: `https://europe-west1-climbing-app-d0074.cloudfunctions.net/sync_calendar`
-9. Metoda: POST
-10. Klikni **CREATE**
+## Předpoklady
 
-## Krok 2: Deploy Cloud Function
+- `gcloud` CLI na `~/google-cloud-sdk/bin/gcloud` (už nainstalovaný)
+- Auth přes účet s rolí `owner` v `climbing-app-d0074`
+  (aktuálně `alfred.limitboulder@gmail.com`)
+- Python 3.11+ pro `gcloud` (default 3.9 vyhazuje warning)
+- Aktivní projekt: `gcloud config set project climbing-app-d0074`
 
-1. V Cloud Console jdi na **Cloud Functions**
-2. Klikni **CREATE FUNCTION**
-3. Vyplň:
-   - **Environment**: Python 3.11
-   - **Function name**: `sync_calendar`
-   - **Region**: europe-west1
-   - **Trigger type**: Cloud Pub/Sub (nebo Cloud Scheduler — pro scheduler se nastaví automaticky)
-   - **Authentication**: Require authentication (zaškrtnuté)
-4. V editoru:
-   - **Runtime settings**: vyvol secrets (viz Krok 3)
-   - `main.py`: zkopíruj obsah `sync_calendar.py`
-   - `requirements.txt`: zkopíruj obsah `requirements.txt`
-5. Klikni **DEPLOY** (čeká 2-3 minuty)
+## Redeploy — jeden příkaz
 
-## Krok 3: Nastavení Service Account (Google Calendar API access)
-
-Cloud Function potřebuje přístup k Google Calendar. Firebase má builtin service account, ale musíš mu dát permissions:
-
-1. V Cloud Console jdi na **Service Accounts**
-2. Najdi `firebase-adminsdk-...@climbing-app-d0074.iam.gserviceaccount.com`
-3. Klikni na ni → **KEYS** → **ADD KEY** → **Create new key** → **JSON** → **CREATE**
-4. V Cloud Function settings přidej **Environment variable**:
-   - `GOOGLE_APPLICATION_CREDENTIALS`: obsah JSON klíče (base64 encoded)
-   - NEBO nech builtin service account (Firebase SDK to používá automaticky)
-
-Cloud Function se spouští pod Service Account, který má Firebase Admin SDK přístup. Zaměř se na **Calendar API permission**:
-
-1. Jdi na [Google API Console](https://console.developers.google.com/)
-2. Vyber projekt **climbing-app-d0074**
-3. Jdi na **APIs & Services** → **Enabled APIs**
-4. Hledej **Google Calendar API** → pokud není → **ENABLE**
-5. Jdi na **Service Accounts** → Firebase service account → **EDIT**
-6. V **Delegated domain-wide authority** (pokud je) → zaměř se na scopes
-7. Jinak: v IAM přidej roli **Editor** nebo **Calendar API Manager** pro service account
-
-**Jednodušší postup:**
-1. Jdi na [Google OAuth Consent Screen](https://console.cloud.google.com/apis/consent)
-2. Přidej scopes: `https://www.googleapis.com/auth/calendar`
-3. Přidej test uživatele: `teamlanovka@gmail.com`
-
-## Krok 4: Test
+Po editaci `sync_calendar.py` (nebo `Dockerfile` / `requirements.txt`):
 
 ```bash
-# Test lokálně
-python3 -m pip install -r requirements.txt
-python3 -c "from sync_calendar import sync_calendar; print(sync_calendar(None))"
-
-# Nebo v Cloud Console: Cloud Scheduler → Klikni job → **FORCE RUN**
+export CLOUDSDK_PYTHON=/Users/cyrilkratochvil/.pyenv/versions/3.11.9/bin/python3.11
+cd /Users/cyrilkratochvil/CLAUDE/climbing-app
+~/google-cloud-sdk/bin/gcloud run deploy synccalendar \
+  --source=. --region=europe-west1 --quiet
 ```
 
-## Co se stane
+Build trvá ~5 min (Cloud Build → push do Artifact Registry → nová Cloud Run
+revize). Až se vrátí `Service [synccalendar] revision [synccalendar-XXXXX-xxx]
+has been deployed and is serving 100 percent of traffic.`, je hotovo.
 
-Při spuštění:
-1. Stáhne aktuální CAL z GitHubu
-2. Načte Firestore data (stavěči, sundavači)
-3. Vypočítá správné sektory a data
-4. Synchronizuje Google Calendar (vytváří/aktualizuje/maže eventy)
-5. Vrací report: `created=X, updated=Y, deleted=Z`
+## Spustit sync ručně (bez čekání na scheduler)
 
-## Pokud něco nejde
+```bash
+~/google-cloud-sdk/bin/gcloud scheduler jobs run \
+  climbing-calendar-sync --location=europe-west1
+```
 
-- **Calendar API je disabled**: V Cloud Console → APIs & Services → Enable **Google Calendar API**
-- **Permission denied**: Service Account musí mít přístup do `teamlanovka@gmail.com` kalendáře. Přidej ji do sdílení.
-- **Firestore chyby**: Service Account potřebuje Firestore read permission (Firebase role to dělá automaticky)
-- **GitHub network error**: Script čeká 10 sekund na odpověď, pokud je GitHub down → fallback na Firestore `_monSector`/`_wedSector`
+Job naplánuje POST na Cloud Run URL. Sync běží ~15 min (čte CAL z GitHubu,
+prochází Firestore týdny, mažé/vytváří/upravuje eventy).
 
----
+Synchronní variantu s okamžitým výstupem dostaneš přes curl + auth token:
 
-**Výsledek:** Kalendář se automaticky synchronizuje 3× denně bez tvého přičinění. Stačí pushnout změny do GitHubu.
+```bash
+TOKEN=$(~/google-cloud-sdk/bin/gcloud auth print-identity-token)
+URL=$(~/google-cloud-sdk/bin/gcloud run services describe synccalendar \
+  --region=europe-west1 --format='value(status.url)')
+curl -X POST -H "Authorization: Bearer $TOKEN" "$URL" --max-time 540
+# → ✓ Sync completed: created=X, updated=Y, deleted=Z
+```
+
+## Logy
+
+```bash
+~/google-cloud-sdk/bin/gcloud run services logs read synccalendar \
+  --region=europe-west1 --limit=30
+```
+
+Hledat `✓ Sync completed:` pro výsledek jednotlivých běhů.
+
+## Scheduler — frekvence
+
+```bash
+~/google-cloud-sdk/bin/gcloud scheduler jobs describe \
+  climbing-calendar-sync --location=europe-west1
+```
+
+Default: `30 6,12,18 * * *` (CEST), tj. 6:30, 12:30, 18:30. Upravit lze přes
+`gcloud scheduler jobs update http climbing-calendar-sync --schedule="..."`.
+
+## Co se přesně synchronizuje
+
+Per týden v rozsahu `−7 dní … +130 dní` od dneška, na základě CAL z `index.html`
+a Firestore stavu:
+
+- **Lanovka** — `Lanovka — {sektor} | {stavěči} | lano-stavěč: {lano}` (lano
+  jen v týdnech, kde `has_lano_build` vrací True — viz `sync_calendar.py`)
+- **Limit** — `Limit — {sektor} | {stavěči}`
+- **Tělocvična** — `Tělocvična | {stavěči}` (jen pokud CAL má `thu: TG` —
+  červen–srpen je vypnutý)
+- **Sundavání Lanovka/Limit** — den předem 20:00–22:00, `| mytí: {jméno}`
+  pokud je vyplněno
+
+Sektor-override (posunuté/zrušené týdny) i datum-override (přesun na jiný den)
+jsou respektovány.
+
+## Architekturní pozn.
+
+- Aplikace byla původně deployed jako Cloud Function (1st gen), ale teď
+  běží jako **Cloud Run service**. Cloud Functions API v projektu **není**
+  enabled — `gcloud functions list` selže.
+- Image se buildí z `Dockerfile` (Python 3.11 slim + `functions-framework`
+  jako HTTP wrapper).
+- Service Account: `firebase-adminsdk-fbsvc@climbing-app-d0074.iam.gserviceaccount.com`
+  (má Calendar API permissions + Firestore admin).
+- Scheduler volá Cloud Run s OIDC tokenem; veřejně je endpoint neauth (vrací
+  403 na GET).
