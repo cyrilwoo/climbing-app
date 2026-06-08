@@ -202,11 +202,24 @@ def firestore_value(val):
     return val
 
 
+def has_lano_build(week_id):
+    """Od června 2026 se lano staví jen jednou za 14 dní (ref: 2026-06-08).
+    Před červnem 2026: každý Lanovka týden."""
+    week_dt = datetime.strptime(week_id, '%Y-%m-%d')
+    if week_dt < datetime(2026, 6, 1):
+        return True
+    ref = datetime(2026, 6, 8)
+    return (week_dt - ref).days % 14 == 0
+
+
 def format_setters(setters, lano=None):
     active = [s for s in (setters or []) if s and s != '__NULL__']
+    parts = []
+    if active:
+        parts.append(', '.join(active))
     if lano and lano != '__NULL__':
-        active.append(lano)
-    return ', '.join(active) if active else None
+        parts.append(f"lano-stavěč: {lano}")
+    return ' | '.join(parts) if parts else None
 
 
 # ─── main sync ──────────────────────────────────────────────────────────────
@@ -289,7 +302,10 @@ def sync_calendar(request):
             lanovka_active = mon_sector and not mon_is_off and not (mon_cancelled or mon_shifted)
 
             if lanovka_active:
-                setters_str = format_setters(mon_setters, mon_lano)
+                # Lano se staví jen v určené týdny (od června 2026 každých 14 dní).
+                # V „no-lano" týdnech ignorujeme případný mondayLano ze starých dat.
+                lano_for_title = mon_lano if has_lano_build(week_id) else None
+                setters_str = format_setters(mon_setters, lano_for_title)
                 title = f"Lanovka — {mon_sector}"
                 if setters_str:
                     title += f" | {setters_str}"
