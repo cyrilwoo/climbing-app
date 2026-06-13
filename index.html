@@ -2552,14 +2552,14 @@
                     <p className="text-xs text-gray-400 mt-0.5">Týdenní plán stavěčů</p>
                   </div>
                 </div>
-              <div className="flex items-center gap-0.5 flex-shrink-0">
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <button onClick={() => shiftMonth(-1)} title="O měsíc zpět"
-                  className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
-                  <ChevronsLeft c="w-5 h-5" />
+                  className="p-3 sm:p-1.5 rounded-xl hover:bg-gray-100 active:bg-gray-200 text-gray-400 hover:text-gray-700 transition-colors touch-manipulation">
+                  <ChevronsLeft c="w-6 h-6 sm:w-5 sm:h-5" />
                 </button>
                 <button onClick={() => setOffset(o => o-1)} title="O týden zpět"
-                  className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors">
-                  <ChevronLeft c="w-5 h-5" />
+                  className="p-3 sm:p-1.5 rounded-xl hover:bg-gray-100 active:bg-gray-200 text-gray-600 transition-colors touch-manipulation">
+                  <ChevronLeft c="w-6 h-6 sm:w-5 sm:h-5" />
                 </button>
                 <div className="text-center min-w-[124px] px-1">
                   <p className="text-sm font-bold text-gray-900 tabular-nums">
@@ -2570,12 +2570,12 @@
                   </p>
                 </div>
                 <button onClick={() => setOffset(o => o+1)} title="O týden vpřed"
-                  className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors">
-                  <ChevronRight c="w-5 h-5" />
+                  className="p-3 sm:p-1.5 rounded-xl hover:bg-gray-100 active:bg-gray-200 text-gray-600 transition-colors touch-manipulation">
+                  <ChevronRight c="w-6 h-6 sm:w-5 sm:h-5" />
                 </button>
                 <button onClick={() => shiftMonth(1)} title="O měsíc vpřed"
-                  className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
-                  <ChevronsRight c="w-5 h-5" />
+                  className="p-3 sm:p-1.5 rounded-xl hover:bg-gray-100 active:bg-gray-200 text-gray-400 hover:text-gray-700 transition-colors touch-manipulation">
+                  <ChevronsRight c="w-6 h-6 sm:w-5 sm:h-5" />
                 </button>
               </div>
               </div>
