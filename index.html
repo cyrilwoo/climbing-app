@@ -2174,12 +2174,16 @@
       function remove(session, idx) {
         if (session === 'mondayLano') {
           const c = week.mondayLano;
+          if (!c) return;
+          if (!window.confirm(`Odebrat „${c}" z lano slotu?`)) return;
           setWeek(w => ({ ...w, mondayLano: null }));
           if (sel === c) setSel(null);
           return;
         }
         const arr = week[session] || E4();
         const c = arr[idx];
+        if (!c) return;
+        if (!window.confirm(`Odebrat „${c}" ze slotu?`)) return;
         setWeek(w => {
           const cur = w[session] || E4();
           return { ...w, [session]: cur.map((s,i) => i === idx ? null : s) };
