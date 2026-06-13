@@ -2321,6 +2321,7 @@
       React.useEffect(() => { if (addingHost) hostInputRef.current?.focus(); }, [addingHost]);
 
       function deleteClimber(name) {
+        if (!window.confirm(`Smazat „${name}" ze stavěčů?\n\nOdstraní se ze všech přiřazení (sloty, sundavači, mytí).`)) return;
         setTeam(t => t.filter(x => x !== name));
         if (sel === name) setSel(null);
         setData(d => {
