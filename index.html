@@ -1096,6 +1096,89 @@
       );
     }
 
+    // ── MonthCalendar — měsíční mřížka pod stěnami (jen profily) ──────────
+    function MonthCalendar({ data, viewMonday, rotationShifts }) {
+      const MONTHS_CS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+      const base = viewMonday instanceof Date ? viewMonday : new Date();
+      const year = base.getFullYear();
+      const month = base.getMonth();
+      const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+      // Mapa datum → seznam stavění (jen profil + barva stěny), z efektivní rotace
+      const sessions = {};
+      const add = (k, s) => { (sessions[k] = sessions[k] || []).push(s); };
+      Object.keys(CAL).forEach(wk => {
+        const mondayD = new Date(wk + 'T12:00:00');
+        const wd = data[wk] || {};
+        const eMon = effSector('mon', wk, data, rotationShifts);
+        if (eMon && !eMon.isOff && eMon.sector) {
+          const d = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : addDays(mondayD, lanovkaOffset(mondayD));
+          add(iso(d), { wall: 'Lanovka', sector: eMon.sector, cls: 'bg-amber-100 text-amber-800 border-amber-200' });
+        }
+        const eWed = effSector('wed', wk, data, rotationShifts);
+        if (eWed && !eWed.isOff && eWed.sector) {
+          const d = wd.wedDateOverride ? new Date(wd.wedDateOverride + 'T12:00:00') : addDays(mondayD, limitOffset(mondayD, eWed.sector));
+          add(iso(d), { wall: 'Limit', sector: eWed.sector, cls: 'bg-pink-100 text-pink-800 border-pink-200' });
+        }
+        const cThu = CAL[wk]?.thu;
+        if (cThu && !cThu.isOff && cThu.sector) {
+          const d = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(mondayD, 3);
+          add(iso(d), { wall: 'Tělocvična', sector: cThu.sector, cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' });
+        }
+      });
+
+      // Mřížka pondělím počínaje
+      const first = new Date(year, month, 1);
+      const startDow = (first.getDay() + 6) % 7; // Po=0 … Ne=6
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const rows = Math.ceil((startDow + daysInMonth) / 7);
+      const gridStart = addDays(first, -startDow);
+      const cells = Array.from({ length: rows * 7 }, (_, i) => addDays(gridStart, i));
+      const today = new Date(); today.setHours(0,0,0,0);
+      const dayHdr = ['Po','Út','St','Čt','Pá','So','Ne'];
+
+      return (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-4 pt-4 pb-2 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="font-bold text-gray-900 text-sm capitalize">{MONTHS_CS[month]} {year}</h2>
+            <div className="flex items-center gap-2 text-[10px] font-bold">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-300 inline-block"/>Lanovka</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-pink-300 inline-block"/>Limit</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-300 inline-block"/>Těloc.</span>
+            </div>
+          </div>
+          <div className="p-2">
+            <div className="grid grid-cols-7 gap-1">
+              {dayHdr.map((d,i) => (
+                <div key={`h${i}`} className={`text-center text-[10px] font-bold uppercase tracking-wide pb-1 ${i>=5 ? 'text-gray-300' : 'text-gray-400'}`}>{d}</div>
+              ))}
+              {cells.map((d, i) => {
+                const inMonth = d.getMonth() === month;
+                const k = iso(d);
+                const evs = sessions[k] || [];
+                const isToday = d.getTime() === today.getTime();
+                const weekend = (d.getDay() === 0 || d.getDay() === 6);
+                return (
+                  <div key={i}
+                    className={`min-h-[58px] rounded-lg border p-1 flex flex-col gap-0.5
+                      ${inMonth ? (weekend ? 'bg-gray-50/60 border-gray-100' : 'bg-white border-gray-100') : 'bg-gray-50/40 border-transparent'}
+                      ${isToday ? 'ring-2 ring-blue-400 ring-inset' : ''}`}>
+                    <span className={`text-[10px] font-bold leading-none ${inMonth ? (isToday ? 'text-blue-600' : 'text-gray-500') : 'text-gray-300'}`}>{d.getDate()}</span>
+                    {inMonth && evs.map((e, j) => (
+                      <span key={j} title={`${e.wall}: ${e.sector}`}
+                        className={`text-[9px] leading-tight font-semibold px-1 py-0.5 rounded border break-words ${e.cls}`}>
+                        {e.sector}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // ── MonthlyOccupancy ─────────────────────────────────────────────────
     function MonthlyOccupancy({ data, viewMonday, rotationShifts }) {
       // Zobrazené 3 měsíce vychází z týdne, na který se uživatel právě dívá
@@ -2911,6 +2994,9 @@
 
               </div>
             </div>
+
+            {/* Měsíční kalendář pod stěnami — přehled profilů */}
+            <MonthCalendar data={data} viewMonday={monday} rotationShifts={rotationShifts} />
 
             {/* Climber pool */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
