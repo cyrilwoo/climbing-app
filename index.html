@@ -2829,8 +2829,8 @@
             {/* Invisible spacer: mirrors stats width → cards appear centered */}
             <div className="hidden lg:block lg:w-64 lg:flex-shrink-0" />
 
-            {/* Main content column */}
-            <div className="flex-1 min-w-0 space-y-4">
+            {/* Main content column — w-full na mobilu dává definitivní šířku (jinak grid kalendáře roztáhne sloupec přes viewport) */}
+            <div className="w-full lg:w-auto flex-1 min-w-0 space-y-4">
 
             {/* Řádky 1+2: Sundavání + Stavění — jeden scroll container */}
             <div className="overflow-x-auto snap-x snap-mandatory lg:overflow-visible lg:snap-none relative z-0">
@@ -2995,9 +2995,6 @@
               </div>
             </div>
 
-            {/* Měsíční kalendář pod stěnami — přehled profilů */}
-            <MonthCalendar data={data} viewMonday={monday} rotationShifts={rotationShifts} />
-
             {/* Climber pool */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
               onDragOver={e => e.preventDefault()} onDrop={onDropPool}>
@@ -3083,6 +3080,20 @@
                 </div>
               )}
             </div>
+
+            {/* Měsíční kalendář — pod stavěči, rozbalovací (2 měsíce pod sebou) */}
+            <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <summary className="px-4 py-3 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors list-none">
+                <span className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                  <span className="text-gray-400 text-xs uppercase tracking-widest">Kalendář</span>
+                </span>
+                <span className="text-gray-400 text-xs font-semibold group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <div className="px-2 pb-3 border-t border-gray-100 space-y-3 pt-3">
+                <MonthCalendar data={data} viewMonday={monday} rotationShifts={rotationShifts} />
+                <MonthCalendar data={data} viewMonday={new Date(monday.getFullYear(), monday.getMonth() + 1, 15)} rotationShifts={rotationShifts} />
+              </div>
+            </details>
 
             {/* Year plan (Rotace + Roční kalendář) — collapsible, defaultně sbalené */}
             <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
