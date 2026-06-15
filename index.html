@@ -261,6 +261,32 @@
       '2027-12-27': { mon: L5, wed: K },
     };
 
+    // ── Rotace stěn — kanonické sekvence + resolver ─────────────────────────
+    // CAL je kanonická sekvence profilů. „Posun" (rotationShifts) neukládá
+    // sektory natvrdo, ale posouvá INDEX do téhle sekvence → kaskáda celé
+    // rotace je automatická a funguje pro obě stěny i přes letní mezery
+    // (kdy se Lanovka/Limit staví obden).
+    const LANOVKA_WEEKS = Object.keys(CAL).filter(k => CAL[k]?.mon).sort();
+    const LIMIT_WEEKS   = Object.keys(CAL).filter(k => CAL[k]?.wed).sort();
+
+    // Efektivní sektor pro daný týden a stěnu.
+    // Priorita: explicitní per-week override (Nahradit / Smazat / legacy pin)
+    //   → potom shift-list (týden je posunutý = Volný)
+    //   → potom výpočet z CAL sekvence posunutý o počet shiftů před týdnem.
+    // venue: 'mon' (Lanovka) | 'wed' (Limit). data + shifts předány zvenčí (čistá funkce).
+    function effSector(venue, weekKey, data, shifts) {
+      const wd = data?.[weekKey];
+      const ov = venue === 'mon' ? wd?.monSectorOverride : wd?.wedSectorOverride;
+      if (ov && (ov.isOff || ov.sector)) return ov;
+      const list = (shifts && shifts[venue === 'mon' ? 'lanovka' : 'limit']) || [];
+      if (list.includes(weekKey)) return { isOff: true, sector: 'Volný týden' };
+      const seq = venue === 'mon' ? LANOVKA_WEEKS : LIMIT_WEEKS;
+      const i = seq.indexOf(weekKey);
+      if (i < 0) return CAL[weekKey]?.[venue] ?? null;
+      const before = list.filter(s => s < weekKey).length;
+      return CAL[seq[Math.max(0, i - before)]]?.[venue] ?? null;
+    }
+
     // Returns the next non-off CAL entry for venue ('mon'|'wed') after weekKey
     function getNextSector(weekKey, venue) {
       const calKeys = Object.keys(CAL).sort();
@@ -885,7 +911,7 @@
     }
 
     // ── YearPlan ─────────────────────────────────────────────────────────
-    function YearPlan() {
+    function YearPlan({ data, rotationShifts }) {
       const MONTHS_CS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
       const lanovkaKey = [
         { n:'L1', label:'Převis + Bizár',               slots:3 },
@@ -917,14 +943,16 @@
         const mon = new Date(key + 'T12:00:00'); // T12:00:00 aby se ISO date neparsoval jako UTC (timezone shift)
         if (mon.getFullYear() !== year) return;
         const dayName = d => d.toLocaleString('cs-CZ', { weekday: 'long' });
-        if (entry.mon && !entry.mon.isOff && entry.mon.sector) {
+        const eMon = effSector('mon', key, data, rotationShifts);
+        const eWed = effSector('wed', key, data, rotationShifts);
+        if (eMon && !eMon.isOff && eMon.sector) {
           const lanD = addDays(mon, lanovkaOffset(mon));
-          monthly[lanD.getMonth()].lanovka.push({ day: lanD.getDate(), dayName: dayName(lanD), sector: entry.mon.sector });
+          monthly[lanD.getMonth()].lanovka.push({ day: lanD.getDate(), dayName: dayName(lanD), sector: eMon.sector });
         }
-        if (entry.wed && !entry.wed.isOff && entry.wed.sector) {
-          const wOff = limitOffset(mon, entry.wed.sector);
+        if (eWed && !eWed.isOff && eWed.sector) {
+          const wOff = limitOffset(mon, eWed.sector);
           const wedD = addDays(mon, wOff);
-          monthly[wedD.getMonth()].limit.push({ day: wedD.getDate(), dayName: dayName(wedD), sector: entry.wed.sector });
+          monthly[wedD.getMonth()].limit.push({ day: wedD.getDate(), dayName: dayName(wedD), sector: eWed.sector });
         }
         if (entry.thu) {
           const thuD = new Date(mon); thuD.setDate(thuD.getDate() + 3);
@@ -1069,7 +1097,7 @@
     }
 
     // ── MonthlyOccupancy ─────────────────────────────────────────────────
-    function MonthlyOccupancy({ data, viewMonday }) {
+    function MonthlyOccupancy({ data, viewMonday, rotationShifts }) {
       // Zobrazené 3 měsíce vychází z týdne, na který se uživatel právě dívá
       const base = viewMonday instanceof Date ? viewMonday : new Date();
       const months = [0, 1, 2].map(offset => {
@@ -1095,9 +1123,9 @@
                 const monDate = new Date(ky, km - 1, kd);
                 const calEntry = CAL[k];
                 const wd = data[k] ?? { monday: [], mondayLano: null, wednesday: [], thursday: [] };
-                // Respect sector overrides (shifted/cancelled weeks count as isOff)
-                const effMon = wd.monSectorOverride ?? calEntry?.mon ?? null;
-                const effWed = wd.wedSectorOverride ?? calEntry?.wed ?? null;
+                // Efektivní sektor: override / shift-list / výpočet z CAL sekvence
+                const effMon = effSector('mon', k, data, rotationShifts);
+                const effWed = effSector('wed', k, data, rotationShifts);
                 const wOff = limitOffset(monDate, effWed?.sector);
                 const lOff = lanovkaOffset(monDate);
 
@@ -1749,10 +1777,22 @@
       const [sel,     setSel]     = useState(null);
       const [drag,    setDrag]    = useState(null);  // { from, climber, session, idx? }
       const [showAddRace, setShowAddRace] = useState(false);
+      const [replaceModal, setReplaceModal] = useState(null); // { venue: 'mon'|'wed' } | null
       const [firebaseReady, setFirebaseReady] = useState(false);
+      // Rotace: seznam týdnů (per stěna), na kterých došlo k „Posun" → posouvá
+      // index do CAL sekvence pro všechny následující týdny. Zdroj pravdy je
+      // Firestore doc rotation/state; localStorage je cache pro offline/první render.
+      const [rotationShifts, setRotationShifts] = useState(() => {
+        try {
+          const s = localStorage.getItem('climbing-rotation');
+          if (s) { const o = JSON.parse(s); if (o && o.lanovka && o.limit) return o; }
+        } catch {}
+        return { lanovka: [], limit: [] };
+      });
       const skipFirebaseWeeks = React.useRef(new Set());
       const skipFirebaseRaces = React.useRef(new Set());
       const skipFirebaseTeam  = React.useRef(false);
+      const skipFirebaseRotation = React.useRef(false);
       const pendingFlushRef   = React.useRef(null);
 
       // ── Firestore helpers: null ↔ "__NULL__" ────────────────────────────────
@@ -1860,8 +1900,47 @@
           setTeam(prev => JSON.stringify(prev) !== JSON.stringify(merged) ? merged : prev);
         });
 
-        return () => { unsub(); unsubR(); unsubT(); };
+        // Rotace (rotationShifts) — fetch + bootstrap + listener.
+        // Bootstrap (pouze pokud doc neexistuje): seed posunů, které ovlivňují
+        // aktuální/budoucí rotaci a nejsou už zabalené v legacy overridech.
+        // 2026-06-01 = posun Lanovky (1.6. se nestavělo) → kaskáda od 8.6. dál.
+        const ROTATION_SEED = { lanovka: ['2026-06-01'], limit: [] };
+        db.collection('rotation').doc('state').get().then(doc => {
+          if (doc.exists) {
+            const d = doc.data();
+            if (Array.isArray(d?.lanovka) && Array.isArray(d?.limit)) {
+              setRotationShifts({ lanovka: d.lanovka, limit: d.limit });
+              return;
+            }
+          }
+          // Bootstrap
+          skipFirebaseRotation.current = true;
+          db.collection('rotation').doc('state').set(ROTATION_SEED).catch(() => {});
+          setRotationShifts(ROTATION_SEED);
+        }).catch(() => {});
+
+        const unsubRot = db.collection('rotation').doc('state').onSnapshot(doc => {
+          if (skipFirebaseRotation.current) { skipFirebaseRotation.current = false; return; }
+          if (!doc.exists) return;
+          const d = doc.data();
+          if (!Array.isArray(d?.lanovka) || !Array.isArray(d?.limit)) return;
+          const next = { lanovka: d.lanovka, limit: d.limit };
+          setRotationShifts(prev => JSON.stringify(prev) !== JSON.stringify(next) ? next : prev);
+        });
+
+        return () => { unsub(); unsubR(); unsubT(); unsubRot(); };
       }, []);
+
+      // Persist rotationShifts do localStorage + Firestore
+      React.useEffect(() => {
+        try { localStorage.setItem('climbing-rotation', JSON.stringify(rotationShifts)); } catch {}
+        if (!firebaseReady) return;
+        const t = setTimeout(() => {
+          skipFirebaseRotation.current = true;
+          db.collection('rotation').doc('state').set(rotationShifts).catch(() => {});
+        }, 800);
+        return () => clearTimeout(t);
+      }, [rotationShifts, firebaseReady]);
 
       // ── Save to localStorage + Firestore when data changes ────────────────
       React.useEffect(() => {
@@ -1872,10 +1951,8 @@
         function flushToFirestore(dataSnapshot) {
           Object.entries(dataSnapshot).forEach(([weekId, weekData]) => {
             skipFirebaseWeeks.current.add(weekId);
-            const _monOvS = weekData.monSectorOverride;
-            const calMon = (_monOvS != null && (_monOvS.isOff || _monOvS.sector)) ? _monOvS : (CAL[weekId]?.mon ?? null);
-            const _wedOvS = weekData.wedSectorOverride;
-            const calWed = (_wedOvS != null && (_wedOvS.isOff || _wedOvS.sector)) ? _wedOvS : (CAL[weekId]?.wed ?? null);
+            const calMon = effSector('mon', weekId, dataSnapshot, rotationShifts);
+            const calWed = effSector('wed', weekId, dataSnapshot, rotationShifts);
             const calThu = CAL[weekId]?.thu ?? null;
             const monBase = new Date(weekId + 'T12:00:00');
             const wOff = limitOffset(monBase, calWed?.sector);
@@ -1944,10 +2021,8 @@
         const base = getMonday(new Date());
         setOffset(Math.round((targetMonday.getTime() - base.getTime()) / (7 * 86400000)));
       }
-      const _monOv = week.monSectorOverride;
-      const calMon = (_monOv != null && (_monOv.isOff || _monOv.sector)) ? _monOv : (CAL[key]?.mon ?? null);
-      const _wedOv = week.wedSectorOverride;
-      const calWed = (_wedOv != null && (_wedOv.isOff || _wedOv.sector)) ? _wedOv : (CAL[key]?.wed ?? null);
+      const calMon = effSector('mon', key, data, rotationShifts);
+      const calWed = effSector('wed', key, data, rotationShifts);
       const calThu = CAL[key]?.thu ?? null;
 
       // Závod NEBO dostavba, které mohou nahradit standardní Stavění sloty (Mon Lanovka / Wed Limit) když jsou zrušené.
@@ -2016,47 +2091,42 @@
       function toIso(d) {
         return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       }
+      // POSUN: tento týden se stavět nebude (Volný) a profily VŠECH následujících
+      // týdnů se posunou o jeden vpřed. Realizováno přidáním týdne do globálního
+      // rotationShifts → resolver effSector kaskáduje celou rotaci automaticky.
+      // Stavěči zůstávají vázaní na DATUM (na následujících týdnech se nehýbou),
+      // jen tento (posunutý) týden se vyklidí (uloží se pro „Vrátit posun").
       function shiftMonSector() {
-        const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
-        // Varovat pokud příští týden má vlastní override (zamezí tichému přepsání)
-        const existingOverride = data[nextKey]?.monSectorOverride;
-        if (existingOverride && (existingOverride.isOff || existingOverride.sector)) {
-          if (!window.confirm(`Příští týden (${nextKey}) má již nastavenou sekci „${existingOverride.sector ?? '?'}". Přepsat?`)) return;
-        }
-        // Only shift the sector/profile — setters/sundavači stay tied to their date (cleared here, not moved)
-        setData(d => ({
-          ...d,
-          [nextKey]: { ...(d[nextKey] ?? initWeek(nextKey)), monSectorOverride: calMon },
-          [key]: { ...week,
-            monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null,
-            monSectorOverride: { isOff: true, sector: 'Volný týden' },
-            monSavedSetters: week.monday, monSavedLano: week.mondayLano,
-            monSavedSundavaci: week.mondaySundavaci || [], monSavedMyti: week.mondayMyti,
-          }
-        }));
+        if ((rotationShifts.lanovka || []).includes(key)) return;
+        if (!window.confirm(`Posunout rotaci Lanovky od ${fmtFull(monDate)}?\n\nTento týden se stavět nebude a profily všech dalších týdnů se posunou o jeden vpřed.`)) return;
+        setData(d => {
+          const curr = { ...(d[key] ?? initWeek(key)) };
+          curr.monSavedSetters = (d[key]?.monday) || E4();
+          curr.monSavedLano = d[key]?.mondayLano ?? null;
+          curr.monSavedSundavaci = d[key]?.mondaySundavaci || [];
+          curr.monSavedMyti = d[key]?.mondayMyti ?? null;
+          curr.monday = E4(); curr.mondayLano = null; curr.mondaySundavaci = []; curr.mondayMyti = null;
+          curr.monSectorOverride = null; // Volný řídí shift-list, ne override
+          return { ...d, [key]: curr };
+        });
+        setRotationShifts(rs => ({ ...rs, lanovka: [...(rs.lanovka || []), key].sort() }));
       }
       function shiftWedSector() {
-        const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
-        // Varovat pokud příští týden má vlastní override (zamezí tichému přepsání)
-        const existingOverride = data[nextKey]?.wedSectorOverride;
-        if (existingOverride && (existingOverride.isOff || existingOverride.sector)) {
-          if (!window.confirm(`Příští týden (${nextKey}) má již nastavenou sekci „${existingOverride.sector ?? '?'}". Přepsat?`)) return;
-        }
-        // Only shift the sector/profile — setters/sundavači stay tied to their date (cleared here, not moved)
-        setData(d => ({
-          ...d,
-          [nextKey]: { ...(d[nextKey] ?? initWeek(nextKey)), wedSectorOverride: calWed },
-          [key]: { ...week,
-            wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null,
-            wedSectorOverride: { isOff: true, sector: 'Volný týden' },
-            wedSavedSetters: week.wednesday,
-            wedSavedSundavaci: week.wednesdaySundavaci || [], wedSavedMyti: week.wednesdayMyti,
-          }
-        }));
+        if ((rotationShifts.limit || []).includes(key)) return;
+        if (!window.confirm(`Posunout rotaci Limitu od ${fmtFull(wedDate)}?\n\nTento týden se stavět nebude a profily všech dalších týdnů se posunou o jeden vpřed.`)) return;
+        setData(d => {
+          const curr = { ...(d[key] ?? initWeek(key)) };
+          curr.wedSavedSetters = (d[key]?.wednesday) || E4();
+          curr.wedSavedSundavaci = d[key]?.wednesdaySundavaci || [];
+          curr.wedSavedMyti = d[key]?.wednesdayMyti ?? null;
+          curr.wednesday = E4(); curr.wednesdaySundavaci = []; curr.wednesdayMyti = null;
+          curr.wedSectorOverride = null;
+          return { ...d, [key]: curr };
+        });
+        setRotationShifts(rs => ({ ...rs, limit: [...(rs.limit || []), key].sort() }));
       }
 
       function undoMonShift() {
-        const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
         setData(d => {
           const curr = { ...(d[key] ?? week) };
           if (curr.monSavedSetters) { curr.monday = curr.monSavedSetters; curr.mondayLano = curr.monSavedLano ?? null; }
@@ -2065,16 +2135,11 @@
           curr.monSectorOverride = null;
           curr.monSavedSetters = null; curr.monSavedLano = null;
           curr.monSavedSundavaci = null; curr.monSavedMyti = null;
-          const updates = { ...d, [key]: curr };
-          if (d[nextKey]) {
-            // Only clear the sector override — keep next week's setters (they belong to that date)
-            updates[nextKey] = { ...d[nextKey], monSectorOverride: null };
-          }
-          return updates;
+          return { ...d, [key]: curr };
         });
+        setRotationShifts(rs => ({ ...rs, lanovka: (rs.lanovka || []).filter(k => k !== key) }));
       }
       function undoWedShift() {
-        const nextKey = toIso(addDays(new Date(key + 'T12:00:00'), 7));
         setData(d => {
           const curr = { ...(d[key] ?? week) };
           if (curr.wedSavedSetters) { curr.wednesday = curr.wedSavedSetters; }
@@ -2083,12 +2148,35 @@
           curr.wedSectorOverride = null;
           curr.wedSavedSetters = null;
           curr.wedSavedSundavaci = null; curr.wedSavedMyti = null;
-          const updates = { ...d, [key]: curr };
-          if (d[nextKey]) {
-            // Only clear the sector override — keep next week's setters (they belong to that date)
-            updates[nextKey] = { ...d[nextKey], wedSectorOverride: null };
-          }
-          return updates;
+          return { ...d, [key]: curr };
+        });
+        setRotationShifts(rs => ({ ...rs, limit: (rs.limit || []).filter(k => k !== key) }));
+      }
+
+      // NAHRADIT: prohodí profil tohoto týdne s jiným týdnem TÉŽE stěny.
+      // Realizováno per-week overridem na obou týdnech (kind:'swap').
+      // Stavěči zůstávají vázaní na datum (sloty se nehýbou).
+      function doReplace(venue, otherKey) {
+        const secThis  = effSector(venue, key, data, rotationShifts);
+        const secOther = effSector(venue, otherKey, data, rotationShifts);
+        if (!secThis?.sector || !secOther?.sector) return;
+        const ovKey = venue === 'mon' ? 'monSectorOverride' : 'wedSectorOverride';
+        setData(d => ({
+          ...d,
+          [key]:      { ...(d[key] ?? initWeek(key)),           [ovKey]: { sector: secOther.sector, kind: 'swap', partner: otherKey, lano: null, setters: [] } },
+          [otherKey]: { ...(d[otherKey] ?? initWeek(otherKey)), [ovKey]: { sector: secThis.sector,  kind: 'swap', partner: key,      lano: null, setters: [] } },
+        }));
+        setReplaceModal(null);
+      }
+      // Zrušit nahrazení (vrátit oba týdny – tento i jeho partnera – do počítané rotace)
+      function undoReplace(venue) {
+        const ovKey = venue === 'mon' ? 'monSectorOverride' : 'wedSectorOverride';
+        const ov = venue === 'mon' ? week.monSectorOverride : week.wedSectorOverride;
+        const partner = ov?.partner;
+        setData(d => {
+          const out = { ...d, [key]: { ...(d[key] ?? week), [ovKey]: null } };
+          if (partner && d[partner]) out[partner] = { ...d[partner], [ovKey]: null };
+          return out;
         });
       }
 
@@ -2520,7 +2608,7 @@
           const [y, m, d] = k.split('-').map(Number);
           const monBase = new Date(y, m-1, d);  // pondělí týdne (week start)
           const wd = data[k];
-          const effWedSector = wd.wedSectorOverride?.sector ?? CAL[k]?.wed?.sector;
+          const effWedSector = effSector('wed', k, data, rotationShifts)?.sector;
           const wOff = limitOffset(monBase, effWedSector);
           const wedDate = wd.wedDateOverride ? new Date(wd.wedDateOverride) : addDays(monBase, wOff);
           const lanDate = wd.monDateOverride ? new Date(wd.monDateOverride) : addDays(monBase, lanovkaOffset(monBase));
@@ -2889,7 +2977,7 @@
 
               {/* Stats — mobile only, na desktopu jsou v pravém sidebaru */}
               <div className="lg:hidden px-4 pb-2 space-y-3">
-                <MonthlyOccupancy data={data} viewMonday={monday} />
+                <MonthlyOccupancy data={data} viewMonday={monday} rotationShifts={rotationShifts} />
                 <RacesPanel races={races} />
                 <StatsPanel stats={computeStats()} team={team} />
                 <RemovalStatsPanel stats={computeRemovalStats()} />
@@ -2919,20 +3007,28 @@
                 <span className="text-gray-400 text-xs font-semibold group-open:rotate-180 transition-transform">▼</span>
               </summary>
               <div className="px-4 pb-4 border-t border-gray-100">
-                <YearPlan />
+                <YearPlan data={data} rotationShifts={rotationShifts} />
               </div>
             </details>
 
             {/* ── Široké action butony úplně dole — každá akce na celou šířku ──── */}
             {(() => {
-              const monLanShift  = calMon && !calMon.isOff && calMon.sector;
-              const monLanCancel = calMon && !calMon.isOff && calMon.sector;
-              const monLanUndoShift  = week.monSectorOverride?.sector === 'Volný týden' && week.monSavedSetters;
-              const monLanUndoCancel = !!week.monCancelledSetters;
-              const wedLimShift  = calWed && !calWed.isOff && calWed.sector;
-              const wedLimCancel = calWed && !calWed.isOff && calWed.sector;
-              const wedLimUndoShift  = week.wedSectorOverride?.sector === 'Volný týden' && week.wedSavedSetters;
-              const wedLimUndoCancel = !!week.wedCancelledSetters;
+              const monActive = calMon && !calMon.isOff && calMon.sector;
+              const monSwapped = week.monSectorOverride?.kind === 'swap';
+              const monLanShift   = monActive && !monSwapped;
+              const monLanReplace = monActive && !monSwapped;
+              const monLanCancel  = monActive && !monSwapped;
+              const monLanUndoShift   = (rotationShifts.lanovka || []).includes(key);
+              const monLanUndoReplace = monSwapped;
+              const monLanUndoCancel  = !!week.monCancelledSetters;
+              const wedActive = calWed && !calWed.isOff && calWed.sector;
+              const wedSwapped = week.wedSectorOverride?.kind === 'swap';
+              const wedLimShift   = wedActive && !wedSwapped;
+              const wedLimReplace = wedActive && !wedSwapped;
+              const wedLimCancel  = wedActive && !wedSwapped;
+              const wedLimUndoShift   = (rotationShifts.limit || []).includes(key);
+              const wedLimUndoReplace = wedSwapped;
+              const wedLimUndoCancel  = !!week.wedCancelledSetters;
               const nextWk = fmt(addDays(monday, 7));
 
               // Tlačítko, plní svůj flex container (uvnitř wall rowu vedle sebe = poloviční)
@@ -2947,8 +3043,8 @@
                 </button>
               );
 
-              const hasLanovkaActions = monLanShift || monLanCancel || monLanUndoShift || monLanUndoCancel;
-              const hasLimitActions   = wedLimShift || wedLimCancel || wedLimUndoShift || wedLimUndoCancel;
+              const hasLanovkaActions = monLanShift || monLanReplace || monLanCancel || monLanUndoShift || monLanUndoReplace || monLanUndoCancel;
+              const hasLimitActions   = wedLimShift || wedLimReplace || wedLimCancel || wedLimUndoShift || wedLimUndoReplace || wedLimUndoCancel;
 
               return (
                 <div className="space-y-2">
@@ -2959,8 +3055,10 @@
                       {hasLanovkaActions && (
                         <div className="flex-1 flex flex-col gap-2">
                           {monLanShift      && wallBtn('lan-shift',      'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', shiftMonSector,  '↪', 'Posun',        calMon.sector, `→ ${nextWk}`)}
+                          {monLanReplace    && wallBtn('lan-replace',    'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', () => setReplaceModal({ venue:'mon' }), '↔', 'Nahradit', calMon.sector, null)}
                           {monLanCancel     && wallBtn('lan-cancel',     'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', cancelMonSector, '✕', 'Smazat',       calMon.sector, null)}
                           {monLanUndoShift  && wallBtn('lan-undoshift',  'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', undoMonShift,    '↩', 'Vrátit posun', null,          null)}
+                          {monLanUndoReplace&& wallBtn('lan-undorepl',   'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', () => undoReplace('mon'), '↩', 'Vrátit nahrazení', null, null)}
                           {monLanUndoCancel && wallBtn('lan-undocancel', 'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', undoMonCancel,   '↩', 'Obnovit',      null,          null)}
                         </div>
                       )}
@@ -2968,8 +3066,10 @@
                       {hasLimitActions && (
                         <div className="flex-1 flex flex-col gap-2">
                           {wedLimShift      && wallBtn('lim-shift',      'bg-zinc-900 text-white hover:bg-zinc-800',     shiftWedSector,  '↪', 'Posun',        calWed.sector, `→ ${nextWk}`)}
+                          {wedLimReplace    && wallBtn('lim-replace',    'bg-zinc-900 text-white hover:bg-zinc-800',     () => setReplaceModal({ venue:'wed' }), '↔', 'Nahradit', calWed.sector, null)}
                           {wedLimCancel     && wallBtn('lim-cancel',     'bg-zinc-900 text-white hover:bg-zinc-800',     cancelWedSector, '✕', 'Smazat',       calWed.sector, null)}
                           {wedLimUndoShift  && wallBtn('lim-undoshift',  'bg-zinc-700 text-zinc-200 hover:bg-zinc-600',  undoWedShift,    '↩', 'Vrátit posun', null,          null)}
+                          {wedLimUndoReplace&& wallBtn('lim-undorepl',   'bg-zinc-700 text-zinc-200 hover:bg-zinc-600',  () => undoReplace('wed'), '↩', 'Vrátit nahrazení', null, null)}
                           {wedLimUndoCancel && wallBtn('lim-undocancel', 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600',  undoWedCancel,   '↩', 'Obnovit',      null,          null)}
                         </div>
                       )}
@@ -3000,8 +3100,8 @@
                   const monday = addDays(startMonday, w * 7);
                   const k = weekKey(monday);
                   const wd = data[k] ?? {};
-                  const calMon = wd.monSectorOverride ?? CAL[k]?.mon ?? null;
-                  const calWed = wd.wedSectorOverride ?? CAL[k]?.wed ?? null;
+                  const calMon = effSector('mon', k, data, rotationShifts);
+                  const calWed = effSector('wed', k, data, rotationShifts);
                   const calThu = CAL[k]?.thu ?? null;
                   const wedOff = limitOffset(monday, calWed?.sector);
                   const monOff = lanovkaOffset(monday);
@@ -3050,6 +3150,57 @@
               onClose={() => setShowAddRace(false)}
               onSave={addRace} />
           )}
+
+          {/* Modal: Nahradit profil (prohození s jiným týdnem téže stěny) */}
+          {replaceModal && (() => {
+            const venue = replaceModal.venue;
+            const isMon = venue === 'mon';
+            const seq = isMon ? LANOVKA_WEEKS : LIMIT_WEEKS;
+            const curSec = effSector(venue, key, data, rotationShifts);
+            // ±2 měsíce kolem aktuálního týdne
+            const lo = toIso(addDays(monday, -62));
+            const hi = toIso(addDays(monday,  62));
+            const cands = seq.filter(wk => wk !== key && wk >= lo && wk <= hi).map(wk => {
+              const sec = effSector(venue, wk, data, rotationShifts);
+              if (!sec || sec.isOff || !sec.sector) return null;
+              const wkMon = new Date(wk + 'T12:00:00');
+              const sessD = addDays(wkMon, isMon ? lanovkaOffset(wkMon) : limitOffset(wkMon, sec.sector));
+              return { wk, sector: sec.sector, label: fmtFull(sessD) };
+            }).filter(Boolean);
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+                onClick={() => setReplaceModal(null)}>
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden"
+                  onClick={e => e.stopPropagation()}>
+                  <div className={`px-5 py-4 ${isMon ? 'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900' : 'bg-zinc-900 text-white'}`}>
+                    <h3 className="text-lg font-black">Nahradit profil</h3>
+                    <p className="text-sm mt-0.5 opacity-80">
+                      {isMon ? 'Lanovka' : 'Limit'} {fmtFull(isMon ? monDate : wedDate)} — „{curSec?.sector ?? '?'}"
+                    </p>
+                    <p className="text-xs mt-1 opacity-70">Vyber týden, se kterým se profil prohodí. Stavěči zůstávají na svých datech.</p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+                    {cands.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-6">Žádné týdny ke prohození v okolí ±2 měsíce.</p>
+                    ) : cands.map(c => (
+                      <button key={c.wk}
+                        onClick={() => { if (window.confirm(`Prohodit profily?\n\n${fmtFull(isMon?monDate:wedDate)} dostane „${c.sector}"\n${c.label} dostane „${curSec?.sector}"`)) doReplace(venue, c.wk); }}
+                        className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-colors text-left">
+                        <span className="text-sm font-bold text-gray-500 tabular-nums flex-shrink-0">{c.label}</span>
+                        <span className="text-sm font-semibold text-gray-900 truncate">{c.sector}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="px-4 py-3 border-t border-gray-100">
+                    <button onClick={() => setReplaceModal(null)}
+                      className="w-full px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold transition-colors">
+                      Zrušit
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       );
     }

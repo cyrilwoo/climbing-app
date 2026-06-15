@@ -231,6 +231,19 @@ def sync_calendar(request):
         if not cal:
             return "ERROR: Could not parse CAL", 500
 
+        # Kanonické sekvence týdnů (kde se daná stěna staví) — pro výpočet rotace.
+        LANOVKA_WEEKS = sorted([w for w in cal if cal[w].get('mon')])
+        LIMIT_WEEKS   = sorted([w for w in cal if cal[w].get('wed')])
+
+        # rotationShifts: seznam posunutých týdnů per stěna (doc rotation/state).
+        try:
+            rdoc = db.collection('rotation').document('state').get()
+            rstate = rdoc.to_dict() or {}
+        except Exception:
+            rstate = {}
+        shifts_lanovka = rstate.get('lanovka') or []
+        shifts_limit   = rstate.get('limit') or []
+
         service = get_calendar_service()
         now = datetime.now()
         stats = {'created': 0, 'updated': 0, 'deleted': 0}
@@ -263,40 +276,50 @@ def sync_calendar(request):
             mon_shifted   = firestore_value(fw.get('_monShifted'))
             wed_shifted   = firestore_value(fw.get('_wedShifted'))
 
-            # ── Effective dates ─────────────────────────────────────────────
             week_dt = datetime.strptime(week_id, '%Y-%m-%d')
 
-            # _monDate / _wedDate / _thuDate are computed by the app as override ?? default
+            # ── Efektivní sektor (replikuje effSector v index.html) ──────────
+            # Priorita: per-week override (Nahradit/Smazat/legacy pin)
+            #   → shift-list (Volný) → výpočet z CAL sekvence posunutý o shifty.
+            def resolve_sector(venue, override_field, sector_dict, seq, shift_list):
+                """venue: 'mon'|'wed'. Vrací (sector_name, is_off)."""
+                override = firestore_value(fw.get(override_field))
+                if isinstance(override, dict) and (override.get('isOff') or override.get('sector')):
+                    if override.get('isOff'):
+                        return None, True
+                    sec = override.get('sector')  # override ukládá NÁZEV
+                    return (sec, False) if sec else (None, False)
+                if week_id in shift_list:
+                    return None, True  # posunutý týden = Volný
+                if week_id in seq:
+                    i = seq.index(week_id)
+                    before = sum(1 for s in shift_list if s < week_id)
+                    src = seq[max(0, i - before)]
+                else:
+                    src = week_id
+                code = cal.get(src, {}).get(venue)
+                if code and code not in ('V', 'M'):
+                    return sector_dict.get(code), False
+                return None, (code == 'V')
+
+            mon_sector, mon_is_off = resolve_sector(
+                'mon', 'monSectorOverride', SECTORS_MON, LANOVKA_WEEKS, shifts_lanovka)
+            wed_sector, wed_is_off = resolve_sector(
+                'wed', 'wedSectorOverride', SECTORS_WED, LIMIT_WEEKS, shifts_limit)
+            thu_code = cal_entry.get('thu')  # only TG, no override
+
+            # ── Effective dates ─────────────────────────────────────────────
+            # _monDate / _wedDate / _thuDate jsou počítané appkou (override ?? default).
             raw_mon = firestore_value(fw.get('_monDate')) or firestore_value(fw.get('monDateOverride'))
             raw_wed = firestore_value(fw.get('_wedDate')) or firestore_value(fw.get('wedDateOverride'))
             raw_thu = firestore_value(fw.get('_thuDate')) or firestore_value(fw.get('thuDateOverride'))
 
             mon_date = raw_mon if raw_mon else week_id
-            wed_default = (week_dt + timedelta(days=3 if cal_entry.get('wed') == 'D' else 2)).strftime('%Y-%m-%d')
+            # Dětská se staví ve čtvrtek (+3), ostatní Limit ve středu (+2) — dle EFEKTIVNÍHO sektoru
+            wed_default = (week_dt + timedelta(days=3 if wed_sector == 'Dětská' else 2)).strftime('%Y-%m-%d')
             wed_date = raw_wed if raw_wed else wed_default
             thu_default = (week_dt + timedelta(days=3)).strftime('%Y-%m-%d')
             thu_date = raw_thu if raw_thu else thu_default
-
-            # ── Sector overrides ────────────────────────────────────────────
-            def resolve_sector(cal_code, override_field, sector_dict):
-                """Return (sector_name, is_off) respecting Firestore override."""
-                override = firestore_value(fw.get(override_field))
-                if isinstance(override, dict) and (override.get('isOff') or override.get('sector')):
-                    if override.get('isOff'):
-                        return None, True
-                    sec = override.get('sector')
-                    return (sec, False) if sec else (None, False)
-                # Fall back to CAL
-                if cal_code and cal_code != 'V':
-                    name = sector_dict.get(cal_code)
-                    return (name, False)
-                return None, (cal_code == 'V')
-
-            mon_sector, mon_is_off = resolve_sector(
-                cal_entry.get('mon'), 'monSectorOverride', SECTORS_MON)
-            wed_sector, wed_is_off = resolve_sector(
-                cal_entry.get('wed'), 'wedSectorOverride', SECTORS_WED)
-            thu_code = cal_entry.get('thu')  # only TG, no override
 
             # ── LANOVKA ─────────────────────────────────────────────────────
             lanovka_active = mon_sector and not mon_is_off and not (mon_cancelled or mon_shifted)
