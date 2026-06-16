@@ -115,13 +115,16 @@
       return isNewSchedule(monday) ? 1 : 0;
     }
     // Od června 2026 se na Lanovce staví lano jen jednou za 14 dní.
-    // Referenční týden s lanem: 2026-05-25 (poslední týdenní kadence) → potom 06-08, 06-22, 07-06 …
-    // 2026-06-01 (první červnový týden) je první týden bez lana.
+    // Červen: 8.6., 22.6. (ref 2026-06-08). Od července se Lanovka staví v „liché"
+    // týdny (léto po 14 dnech), takže lano kotvíme na 2026-07-13 → 14.7., 28.7.,
+    // 11.8., 25.8., 7.9., 21.9. … aby provaz padl na skutečná letní Lanovka stavění.
     function hasLanoBuild(monday) {
-      const juneStart = new Date(2026, 5, 1).getTime();
-      if (monday.getTime() < juneStart) return true;
-      const ref = new Date(2026, 5, 8).getTime();
-      const days = Math.round((monday.getTime() - ref) / 86400000);
+      const t = monday.getTime();
+      if (t < new Date(2026, 5, 1).getTime()) return true; // před červnem: každý týden
+      const ref = t < new Date(2026, 6, 1).getTime()
+        ? new Date(2026, 5, 8).getTime()    // červen → 8.6., 22.6.
+        : new Date(2026, 6, 13).getTime();  // červenec a dál → 13.7., 27.7., …
+      const days = Math.round((t - ref) / 86400000);
       return ((days % 14) + 14) % 14 === 0;
     }
     function limitOffset(monday, sectorName) {
@@ -1907,6 +1910,33 @@
         }
         return out;
       }
+      // Sestaví Firestore payload týdne (vč. enriched _* polí pro sync). Sdílené
+      // flushem i seedingem lastFlushedRef (load/onSnapshot), aby se signatury
+      // shodovaly a první flush po načtení nepřepisoval všechny týdny.
+      function weekPayload(weekId, dataSnap, shifts) {
+        const weekData = dataSnap[weekId];
+        if (!weekData) return null;
+        const calMon = effSector('mon', weekId, dataSnap, shifts);
+        const calWed = effSector('wed', weekId, dataSnap, shifts);
+        const calThu = CAL[weekId]?.thu ?? null;
+        const monBase = new Date(weekId + 'T12:00:00');
+        const wOff = limitOffset(monBase, calWed?.sector);
+        const lOff = lanovkaOffset(monBase);
+        const enriched = {
+          ...weekData,
+          _monSector: (calMon && !calMon.isOff && calMon.sector) ? calMon.sector : null,
+          _wedSector: (calWed && !calWed.isOff && calWed.sector) ? calWed.sector : null,
+          _thuSector: (calThu && !calThu.isOff && calThu.sector) ? calThu.sector : null,
+          _monDate:   weekData.monDateOverride || toIso(addDays(monBase, lOff)),
+          _wedDate:   weekData.wedDateOverride || toIso(addDays(monBase, wOff)),
+          _thuDate:   weekData.thuDateOverride || toIso(addDays(monBase, 3)),
+          _monCancelled: weekData.monSectorOverride?.isOff === true ? true : null,
+          _wedCancelled: weekData.wedSectorOverride?.isOff === true ? true : null,
+          _monShifted: weekData.monSavedSetters != null ? true : null,
+          _wedShifted: weekData.wedSavedSetters != null ? true : null,
+        };
+        return toFirestore(enriched);
+      }
 
       // ── Load all data from Firestore on mount ─────────────────────────────
       React.useEffect(() => {
@@ -1914,6 +1944,12 @@
           if (!snapshot.empty) {
             const loaded = {};
             snapshot.forEach(doc => { loaded[doc.id] = fromFirestore(doc.data()); });
+            // Seed lastFlushedRef — jinak první flush po načtení přepíše VŠECHNY týdny
+            // (a v souběhu s jiným tabem může přepsat čerstvá data).
+            Object.keys(loaded).forEach(weekId => {
+              const p = weekPayload(weekId, loaded, rotationShifts);
+              if (p) lastFlushedRef.current[weekId] = JSON.stringify(p);
+            });
             setData(prev => {
               const merged = { ...prev, ...loaded };
               return merged;
@@ -1938,7 +1974,13 @@
           if (Object.keys(loaded).length === 0) return;
           setData(prev => {
             const merged = { ...prev, ...loaded };
-            return JSON.stringify(merged) !== JSON.stringify(prev) ? merged : prev;
+            if (JSON.stringify(merged) === JSON.stringify(prev)) return prev;
+            // Vzdáleně změněné týdny ber jako už-flushnuté → příští flush je nepřepíše zpět.
+            Object.keys(loaded).forEach(weekId => {
+              const p = weekPayload(weekId, merged, rotationShifts);
+              if (p) lastFlushedRef.current[weekId] = JSON.stringify(p);
+            });
+            return merged;
           });
         });
 
@@ -2042,31 +2084,10 @@
         if (!firebaseReady) return;
         // Sestaví a zapíše všechny týdny do Firestore
         function flushToFirestore(dataSnapshot) {
-          Object.entries(dataSnapshot).forEach(([weekId, weekData]) => {
-            const calMon = effSector('mon', weekId, dataSnapshot, rotationShifts);
-            const calWed = effSector('wed', weekId, dataSnapshot, rotationShifts);
-            const calThu = CAL[weekId]?.thu ?? null;
-            const monBase = new Date(weekId + 'T12:00:00');
-            const wOff = limitOffset(monBase, calWed?.sector);
-            const lOff = lanovkaOffset(monBase);
-            const enriched = {
-              ...weekData,
-              _monSector: (calMon && !calMon.isOff && calMon.sector) ? calMon.sector : null,
-              _wedSector: (calWed && !calWed.isOff && calWed.sector) ? calWed.sector : null,
-              _thuSector: (calThu && !calThu.isOff && calThu.sector) ? calThu.sector : null,
-              _monDate:   weekData.monDateOverride || toIso(addDays(monBase, lOff)),
-              _wedDate:   weekData.wedDateOverride || toIso(addDays(monBase, wOff)),
-              _thuDate:   weekData.thuDateOverride || toIso(addDays(monBase, 3)),
-              // Pozor: navázat na SKUTEČNÝ vypnutý stav (isOff), ne na zbytkové
-              // monCancelledSetters — ty swap/override po zrušení nevyčistí a sync
-              // by pak build chybně přeskočil (viz 15.6. Lanovka).
-              _monCancelled: weekData.monSectorOverride?.isOff === true ? true : null,
-              _wedCancelled: weekData.wedSectorOverride?.isOff === true ? true : null,
-              _monShifted: weekData.monSavedSetters != null ? true : null,
-              _wedShifted: weekData.wedSavedSetters != null ? true : null,
-            };
-            const payload = toFirestore(enriched);
-            // Zapiš JEN týdny, které se reálně změnily od posledního flushe.
+          Object.keys(dataSnapshot).forEach(weekId => {
+            const payload = weekPayload(weekId, dataSnapshot, rotationShifts);
+            if (!payload) return;
+            // Zapiš JEN týdny, které se reálně změnily od posledního flushe (signatura).
             // Jinak flush přepisuje VŠECHNY týdny a může přepsat čerstvé zápisy
             // (z jiného klienta / přímé) → ztráta dat a zbytečná zátěž.
             const sig = JSON.stringify(payload);
@@ -2272,11 +2293,20 @@
         const secOther = effSector(venue, otherKey, data, rotationShifts);
         if (!secThis?.sector || !secOther?.sector) return;
         const ovKey = venue === 'mon' ? 'monSectorOverride' : 'wedSectorOverride';
-        setData(d => ({
-          ...d,
-          [key]:      { ...(d[key] ?? initWeek(key)),           [ovKey]: { sector: secOther.sector, kind: 'swap', partner: otherKey, lano: null, setters: [] } },
-          [otherKey]: { ...(d[otherKey] ?? initWeek(otherKey)), [ovKey]: { sector: secThis.sector,  kind: 'swap', partner: key,      lano: null, setters: [] } },
-        }));
+        setData(d => {
+          const out = { ...d };
+          // Pojistka: je-li některá strana už ve swapu s JINÝM týdnem, nejdřív uvolni
+          // jejího starého partnera (jinak zůstane „visící" odkaz a undo to rozbije).
+          for (const k of [key, otherKey]) {
+            const ov = d[k]?.[ovKey];
+            if (ov?.kind === 'swap' && ov.partner && ov.partner !== key && ov.partner !== otherKey && d[ov.partner]) {
+              out[ov.partner] = { ...d[ov.partner], [ovKey]: null };
+            }
+          }
+          out[key]      = { ...(out[key] ?? initWeek(key)),           [ovKey]: { sector: secOther.sector, kind: 'swap', partner: otherKey, lano: null, setters: [] } };
+          out[otherKey] = { ...(out[otherKey] ?? initWeek(otherKey)), [ovKey]: { sector: secThis.sector,  kind: 'swap', partner: key,      lano: null, setters: [] } };
+          return out;
+        });
         setReplaceModal(null);
       }
       // Zrušit nahrazení (vrátit oba týdny – tento i jeho partnera – do počítané rotace)

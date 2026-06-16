@@ -203,12 +203,14 @@ def firestore_value(val):
 
 
 def has_lano_build(week_id):
-    """Od června 2026 se lano staví jen jednou za 14 dní (ref: 2026-06-08).
-    Před červnem 2026: každý Lanovka týden."""
+    """Lano po 14 dnech. Červen: ref 2026-06-08 (8.6., 22.6.). Od července: ref
+    2026-07-13, aby lano padlo na letní Lanovka stavění (14.7., 28.7., 11.8.,
+    25.8., 7.9. …). Před červnem 2026: každý Lanovka týden.
+    (parita s hasLanoBuild v index.html)"""
     week_dt = datetime.strptime(week_id, '%Y-%m-%d')
     if week_dt < datetime(2026, 6, 1):
         return True
-    ref = datetime(2026, 6, 8)
+    ref = datetime(2026, 6, 8) if week_dt < datetime(2026, 7, 1) else datetime(2026, 7, 13)
     return (week_dt - ref).days % 14 == 0
 
 
