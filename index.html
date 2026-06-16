@@ -1864,6 +1864,7 @@
       const [drag,    setDrag]    = useState(null);  // { from, climber, session, idx? }
       const [showAddRace, setShowAddRace] = useState(false);
       const [replaceModal, setReplaceModal] = useState(null); // { venue: 'mon'|'wed' } | null
+      const [calMonths, setCalMonths] = useState(2); // počet měsíců v kalendáři (2 nebo 3)
       const [firebaseReady, setFirebaseReady] = useState(false);
       // Rotace: seznam týdnů (per stěna), na kterých došlo k „Posun" → posouvá
       // index do CAL sekvence pro všechny následující týdny. Zdroj pravdy je
@@ -3117,8 +3118,15 @@
                 <span className="text-gray-400 text-xs font-semibold group-open:rotate-180 transition-transform">▼</span>
               </summary>
               <div className="px-2 pb-3 border-t border-gray-100 space-y-3 pt-3">
-                <MonthCalendar data={data} viewMonday={monday} rotationShifts={rotationShifts} />
-                <MonthCalendar data={data} viewMonday={new Date(monday.getFullYear(), monday.getMonth() + 1, 15)} rotationShifts={rotationShifts} />
+                {Array.from({ length: calMonths }, (_, i) => (
+                  <MonthCalendar key={i} data={data}
+                    viewMonday={i === 0 ? monday : new Date(monday.getFullYear(), monday.getMonth() + i, 15)}
+                    rotationShifts={rotationShifts} />
+                ))}
+                <button onClick={() => setCalMonths(m => m === 2 ? 3 : 2)}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-600 text-sm font-semibold transition-colors">
+                  {calMonths === 2 ? '+ Zobrazit 3. měsíc' : '− Zobrazit jen 2 měsíce'}
+                </button>
               </div>
             </details>
 
