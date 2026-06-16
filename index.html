@@ -1880,6 +1880,7 @@
       const skipFirebaseTeam  = React.useRef(false);
       const skipFirebaseRotation = React.useRef(false);
       const pendingFlushRef   = React.useRef(null);
+      const lastFlushedRef    = React.useRef({}); // weekId → JSON naposledy zapsaného docu (flush jen změn)
 
       // ── Firestore helpers: null ↔ "__NULL__" ────────────────────────────────
       function toFirestore(weekData) {
@@ -2040,7 +2041,6 @@
         // Sestaví a zapíše všechny týdny do Firestore
         function flushToFirestore(dataSnapshot) {
           Object.entries(dataSnapshot).forEach(([weekId, weekData]) => {
-            skipFirebaseWeeks.current.add(weekId);
             const calMon = effSector('mon', weekId, dataSnapshot, rotationShifts);
             const calWed = effSector('wed', weekId, dataSnapshot, rotationShifts);
             const calThu = CAL[weekId]?.thu ?? null;
@@ -2060,7 +2060,15 @@
               _monShifted: weekData.monSavedSetters != null ? true : null,
               _wedShifted: weekData.wedSavedSetters != null ? true : null,
             };
-            db.collection('weeks').doc(weekId).set(toFirestore(enriched), { merge: true }).catch(() => {});
+            const payload = toFirestore(enriched);
+            // Zapiš JEN týdny, které se reálně změnily od posledního flushe.
+            // Jinak flush přepisuje VŠECHNY týdny a může přepsat čerstvé zápisy
+            // (z jiného klienta / přímé) → ztráta dat a zbytečná zátěž.
+            const sig = JSON.stringify(payload);
+            if (lastFlushedRef.current[weekId] === sig) return;
+            lastFlushedRef.current[weekId] = sig;
+            skipFirebaseWeeks.current.add(weekId);
+            db.collection('weeks').doc(weekId).set(payload, { merge: true }).catch(() => {});
           });
         }
         // Uloží ref na aktuální flush — pro případ zavření tabu
