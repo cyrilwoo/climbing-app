@@ -611,9 +611,9 @@
               return (
                 <div className="mt-3 grid grid-cols-4 gap-1.5">
                   {steps.map(({ id, label }) => (
-                    <div key={id} className={`rounded-lg py-2.5 px-1 text-center
+                    <div key={id} className={`rounded-lg py-2.5 px-0.5 text-center
                       ${active.has(id) ? 'bg-pink-600 ring-1 ring-pink-400' : 'bg-white/5 ring-1 ring-white/10'}`}>
-                      <div className={`text-xs font-black leading-tight
+                      <div className={`text-[11px] font-black leading-tight tracking-tight break-words
                         ${active.has(id) ? 'text-white' : 'text-white/30'}`}>
                         {label}
                       </div>
@@ -1800,9 +1800,9 @@
             {/* Sector badges */}
             <div className="mt-3 grid grid-cols-4 gap-1.5">
               {limitSteps.map(({ id, label }) => (
-                <div key={id} className={`rounded-lg py-2.5 px-1 text-center
+                <div key={id} className={`rounded-lg py-2.5 px-0.5 text-center
                   ${sectorActive.has(id) ? 'bg-pink-600 ring-1 ring-pink-400' : 'bg-white/5 ring-1 ring-white/10'}`}>
-                  <div className={`text-xs font-black leading-tight
+                  <div className={`text-[11px] font-black leading-tight tracking-tight break-words
                     ${sectorActive.has(id) ? 'text-white' : 'text-white/30'}`}>
                     {label}
                   </div>
