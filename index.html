@@ -521,62 +521,64 @@
 
           {/* Header */}
           <div className={`${hdr} p-4 h-52 flex flex-col justify-between`}>
-            <div className={`flex items-center justify-between gap-3 ${hdrText}`}>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-xl font-black leading-none">{displayDay}</h3>
-                <div className="flex items-center gap-1 mt-0.5">
-                  {editingDate ? (
-                    <input type="date"
-                      key={`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
-                      defaultValue={`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
-                      min={weekMin} max={weekMax}
-                      className={`text-xs font-medium outline-none rounded px-1 py-0.5 w-32
-                        ${isYellow ? 'bg-black/10 text-gray-900' : 'bg-white/10 text-white'}`}
-                      onChange={e => { const v=e.target.value; if(v && (!weekMin || v>=weekMin) && (!weekMax || v<=weekMax)) onDateChange(v); }}
-                      onBlur={e => { const v=e.target.value; if(v && (!weekMin || v>=weekMin) && (!weekMax || v<=weekMax)) onDateChange(v); setEditingDate(false); }}
-                      autoFocus
-                    />
-                  ) : (
-                    <>
-                      <p className={`text-sm font-medium ${hdrSub}`}>{fmtFull(date)}</p>
-                      <button onClick={() => setEditingDate(true)} title="Změnit datum"
-                        className={`p-0.5 rounded transition-opacity opacity-30 hover:opacity-80`}>
-                        <CalEdit c="w-3 h-3" />
-                      </button>
-                    </>
-                  )}
+            <div className={hdrText}>
+              {/* Řádek 1: den + stěna + reset (každý prvek má svůj prostor, nic se nepřekrývá) */}
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xl font-black leading-none truncate min-w-0">{displayDay}</h3>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <span className={`text-xs font-black tracking-wide whitespace-nowrap
+                    ${isYellow ? 'text-black' : isGreen ? 'text-white' : 'text-pink-500'}`}>
+                    {isYellow ? 'LANOVKA' : isGreen ? 'TĚLOCVIČNA' : 'LIMIT'}
+                  </span>
+                  <button onClick={onClear} title="Vymazat přiřazení"
+                    className={`p-1.5 rounded-lg transition-colors ${isYellow ? 'hover:bg-black/10' : 'hover:bg-white/20'}`}>
+                    <RotateCcw c="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                {calInfo?.sector && (
-                  <span className={`inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full
-                    ${isYellow ? 'bg-black/10 text-gray-800' : 'bg-white/10 text-white/80'}`}>
-                    {calInfo.sector}
-                    {calInfo.note && <span className="ml-1 opacity-60">· {calInfo.note}</span>}
-                  </span>
-                )}
-                {calInfo?.isOff && (
-                  <span className={`inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full
-                    ${isYellow ? 'bg-black/10 text-gray-700' : 'bg-white/10 text-white/60'}`}>
-                    {calInfo.sector}
-                  </span>
-                )}
-                {!calInfo && isJulyAugust && (
-                  <span className={`inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full
-                    ${isYellow ? 'bg-black/10 text-gray-700' : 'bg-white/10 text-white/60'}`}>
-                    není stavění
-                  </span>
+              </div>
+              {/* Řádek 2: datum (plná šířka) */}
+              <div className="flex items-center gap-1 mt-1">
+                {editingDate ? (
+                  <input type="date"
+                    key={`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
+                    defaultValue={`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
+                    min={weekMin} max={weekMax}
+                    className={`text-xs font-medium outline-none rounded px-1 py-0.5 w-32
+                      ${isYellow ? 'bg-black/10 text-gray-900' : 'bg-white/10 text-white'}`}
+                    onChange={e => { const v=e.target.value; if(v && (!weekMin || v>=weekMin) && (!weekMax || v<=weekMax)) onDateChange(v); }}
+                    onBlur={e => { const v=e.target.value; if(v && (!weekMin || v>=weekMin) && (!weekMax || v<=weekMax)) onDateChange(v); setEditingDate(false); }}
+                    autoFocus
+                  />
+                ) : (
+                  <>
+                    <p className={`text-sm font-medium ${hdrSub}`}>{fmtFull(date)}</p>
+                    <button onClick={() => setEditingDate(true)} title="Změnit datum"
+                      className={`p-0.5 rounded transition-opacity opacity-30 hover:opacity-80`}>
+                      <CalEdit c="w-3 h-3" />
+                    </button>
+                  </>
                 )}
               </div>
-              <div className="flex-shrink-0">
-                <span className={`text-sm font-black tracking-widest flex-shrink-0
-                  ${isYellow ? 'text-black' : isGreen ? 'text-white' : 'text-pink-500'}`}>
-                  {isYellow ? 'LANOVKA' : isGreen ? 'TĚLOCVIČNA' : 'LIMIT'}
+              {/* Řádek 3: profil (plná šířka) */}
+              {calInfo?.sector && (
+                <span className={`inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full
+                  ${isYellow ? 'bg-black/10 text-gray-800' : 'bg-white/10 text-white/80'}`}>
+                  {calInfo.sector}
+                  {calInfo.note && <span className="ml-1 opacity-60">· {calInfo.note}</span>}
                 </span>
-              </div>
-              <button onClick={onClear} title="Vymazat přiřazení"
-                className={`p-1.5 rounded-lg transition-colors flex-shrink-0
-                  ${isYellow ? 'hover:bg-black/10' : 'hover:bg-white/20'}`}>
-                <RotateCcw c="w-3.5 h-3.5" />
-              </button>
+              )}
+              {calInfo?.isOff && (
+                <span className={`inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full
+                  ${isYellow ? 'bg-black/10 text-gray-700' : 'bg-white/10 text-white/60'}`}>
+                  {calInfo.sector}
+                </span>
+              )}
+              {!calInfo && isJulyAugust && (
+                <span className={`inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full
+                  ${isYellow ? 'bg-black/10 text-gray-700' : 'bg-white/10 text-white/60'}`}>
+                  není stavění
+                </span>
+              )}
             </div>
 
             {/* Sector label — výška sjednocena s Limit sektor gridem */}
