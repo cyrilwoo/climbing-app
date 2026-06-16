@@ -3127,6 +3127,16 @@
               const wedLimUndoReplace = wedSwapped;
               const wedLimUndoCancel  = !!week.wedCancelledSetters;
               const nextWk = fmt(addDays(monday, 7));
+              // Reálné datum dopadu Posunu = build day dalšího týdne TÉŽE stěny v rotaci
+              // (přeskočí prázdné letní týdny — Lanovka staví Po/Út, Limit St, Dětská Čt).
+              const landDate = (seq, offForDate) => {
+                const idx = seq.indexOf(key);
+                if (idx < 0 || idx + 1 >= seq.length) return nextWk;
+                const m = new Date(seq[idx + 1] + 'T12:00:00');
+                return fmt(addDays(m, offForDate(m)));
+              };
+              const monLandWk = landDate(LANOVKA_WEEKS, m => lanovkaOffset(m));
+              const wedLandWk = landDate(LIMIT_WEEKS, m => limitOffset(m, calWed?.sector));
 
               // Tlačítko, plní svůj flex container (uvnitř wall rowu vedle sebe = poloviční)
               const wallBtn = (key, cls, onClick, icon, action, sector, suffix) => (
@@ -3151,7 +3161,7 @@
                       {/* LANOVKA — Posun + Smazat pod sebou (žluté gradient) */}
                       {hasLanovkaActions && (
                         <div className="flex-1 flex flex-col gap-2">
-                          {monLanShift      && wallBtn('lan-shift',      'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', shiftMonSector,  '↪', 'Posun',        calMon.sector, `→ ${nextWk}`)}
+                          {monLanShift      && wallBtn('lan-shift',      'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', shiftMonSector,  '↪', 'Posun',        calMon.sector, `→ ${monLandWk}`)}
                           {monLanReplace    && wallBtn('lan-replace',    'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', () => setReplaceModal({ venue:'mon' }), '↔', 'Nahradit', calMon.sector, null)}
                           {monLanCancel     && wallBtn('lan-cancel',     'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', cancelMonSector, '✕', 'Smazat',       calMon.sector, null)}
                           {monLanUndoShift  && wallBtn('lan-undoshift',  'bg-gradient-to-br from-amber-400 to-yellow-400 text-gray-900 hover:from-amber-500 hover:to-yellow-500', undoMonShift,    '↩', 'Vrátit posun', null,          null)}
@@ -3162,7 +3172,7 @@
                       {/* LIMIT — Posun + Smazat pod sebou (černé) */}
                       {hasLimitActions && (
                         <div className="flex-1 flex flex-col gap-2">
-                          {wedLimShift      && wallBtn('lim-shift',      'bg-zinc-900 text-white hover:bg-zinc-800',     shiftWedSector,  '↪', 'Posun',        calWed.sector, `→ ${nextWk}`)}
+                          {wedLimShift      && wallBtn('lim-shift',      'bg-zinc-900 text-white hover:bg-zinc-800',     shiftWedSector,  '↪', 'Posun',        calWed.sector, `→ ${wedLandWk}`)}
                           {wedLimReplace    && wallBtn('lim-replace',    'bg-zinc-900 text-white hover:bg-zinc-800',     () => setReplaceModal({ venue:'wed' }), '↔', 'Nahradit', calWed.sector, null)}
                           {wedLimCancel     && wallBtn('lim-cancel',     'bg-zinc-900 text-white hover:bg-zinc-800',     cancelWedSector, '✕', 'Smazat',       calWed.sector, null)}
                           {wedLimUndoShift  && wallBtn('lim-undoshift',  'bg-zinc-700 text-zinc-200 hover:bg-zinc-600',  undoWedShift,    '↩', 'Vrátit posun', null,          null)}
