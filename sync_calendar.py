@@ -340,18 +340,21 @@ def sync_calendar(request):
                 if setters_str:
                     title += f" | {setters_str}"
 
-                # Delete stale event from default (week_id) if date was moved
-                if mon_date != week_id:
-                    clear_on_dates(service, 'Lanovka', week_id, stats=stats)
+                # Smaž stale Lanovka eventy na VŠECH možných default pozicích kromě
+                # skutečného mon_date: pondělí (+0 = week_id) i úterý (+1, od září).
+                # (symetrické s Limit větví; bez toho posunutý zářijový build nechá duplikát)
+                mon_tue = (week_dt + timedelta(days=1)).strftime('%Y-%m-%d')
+                for d in {week_id, mon_default, mon_tue}:
+                    if d != mon_date:
+                        clear_on_dates(service, 'Lanovka', d, stats=stats)
 
                 sync_event(service, 'Lanovka', mon_date, title, '07:15:00', '15:00:00', stats)
 
-                # Sundavání
+                # Sundavání — smaž stale na den-před všemi default pozicemi kromě aktuální
                 sun = day_before(mon_date)
-                if mon_date != week_id:
-                    old_sun = day_before(week_id)
-                    if old_sun != sun:
-                        clear_on_dates(service, 'Sundavání Lanovka', old_sun, stats=stats)
+                for old in {day_before(week_id), day_before(mon_default), day_before(mon_tue)}:
+                    if old != sun:
+                        clear_on_dates(service, 'Sundavání Lanovka', old, stats=stats)
 
                 if mon_sun:
                     s = format_setters(mon_sun)

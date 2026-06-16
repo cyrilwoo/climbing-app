@@ -2057,8 +2057,11 @@
               _monDate:   weekData.monDateOverride || toIso(addDays(monBase, lOff)),
               _wedDate:   weekData.wedDateOverride || toIso(addDays(monBase, wOff)),
               _thuDate:   weekData.thuDateOverride || toIso(addDays(monBase, 3)),
-              _monCancelled: weekData.monCancelledSetters != null ? true : null,
-              _wedCancelled: weekData.wedCancelledSetters != null ? true : null,
+              // Pozor: navázat na SKUTEČNÝ vypnutý stav (isOff), ne na zbytkové
+              // monCancelledSetters — ty swap/override po zrušení nevyčistí a sync
+              // by pak build chybně přeskočil (viz 15.6. Lanovka).
+              _monCancelled: weekData.monSectorOverride?.isOff === true ? true : null,
+              _wedCancelled: weekData.wedSectorOverride?.isOff === true ? true : null,
               _monShifted: weekData.monSavedSetters != null ? true : null,
               _wedShifted: weekData.wedSavedSetters != null ? true : null,
             };
@@ -3267,7 +3270,7 @@
                       {upcoming.map((s, i) => (
                         <div key={i} className="space-y-0.5">
                           <div className={`text-xs font-semibold ${s.color}`}>{fmtDate(s.date)} {s.label}</div>
-                          <div className={`text-xs font-black leading-tight ${s.color}`}>{s.sector}</div>
+                          <div className={`text-xs font-black leading-tight break-words ${s.color}`}>{s.sector}</div>
                         </div>
                       ))}
                     </div>
