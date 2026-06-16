@@ -309,10 +309,13 @@ def sync_calendar(request):
             thu_code = cal_entry.get('thu')  # only TG, no override
 
             # ── Effective dates ─────────────────────────────────────────────
-            # _monDate / _wedDate / _thuDate jsou počítané appkou (override ?? default).
-            raw_mon = firestore_value(fw.get('_monDate')) or firestore_value(fw.get('monDateOverride'))
-            raw_wed = firestore_value(fw.get('_wedDate')) or firestore_value(fw.get('wedDateOverride'))
-            raw_thu = firestore_value(fw.get('_thuDate')) or firestore_value(fw.get('thuDateOverride'))
+            # Explicitní datumový override MUSÍ mít přednost před pomocným _*Date
+            # (které appka počítá jako override ?? default). Když se override zapíše
+            # mimo appku (přímý zápis do Firestore), _*Date zůstane staré → proto
+            # bereme override první a _*Date jen jako fallback.
+            raw_mon = firestore_value(fw.get('monDateOverride')) or firestore_value(fw.get('_monDate'))
+            raw_wed = firestore_value(fw.get('wedDateOverride')) or firestore_value(fw.get('_wedDate'))
+            raw_thu = firestore_value(fw.get('thuDateOverride')) or firestore_value(fw.get('_thuDate'))
 
             # Od září 2026 se mění rozvrh: Lanovka úterý (+1), Limit vždy čtvrtek (+3).
             # (parita s isNewSchedule/lanovkaOffset/limitOffset v index.html)
@@ -379,9 +382,14 @@ def sync_calendar(request):
                 if setters_str:
                     title += f" | {setters_str}"
 
-                # Delete stale event from default date if date was moved
-                if wed_date != wed_default:
-                    clear_on_dates(service, 'Limit', wed_default, stats=stats)
+                # Smaž stale Limit eventy na VŠECH možných default pozicích kromě
+                # skutečného wed_date: středa (+2) i čtvrtek (+3). Pokryje i nesoulad
+                # starého _wedDate (St +2) vs wed_default pro Dětskou (Čt +3).
+                for d in {wed_default,
+                          (week_dt + timedelta(days=2)).strftime('%Y-%m-%d'),
+                          (week_dt + timedelta(days=3)).strftime('%Y-%m-%d')}:
+                    if d != wed_date:
+                        clear_on_dates(service, 'Limit', d, stats=stats)
 
                 sync_event(service, 'Limit', wed_date, title, '07:15:00', '15:00:00', stats)
 
