@@ -314,9 +314,13 @@ def sync_calendar(request):
             raw_wed = firestore_value(fw.get('_wedDate')) or firestore_value(fw.get('wedDateOverride'))
             raw_thu = firestore_value(fw.get('_thuDate')) or firestore_value(fw.get('thuDateOverride'))
 
-            mon_date = raw_mon if raw_mon else week_id
-            # Dětská se staví ve čtvrtek (+3), ostatní Limit ve středu (+2) — dle EFEKTIVNÍHO sektoru
-            wed_default = (week_dt + timedelta(days=3 if wed_sector == 'Dětská' else 2)).strftime('%Y-%m-%d')
+            # Od září 2026 se mění rozvrh: Lanovka úterý (+1), Limit vždy čtvrtek (+3).
+            # (parita s isNewSchedule/lanovkaOffset/limitOffset v index.html)
+            new_schedule = week_dt.year > 2026 or (week_dt.year == 2026 and week_dt.month >= 9)
+            mon_default = (week_dt + timedelta(days=1 if new_schedule else 0)).strftime('%Y-%m-%d')
+            mon_date = raw_mon if raw_mon else mon_default
+            # Dětská čtvrtek (+3); od září vše čtvrtek (+3); jinak středa (+2) — dle EFEKTIVNÍHO sektoru
+            wed_default = (week_dt + timedelta(days=3 if (new_schedule or wed_sector == 'Dětská') else 2)).strftime('%Y-%m-%d')
             wed_date = raw_wed if raw_wed else wed_default
             thu_default = (week_dt + timedelta(days=3)).strftime('%Y-%m-%d')
             thu_date = raw_thu if raw_thu else thu_default
@@ -356,12 +360,14 @@ def sync_calendar(request):
                     sync_event(service, 'Sundavání Lanovka', sun, None, '', '', stats)
 
             else:
-                # No Lanovka — delete event and sundavání at ALL possible positions
+                # No Lanovka — smaž event i sundavání na VŠECH možných pozicích
+                # (pondělí +0, úterý +1 od září, plus override datum)
+                mon_tue = (week_dt + timedelta(days=1)).strftime('%Y-%m-%d')
                 clear_on_dates(service, 'Lanovka',
-                               mon_date, week_id,
+                               mon_date, week_id, mon_tue,
                                stats=stats)
                 clear_on_dates(service, 'Sundavání Lanovka',
-                               day_before(mon_date), day_before(week_id),
+                               day_before(mon_date), day_before(week_id), day_before(mon_tue),
                                stats=stats)
 
             # ── LIMIT ───────────────────────────────────────────────────────

@@ -946,15 +946,15 @@
         const mon = new Date(key + 'T12:00:00'); // T12:00:00 aby se ISO date neparsoval jako UTC (timezone shift)
         if (mon.getFullYear() !== year) return;
         const dayName = d => d.toLocaleString('cs-CZ', { weekday: 'long' });
+        const wd = data?.[key] || {};
         const eMon = effSector('mon', key, data, rotationShifts);
         const eWed = effSector('wed', key, data, rotationShifts);
         if (eMon && !eMon.isOff && eMon.sector) {
-          const lanD = addDays(mon, lanovkaOffset(mon));
+          const lanD = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : addDays(mon, lanovkaOffset(mon));
           monthly[lanD.getMonth()].lanovka.push({ day: lanD.getDate(), dayName: dayName(lanD), sector: eMon.sector });
         }
         if (eWed && !eWed.isOff && eWed.sector) {
-          const wOff = limitOffset(mon, eWed.sector);
-          const wedD = addDays(mon, wOff);
+          const wedD = wd.wedDateOverride ? new Date(wd.wedDateOverride + 'T12:00:00') : addDays(mon, limitOffset(mon, eWed.sector));
           monthly[wedD.getMonth()].limit.push({ day: wedD.getDate(), dayName: dayName(wedD), sector: eWed.sector });
         }
         if (entry.thu) {
@@ -1881,6 +1881,7 @@
       const skipFirebaseRotation = React.useRef(false);
       const pendingFlushRef   = React.useRef(null);
       const lastFlushedRef    = React.useRef({}); // weekId → JSON naposledy zapsaného docu (flush jen změn)
+      const lastFlushedRacesRef = React.useRef({}); // raceId → JSON naposledy zapsaného (flush jen změn)
 
       // ── Firestore helpers: null ↔ "__NULL__" ────────────────────────────────
       function toFirestore(weekData) {
@@ -2079,7 +2080,7 @@
           pendingFlushRef.current = null;
         }, 800);
         return () => clearTimeout(t);
-      }, [data, firebaseReady]);
+      }, [data, firebaseReady, rotationShifts]);
 
       // ── Save races to localStorage + Firestore ────────────────────────────
       React.useEffect(() => {
@@ -2087,8 +2088,12 @@
         if (!firebaseReady) return;
         function flushRaces(snap) {
           Object.entries(snap).forEach(([raceId, raceData]) => {
+            const payload = toFirestore(raceData);
+            const sig = JSON.stringify(payload);
+            if (lastFlushedRacesRef.current[raceId] === sig) return; // zapiš jen změněné závody
+            lastFlushedRacesRef.current[raceId] = sig;
             skipFirebaseRaces.current.add(raceId);
-            db.collection('races').doc(raceId).set(toFirestore(raceData), { merge: true }).catch(() => {});
+            db.collection('races').doc(raceId).set(payload, { merge: true }).catch(() => {});
           });
         }
         const t = setTimeout(() => flushRaces(races), 800);
@@ -2631,7 +2636,7 @@
 
         function countWeek(wd, defaultMonDate, calEntry) {
           const effectiveMon = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : addDays(defaultMonDate, lanovkaOffset(defaultMonDate));
-          const effWedSector = wd.wedSectorOverride?.sector ?? calEntry?.wed?.sector;
+          const effWedSector = effSector('wed', weekKey(defaultMonDate), data, rotationShifts)?.sector;
           const wOff = limitOffset(defaultMonDate, effWedSector);
           const effectiveWed = wd.wedDateOverride ? new Date(wd.wedDateOverride + 'T12:00:00') : addDays(defaultMonDate, wOff);
           function tally(name, date) {
@@ -3261,7 +3266,7 @@
                   </div>
                 );
               })()}
-              <MonthlyOccupancy data={data} viewMonday={monday} />
+              <MonthlyOccupancy data={data} viewMonday={monday} rotationShifts={rotationShifts} />
               <RacesPanel races={races} />
               </div>
               <div className="hidden lg:block space-y-3">
