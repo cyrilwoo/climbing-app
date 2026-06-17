@@ -1509,9 +1509,14 @@
       const [slotCount,      setSlotCount]     = useState(4);
       const [dostavbaCount,  setDostavbaCount] = useState(0);
       const [dostavbaDays,   setDostavbaDays]  = useState([]);
+      const _allRaceDates = [date, ...dostavbaDays.map(d => d.date)].filter(Boolean);
+      const _hasInternalDup = new Set(_allRaceDates).size !== _allRaceDates.length;
       const valid = date && sectors.length > 0 && slotCount > 0
-        && dostavbaDays.every(d => d.sectors.length > 0 && d.slotCount > 0);
-      const dateConflict = date && existingRaceDates.has(date);
+        && dostavbaDays.every(d => d.sectors.length > 0 && d.slotCount > 0)
+        && !_hasInternalDup;
+      // Kolize hlavního data NEBO kterékoli dostavby s už existujícím závodem/dostavbou.
+      const dateConflict = (date && existingRaceDates.has(date))
+        || _allRaceDates.some(dt => existingRaceDates.has(dt));
       const toggleSector = s => setSectors(curr => curr.includes(s) ? curr.filter(x => x !== s) : [...curr, s]);
       const isoDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
@@ -3353,7 +3358,7 @@
           {/* Modal: Přidat závod */}
           {showAddRace && (
             <AddRaceModal
-              existingRaceDates={new Set(Object.keys(races || {}))}
+              existingRaceDates={new Set(Object.values(races || {}).flatMap(r => [r.date, ...((r.dostavba || []).map(d => d.date))]).filter(Boolean))}
               onClose={() => setShowAddRace(false)}
               onSave={addRace} />
           )}
