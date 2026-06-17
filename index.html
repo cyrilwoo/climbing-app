@@ -2442,12 +2442,16 @@
           return true;
         }
         const arr = week[session] || E4();
-        if (arr[idx] != null) return false; // != handles null i undefined
-        if (arr.includes(climber)) return false;
+        if (arr[idx] != null) return false; // cílový slot obsazený – nepřepisuj
         setWeek(w => {
           const cur = w[session] || E4();
-          if (cur[idx] != null || cur.includes(climber)) return w;
-          return { ...w, [session]: cur.map((s,i) => i === idx ? climber : s) };
+          if (cur[idx] != null) return w;
+          // Je-li stavěč v téhle session už jinde (typicky „navíc" po přehození na
+          // menší profil), PŘESUŇ ho sem – uvolni starou pozici – místo blokování.
+          // Tím jde vždy zapsat a nikde „nezůstane viset". Bez duplicit (max 1× v session).
+          const moved = cur.map(s => s === climber ? null : s);
+          moved[idx] = climber;
+          return { ...w, [session]: moved };
         });
         return true;
       }
