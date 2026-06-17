@@ -82,7 +82,9 @@ def get_calendar_service():
 
 
 def list_events_on_date(service, date_str):
-    """List events on a specific date"""
+    """List events on a date. Vrací None při chybě (fail-closed: volající NESMÍ
+    při None nic vytvářet ani mazat — jinak by se na transientní API chybě
+    naskládal duplikát / smazal špatný event)."""
     start = f"{date_str}T00:00:00Z"
     end   = f"{date_str}T23:59:59Z"
     try:
@@ -94,14 +96,19 @@ def list_events_on_date(service, date_str):
         return result.get('items', [])
     except Exception as e:
         print(f"ERROR listing events on {date_str}: {e}")
-        return []
+        return None
 
 
-def find_event(events, prefix):
-    for ev in events:
-        if ev.get('summary', '').startswith(prefix):
-            return ev
-    return None
+def _matches(summary, prefix):
+    """True jen pro eventy, které tenhle sync sám vyrábí — ne ruční eventy.
+    Sync tituly: '{prefix} — …' (stavění), '{prefix} | …' (sundavání) nebo
+    přesně '{prefix}' (Tělocvična). 'Lanovka otevřená' apod. se NEsmaže."""
+    return summary == prefix or summary.startswith(prefix + ' — ') or summary.startswith(prefix + ' | ')
+
+
+def find_events(events, prefix):
+    """VŠECHNY shody (kvůli dedupu duplicit), ne jen první."""
+    return [ev for ev in events if _matches(ev.get('summary', ''), prefix)]
 
 
 def _delete(service, event_id):
@@ -147,29 +154,36 @@ def sync_event(service, prefix, date, title, start_time, end_time, stats):
     Returns nothing; mutates stats dict.
     """
     events = list_events_on_date(service, date)
-    ev = find_event(events, prefix)
+    if events is None:
+        return  # listing selhal → fail-closed (nic nevytvářej/nemaž)
+    matches = find_events(events, prefix)
     if title is None:
-        if ev:
-            _delete(service, ev['id'])
-            stats['deleted'] += 1
+        for ev in matches:
+            if _delete(service, ev['id']):
+                stats['deleted'] += 1
     else:
-        if ev:
-            if ev.get('summary') != title:
-                _update(service, ev['id'], title)
-                stats['updated'] += 1
+        if matches:
+            keep = matches[0]
+            if keep.get('summary') != title:
+                if _update(service, keep['id'], title):
+                    stats['updated'] += 1
+            for ev in matches[1:]:  # smaž duplicity (self-heal)
+                if _delete(service, ev['id']):
+                    stats['deleted'] += 1
         else:
-            _create(service, title, date, start_time, end_time)
-            stats['created'] += 1
+            if _create(service, title, date, start_time, end_time):
+                stats['created'] += 1
 
 
 def clear_on_dates(service, prefix, *dates, stats):
-    """Delete events with `prefix` on any of the given dates (deduped)."""
+    """Smaž VŠECHNY sync-eventy s `prefix` na daných datech (deduped vstup)."""
     for d in dict.fromkeys(d for d in dates if d):  # dedup, preserve order
         events = list_events_on_date(service, d)
-        ev = find_event(events, prefix)
-        if ev:
-            _delete(service, ev['id'])
-            stats['deleted'] += 1
+        if events is None:
+            continue  # fail-closed
+        for ev in find_events(events, prefix):
+            if _delete(service, ev['id']):
+                stats['deleted'] += 1
 
 
 def day_before(date_str):
@@ -247,12 +261,14 @@ def sync_calendar(request):
         shifts_limit   = rstate.get('limit') or []
 
         service = get_calendar_service()
-        now = datetime.now()
+        # Porovnávej KALENDÁŘNÍ dny (ne datetime s časem) — jinak (midnight − now)
+        # floorem zaokrouhlí týden „přesně −7 dní" na −8 a vypadne podle denní doby.
+        today = datetime.now().date()
         stats = {'created': 0, 'updated': 0, 'deleted': 0}
 
         weeks_to_sync = [
             wid for wid in sorted(cal.keys())
-            if -7 <= (datetime.strptime(wid, '%Y-%m-%d') - now).days <= 130
+            if -7 <= (datetime.strptime(wid, '%Y-%m-%d').date() - today).days <= 130
         ]
 
         for week_id in weeks_to_sync:
@@ -398,12 +414,16 @@ def sync_calendar(request):
 
                 sync_event(service, 'Limit', wed_date, title, '07:15:00', '15:00:00', stats)
 
-                # Sundavání
+                # Sundavání — smaž stale na den-před všemi default pozicemi (St +2 i
+                # Čt +3) kromě aktuální (symetrie s Lanovka větví; jinak orphan u
+                # Dětské, když se staré _wedDate=St vs nové wed_default=Čt).
                 sun = day_before(wed_date)
-                if wed_date != wed_default:
-                    old_sun = day_before(wed_default)
-                    if old_sun != sun:
-                        clear_on_dates(service, 'Sundavání Limit', old_sun, stats=stats)
+                for d in {wed_default,
+                          (week_dt + timedelta(days=2)).strftime('%Y-%m-%d'),
+                          (week_dt + timedelta(days=3)).strftime('%Y-%m-%d')}:
+                    od = day_before(d)
+                    if od != sun:
+                        clear_on_dates(service, 'Sundavání Limit', od, stats=stats)
 
                 if wed_sun:
                     s = format_setters(wed_sun)
