@@ -491,13 +491,11 @@
       const sectorSlots = calInfo?.sector && !calInfo.isOff
         ? (isGreen ? 2 : isYellow ? getLanovkaSlotCount(calInfo.sector) : getWedSlotCount(calInfo.sector))
         : safeSlots.length;
-      // Počet slotů určuje PROFIL (ne počet zapsaných). Stavěči obsazení nad rámec
-      // profilu (typicky po přehození profilu na menší – „Dole kout" má 2 sloty)
-      // se ukážou zvlášť jako „navíc" s křížkem, ať profil drží svůj počet slotů
-      // a zároveň nikdo nezůstane skrytý/nesmazatelný (dedup).
+      // Počet slotů určuje PROFIL (ne počet zapsaných). Přebyteční stavěči nad rámec
+      // profilu (po přehození na menší profil) se nezobrazují – při přehození se rovnou
+      // zahodí (viz doReplace), takže tu žádný přebytek nezůstává.
       const maxSlots = sectorSlots;
       const visibleSlots = safeSlots.slice(0, maxSlots);
-      const overflow = safeSlots.map((n, i) => ({ n, i })).filter(x => x.n && x.i >= maxSlots);
       const filled = visibleSlots.filter(Boolean).length + (lanoSlot && calInfo != null ? 1 : 0);
       const total  = maxSlots + (lanoSlot !== undefined && calInfo != null ? 1 : 0);
       const allFilled = filled === total;
@@ -667,26 +665,6 @@
               ))
             )}
 
-            {/* Stavěči „navíc" – obsazení nad rámec profilu (po přehození na menší profil).
-                Profil drží svůj počet slotů; přebytek je tu vidět a dá se odebrat. */}
-            {calInfo != null && !calInfo.isOff && overflow.length > 0 && (
-              <div className={`mt-2 rounded-xl px-3 py-2 ${isYellow ? 'bg-amber-50 border border-amber-200' : 'bg-zinc-800/60 border border-zinc-700'}`}>
-                <p className={`text-[11px] font-bold mb-1.5 ${isYellow ? 'text-amber-700' : 'text-pink-300'}`}>
-                  Navíc po přehození · profil má {maxSlots} {maxSlots === 1 ? 'slot' : maxSlots < 5 ? 'sloty' : 'slotů'} — odeber:
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {overflow.map(({ n, i }) => (
-                    <button key={i} onClick={() => onSlotClick(i)} title="Odebrat ze stavění"
-                      className={`inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-semibold transition-colors
-                        ${isYellow ? 'bg-white text-amber-800 border border-amber-300 hover:bg-amber-100' : 'bg-zinc-700 text-white border border-zinc-600 hover:bg-zinc-600'}`}>
-                      {n}
-                      <X c="w-3 h-3 opacity-70" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Lano section (Lanovka only) */}
             {lanoSlot !== undefined && calInfo != null && !calInfo?.isOff && (
               <div className="mt-3 pt-3 border-t border-amber-100">
@@ -742,13 +720,17 @@
             <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold
               ${isSelected ? 'bg-white/20 text-white' : 'bg-pink-100 text-pink-700'}`}>St</span>
           )}
-          <button onClick={e => { e.stopPropagation(); onRemove(); }}
-            className={`ml-0.5 p-0.5 rounded-full transition-colors flex-shrink-0
-              ${isSelected
-                ? 'text-white/50 hover:text-white hover:bg-white/20'
-                : 'text-gray-300 hover:text-red-400 hover:bg-red-50'}`}>
-            <X c="w-3 h-3" />
-          </button>
+          {/* Křížek (smazat) jen pro hosty – stálí stavěči se nemažou (jsou trvalí
+              a mazání jen působilo problémy). Host je dočasný, ten zůstane odebíratelný. */}
+          {isHost && (
+            <button onClick={e => { e.stopPropagation(); onRemove(); }}
+              className={`ml-0.5 p-0.5 rounded-full transition-colors flex-shrink-0
+                ${isSelected
+                  ? 'text-white/50 hover:text-white hover:bg-white/20'
+                  : 'text-gray-300 hover:text-red-400 hover:bg-red-50'}`}>
+              <X c="w-3 h-3" />
+            </button>
+          )}
         </div>
       );
     }
@@ -2344,7 +2326,12 @@
         const secThis  = effSector(venue, key, data, rotationShifts);
         const secOther = effSector(venue, otherKey, data, rotationShifts);
         if (!secThis?.sector || !secOther?.sector) return;
-        const ovKey = venue === 'mon' ? 'monSectorOverride' : 'wedSectorOverride';
+        const ovKey  = venue === 'mon' ? 'monSectorOverride' : 'wedSectorOverride';
+        const arrKey = venue === 'mon' ? 'monday' : 'wednesday';
+        const slotsFor = sec => venue === 'mon' ? getLanovkaSlotCount(sec) : getWedSlotCount(sec);
+        // Po přehození na menší profil zahodit přebyteční stavěče (nad rámec nového
+        // počtu slotů) – ať nikde „nevisí". Zachová první obsazené, zbytek zahodí.
+        const trim = (arr, n) => { const kept = (arr || []).filter(Boolean).slice(0, n); while (kept.length < n) kept.push(null); return kept; };
         setData(d => {
           const out = { ...d };
           // Pojistka: je-li některá strana už ve swapu s JINÝM týdnem, nejdřív uvolni
@@ -2355,8 +2342,8 @@
               out[ov.partner] = { ...d[ov.partner], [ovKey]: null };
             }
           }
-          out[key]      = { ...(out[key] ?? initWeek(key)),           [ovKey]: { sector: secOther.sector, kind: 'swap', partner: otherKey, lano: null, setters: [] } };
-          out[otherKey] = { ...(out[otherKey] ?? initWeek(otherKey)), [ovKey]: { sector: secThis.sector,  kind: 'swap', partner: key,      lano: null, setters: [] } };
+          out[key]      = { ...(d[key] ?? initWeek(key)),           [ovKey]: { sector: secOther.sector, kind: 'swap', partner: otherKey, lano: null, setters: [] }, [arrKey]: trim(d[key]?.[arrKey],      slotsFor(secOther.sector)) };
+          out[otherKey] = { ...(d[otherKey] ?? initWeek(otherKey)), [ovKey]: { sector: secThis.sector,  kind: 'swap', partner: key,      lano: null, setters: [] }, [arrKey]: trim(d[otherKey]?.[arrKey], slotsFor(secThis.sector)) };
           return out;
         });
         setReplaceModal(null);
