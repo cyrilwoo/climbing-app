@@ -81,7 +81,7 @@
     function withCoreTeam(arr) {
       const base = Array.isArray(arr) ? arr.filter(x => typeof x === 'string') : [];
       const extras = base.filter(n => !TEAM.includes(n));
-      return [...TEAM, ...extras];
+      return [...new Set([...TEAM, ...extras])]; // dedup → žádné duplicitní React klíče
     }
     const E4   = () => [null, null, null, null];
 
@@ -304,8 +304,9 @@
     function initWeek(key) {
       const c = CAL[key];
       if (!c) {
-        // default: Cyril in wed slot 1
-        return { monday: E4(), mondayLano: null, wednesday: ['Cyril', null, null, null], thursday: E4(),
+        // Mimo CAL = žádné stavění → prázdné sloty (dřív tu byl default Cyril
+        // ve wed slotu, který je neviditelný, ale nafukoval Cyrilovi statistiky).
+        return { monday: E4(), mondayLano: null, wednesday: E4(), thursday: E4(),
                  mondaySundavaci: [], mondayMyti: null, wednesdaySundavaci: [], wednesdayMyti: null,
                  thuDateOverride: null, monDateOverride: null, wedDateOverride: null };
       }
@@ -630,7 +631,7 @@
             <div className="mt-3 flex items-center gap-2.5">
               <div className={`flex-1 ${progTrack} rounded-full h-1.5`}>
                 <div className={`${progFill} rounded-full h-1.5 transition-all duration-500`}
-                  style={{ width: `${(filled / total) * 100}%` }} />
+                  style={{ width: `${total ? (filled / total) * 100 : 0}%` }} />
               </div>
               <span className={`text-xs font-bold tabular-nums ${countCol}`}>
                 {allFilled && '✓ '}{filled}/{total}
@@ -2150,7 +2151,14 @@
           }
         };
         document.addEventListener('visibilitychange', handleHide);
-        return () => document.removeEventListener('visibilitychange', handleHide);
+        // Zrušený/upuštěný drag mimo drop zónu → vyčisti stav (jinak zůstane viset
+        // červený banner „Přetáhněte sem pro odebrání").
+        const handleDragEnd = () => setDrag(null);
+        document.addEventListener('dragend', handleDragEnd);
+        return () => {
+          document.removeEventListener('visibilitychange', handleHide);
+          document.removeEventListener('dragend', handleDragEnd);
+        };
       }, []);
 
       const monday = addDays(getMonday(new Date()), offset * 7);
