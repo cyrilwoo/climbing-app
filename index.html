@@ -2605,6 +2605,23 @@
           }
           return out;
         });
+        // Vyčisti smazaného i ze závodů a dostaveb (dialog to slibuje).
+        setRaces(rs => {
+          const nul = v => v === name ? null : v;
+          const nulArr = a => a == null ? a : a.map(nul);
+          const filArr = a => a == null ? a : a.filter(x => x !== name);
+          const out = {};
+          for (const [k, r] of Object.entries(rs)) {
+            out[k] = {
+              ...r,
+              setters:   nulArr(r.setters),
+              sundavaci: filArr(r.sundavaci),
+              myti:      nul(r.myti),
+              dostavba:  (r.dostavba || []).map(d => ({ ...d, setters: nulArr(d.setters) })),
+            };
+          }
+          return out;
+        });
       }
 
       // ── Drag ──────────────────────────────────────────────────────────────
