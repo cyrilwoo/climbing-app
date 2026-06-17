@@ -1932,8 +1932,11 @@
           _thuDate:   weekData.thuDateOverride || toIso(addDays(monBase, 3)),
           _monCancelled: weekData.monSectorOverride?.isOff === true ? true : null,
           _wedCancelled: weekData.wedSectorOverride?.isOff === true ? true : null,
-          _monShifted: weekData.monSavedSetters != null ? true : null,
-          _wedShifted: weekData.wedSavedSetters != null ? true : null,
+          // Navázat na shift LIST (zdroj pravdy), ne na monSavedSetters — ty může
+          // deleteClimber poškodit z null na [] a tím chybně označit VŠECHNY týdny
+          // jako shifted → sync by smazal všechna stavění.
+          _monShifted: (shifts?.lanovka || []).includes(weekId) ? true : null,
+          _wedShifted: (shifts?.limit || []).includes(weekId) ? true : null,
         };
         return toFirestore(enriched);
       }
@@ -1962,18 +1965,21 @@
         // Use docChanges() to process only added/modified docs, not the full snapshot every time
         const unsub = db.collection('weeks').onSnapshot(snapshot => {
           const loaded = {};
+          const removed = [];
           snapshot.docChanges().forEach(change => {
-            if (change.type === 'removed') return;
             const doc = change.doc;
+            if (change.type === 'removed') { removed.push(doc.id); return; }
             if (skipFirebaseWeeks.current.has(doc.id)) {
               skipFirebaseWeeks.current.delete(doc.id);
               return; // vlastní zápis — přeskoč
             }
             loaded[doc.id] = fromFirestore(doc.data());
           });
-          if (Object.keys(loaded).length === 0) return;
+          if (Object.keys(loaded).length === 0 && removed.length === 0) return;
           setData(prev => {
             const merged = { ...prev, ...loaded };
+            // Smazaný týden zmiz i lokálně (jinak ho příští flush „obživne").
+            removed.forEach(id => { delete merged[id]; delete lastFlushedRef.current[id]; });
             if (JSON.stringify(merged) === JSON.stringify(prev)) return prev;
             // Vzdáleně změněné týdny ber jako už-flushnuté → příští flush je nepřepíše zpět.
             Object.keys(loaded).forEach(weekId => {
@@ -1989,6 +1995,8 @@
           if (!snapshot.empty) {
             const loaded = {};
             snapshot.forEach(doc => { loaded[doc.id] = fromFirestore(doc.data()); });
+            // Seed lastFlushedRacesRef — jinak první flush přepíše všechny závody.
+            Object.keys(loaded).forEach(id => { lastFlushedRacesRef.current[id] = JSON.stringify(toFirestore(loaded[id])); });
             setRaces(prev => ({ ...prev, ...loaded }));
           }
         }).catch(() => {});
@@ -2017,8 +2025,11 @@
           if (Object.keys(loaded).length === 0 && removed.length === 0) return;
           setRaces(prev => {
             const merged = { ...prev, ...loaded };
-            removed.forEach(id => { delete merged[id]; });
-            return JSON.stringify(merged) !== JSON.stringify(prev) ? merged : prev;
+            removed.forEach(id => { delete merged[id]; delete lastFlushedRacesRef.current[id]; });
+            if (JSON.stringify(merged) === JSON.stringify(prev)) return prev;
+            // Vzdáleně změněné závody ber jako už-flushnuté.
+            Object.keys(loaded).forEach(id => { lastFlushedRacesRef.current[id] = JSON.stringify(toFirestore(merged[id])); });
+            return merged;
           });
         });
 
@@ -2561,8 +2572,10 @@
           const out = {};
           for (const [k,w] of Object.entries(d)) {
             const nullify = v => v === name ? null : v;
-            const nullifyArr = a => (a || []).map(nullify);
-            const filterArr = a => (a || []).filter(x => x !== name);
+            // Zachovej null (neměň null → [] — to dřív poškozovalo monSavedSetters
+            // a přes _monShifted to mohlo smazat všechna stavění v kalendáři).
+            const nullifyArr = a => a == null ? a : a.map(nullify);
+            const filterArr = a => a == null ? a : a.filter(x => x !== name);
             out[k] = {
               ...w,
               monday:    nullifyArr(w.monday),
@@ -2751,8 +2764,8 @@
           const wd = data[k];
           const effWedSector = effSector('wed', k, data, rotationShifts)?.sector;
           const wOff = limitOffset(monBase, effWedSector);
-          const wedDate = wd.wedDateOverride ? new Date(wd.wedDateOverride) : addDays(monBase, wOff);
-          const lanDate = wd.monDateOverride ? new Date(wd.monDateOverride) : addDays(monBase, lanovkaOffset(monBase));
+          const wedDate = wd.wedDateOverride ? new Date(wd.wedDateOverride + 'T12:00:00') : addDays(monBase, wOff);
+          const lanDate = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : addDays(monBase, lanovkaOffset(monBase));
           const sundMon = addDays(lanDate, -1);
           const sundWed = addDays(wedDate, -1);
           (wd.mondaySundavaci || []).forEach(n => tally(n, sundMon, 'sund'));
