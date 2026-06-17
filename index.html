@@ -491,12 +491,13 @@
       const sectorSlots = calInfo?.sector && !calInfo.isOff
         ? (isGreen ? 2 : isYellow ? getLanovkaSlotCount(calInfo.sector) : getWedSlotCount(calInfo.sector))
         : safeSlots.length;
-      // Nikdy neskrývej už přiřazené stavěče: když profil (typicky po swapu na menší
-      // profil) má míň slotů než kolik je obsazeno, zobraz tolik slotů, ať jsou vidět
-      // všichni (jinak „zmizí" za posledním slotem a nejdou ani znovu přidat – dedup).
-      const lastFilled = safeSlots.reduce((m, s, i) => s != null ? i + 1 : m, 0);
-      const maxSlots = Math.max(sectorSlots, lastFilled);
+      // Počet slotů určuje PROFIL (ne počet zapsaných). Stavěči obsazení nad rámec
+      // profilu (typicky po přehození profilu na menší – „Dole kout" má 2 sloty)
+      // se ukážou zvlášť jako „navíc" s křížkem, ať profil drží svůj počet slotů
+      // a zároveň nikdo nezůstane skrytý/nesmazatelný (dedup).
+      const maxSlots = sectorSlots;
       const visibleSlots = safeSlots.slice(0, maxSlots);
+      const overflow = safeSlots.map((n, i) => ({ n, i })).filter(x => x.n && x.i >= maxSlots);
       const filled = visibleSlots.filter(Boolean).length + (lanoSlot && calInfo != null ? 1 : 0);
       const total  = maxSlots + (lanoSlot !== undefined && calInfo != null ? 1 : 0);
       const allFilled = filled === total;
@@ -664,6 +665,26 @@
                   onDragStart={() => onDragStartSlot(i, name)}
                   onDrop={() => onDropSlot(i)} />
               ))
+            )}
+
+            {/* Stavěči „navíc" – obsazení nad rámec profilu (po přehození na menší profil).
+                Profil drží svůj počet slotů; přebytek je tu vidět a dá se odebrat. */}
+            {calInfo != null && !calInfo.isOff && overflow.length > 0 && (
+              <div className={`mt-2 rounded-xl px-3 py-2 ${isYellow ? 'bg-amber-50 border border-amber-200' : 'bg-zinc-800/60 border border-zinc-700'}`}>
+                <p className={`text-[11px] font-bold mb-1.5 ${isYellow ? 'text-amber-700' : 'text-pink-300'}`}>
+                  Navíc po přehození · profil má {maxSlots} {maxSlots === 1 ? 'slot' : maxSlots < 5 ? 'sloty' : 'slotů'} — odeber:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {overflow.map(({ n, i }) => (
+                    <button key={i} onClick={() => onSlotClick(i)} title="Odebrat ze stavění"
+                      className={`inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-semibold transition-colors
+                        ${isYellow ? 'bg-white text-amber-800 border border-amber-300 hover:bg-amber-100' : 'bg-zinc-700 text-white border border-zinc-600 hover:bg-zinc-600'}`}>
+                      {n}
+                      <X c="w-3 h-3 opacity-70" />
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* Lano section (Lanovka only) */}
