@@ -2978,6 +2978,11 @@
                       stavba: renderReplacementStavba(monReplacement),
                       sundavani: monReplacement.kind === 'race' ? renderRaceSund(monReplacement.race) : null,
                     });
+                  } else if ((monday.getMonth() === 6 || monday.getMonth() === 7) && calMon?.isOff) {
+                    // O prázdninách (čvc–srp) skryj nestavící Lanovku ("Volný týden") —
+                    // OFF karta stejně nezobrazuje žádné sloty, jen "není stavění", takže
+                    // skrytí nic viditelného neztratí. Data (případní zbytkoví stavěči)
+                    // zůstávají uložená, jen se nezobrazuje prázdná karta.
                   } else {
                     slots.push({
                       stavba: <SessionCard
@@ -3010,6 +3015,9 @@
                       stavba: renderReplacementStavba(wedReplacement),
                       sundavani: wedReplacement.kind === 'race' ? renderRaceSund(wedReplacement.race) : null,
                     });
+                  } else if ((monday.getMonth() === 6 || monday.getMonth() === 7) && calWed?.isOff) {
+                    // O prázdninách (čvc–srp) skryj nestavící Limit ("Volný týden") —
+                    // OFF karta nezobrazuje sloty, jen "není stavění". Data zůstávají.
                   } else {
                     slots.push({
                       stavba: <SessionCard
