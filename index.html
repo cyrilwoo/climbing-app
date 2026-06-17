@@ -488,9 +488,14 @@
       // Defenzivní: data z Firestore mohou mít chybějící pole (např. týden má jen monday bez wednesday)
       const safeSlots = Array.isArray(slots) ? slots : [null, null, null, null];
       // Slot count: Tělocvična=2, Lanovka=variable, Limit=variable
-      const maxSlots = calInfo?.sector && !calInfo.isOff
+      const sectorSlots = calInfo?.sector && !calInfo.isOff
         ? (isGreen ? 2 : isYellow ? getLanovkaSlotCount(calInfo.sector) : getWedSlotCount(calInfo.sector))
         : safeSlots.length;
+      // Nikdy neskrývej už přiřazené stavěče: když profil (typicky po swapu na menší
+      // profil) má míň slotů než kolik je obsazeno, zobraz tolik slotů, ať jsou vidět
+      // všichni (jinak „zmizí" za posledním slotem a nejdou ani znovu přidat – dedup).
+      const lastFilled = safeSlots.reduce((m, s, i) => s != null ? i + 1 : m, 0);
+      const maxSlots = Math.max(sectorSlots, lastFilled);
       const visibleSlots = safeSlots.slice(0, maxSlots);
       const filled = visibleSlots.filter(Boolean).length + (lanoSlot && calInfo != null ? 1 : 0);
       const total  = maxSlots + (lanoSlot !== undefined && calInfo != null ? 1 : 0);
