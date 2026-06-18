@@ -343,7 +343,9 @@ def sync_calendar(request):
             # Dětská čtvrtek (+3); od září vše čtvrtek (+3); jinak středa (+2) — dle EFEKTIVNÍHO sektoru
             wed_default = (week_dt + timedelta(days=3 if (new_schedule or wed_sector == 'Dětská') else 2)).strftime('%Y-%m-%d')
             wed_date = raw_wed if raw_wed else wed_default
-            thu_default = (week_dt + timedelta(days=3)).strftime('%Y-%m-%d')
+            # Tělocvična: od září 2026 v PÁTEK (+4), předtím čtvrtek (+3).
+            # (parita s gymOffset v index.html)
+            thu_default = (week_dt + timedelta(days=4 if new_schedule else 3)).strftime('%Y-%m-%d')
             thu_date = raw_thu if raw_thu else thu_default
 
             # ── LANOVKA ─────────────────────────────────────────────────────
@@ -448,20 +450,24 @@ def sync_calendar(request):
                     clear_on_dates(service, 'Sundavání Limit', day_before(d), stats=stats)
 
             # ── TĚLOCVIČNA ──────────────────────────────────────────────────
+            # Možné pozice: čtvrtek (+3, starý rozvrh) i pátek (+4, od září 2026).
+            thu_thu = (week_dt + timedelta(days=3)).strftime('%Y-%m-%d')
+            thu_fri = (week_dt + timedelta(days=4)).strftime('%Y-%m-%d')
             if thu_code:
                 setters_str = format_setters(thu_setters)
                 title = "Tělocvična"
                 if setters_str:
                     title += f" | {setters_str}"
 
-                # Delete stale event from default Thursday if date was moved
-                if thu_date != thu_default:
-                    clear_on_dates(service, 'Tělocvična', thu_default, stats=stats)
+                # Smaž stale na VŠECH pozicích kromě aktuální (pokrývá přesun Čt→Pá).
+                for d in {thu_thu, thu_fri, thu_default}:
+                    if d != thu_date:
+                        clear_on_dates(service, 'Tělocvična', d, stats=stats)
 
                 sync_event(service, 'Tělocvična', thu_date, title, '08:00:00', '12:00:00', stats)
             else:
-                # No Tělocvična this week — delete at both possible positions
-                clear_on_dates(service, 'Tělocvična', thu_date, thu_default, stats=stats)
+                # Žádná Tělocvična — smaž na všech možných pozicích (Čt +3 i Pá +4).
+                clear_on_dates(service, 'Tělocvična', thu_date, thu_default, thu_thu, thu_fri, stats=stats)
 
         result = f"✓ Sync completed: created={stats['created']}, updated={stats['updated']}, deleted={stats['deleted']}"
         print(result)

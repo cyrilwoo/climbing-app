@@ -131,6 +131,11 @@
       if (isNewSchedule(monday)) return 3;
       return isDetskaWed(sectorName) ? 3 : 2;
     }
+    // Tělocvična: od září 2026 v PÁTEK (+4), předtím čtvrtek (+3). Staví se každé
+    // 4 týdny (viz thu: TG v CAL), první zářijové stavění 18.9.2026 (týden 2026-09-14).
+    function gymOffset(monday) {
+      return isNewSchedule(monday) ? 4 : 3;
+    }
     const CAL = {
       // ── LEDEN–BŘEZEN: Lanovka bez sektoru, Limit ještě nezačal ───
       '2026-01-05': { mon: M },
@@ -176,52 +181,52 @@
       '2026-08-31': { mon: L5 },
       // ── ZÁŘÍ ─────────────────────────────────────────────────────
       '2026-09-07': { mon: L1, wed: V },
-      '2026-09-14': { mon: L2, wed: D },
+      '2026-09-14': { mon: L2, wed: D, thu: TG },   // Tělocvična pátek 18.9. (start)
       '2026-09-21': { mon: L3, wed: P },
-      '2026-09-28': { mon: L4, wed: Z, thu: TG },
+      '2026-09-28': { mon: L4, wed: Z },
       // ── ŘÍJEN ────────────────────────────────────────────────────
       '2026-10-05': { mon: L5, wed: K },
-      '2026-10-12': { mon: L1, wed: V },
+      '2026-10-12': { mon: L1, wed: V, thu: TG },   // Tělocvična pátek 16.10.
       '2026-10-19': { mon: L2, wed: D },
-      '2026-10-26': { mon: L3, wed: P, thu: TG },
+      '2026-10-26': { mon: L3, wed: P },
       // ── LISTOPAD ─────────────────────────────────────────────────
       '2026-11-02': { mon: L4, wed: Z },
-      '2026-11-09': { mon: L5, wed: K },
+      '2026-11-09': { mon: L5, wed: K, thu: TG },   // Tělocvična pátek 13.11.
       '2026-11-16': { mon: L1, wed: V },
-      '2026-11-23': { mon: L2, wed: D, thu: TG },
+      '2026-11-23': { mon: L2, wed: D },
       '2026-11-30': { mon: L3, wed: P },
       // ── PROSINEC ─────────────────────────────────────────────────
-      '2026-12-07': { mon: L4, wed: Z },
+      '2026-12-07': { mon: L4, wed: Z, thu: TG },   // Tělocvična pátek 11.12.
       '2026-12-14': { mon: L5, wed: K },
-      '2026-12-21': { mon: L1, wed: V, thu: TG },
+      '2026-12-21': { mon: L1, wed: V },
       '2026-12-28': { mon: L2, wed: D },
       // ══════════════════════════════════════════════════════════════
       // ROK 2027 — pokračování rotace (Lanovka cyklus L1-L5, Limit D-P-Z-K-V, Tělocvična každé 4 týdny)
       // ══════════════════════════════════════════════════════════════
       // ── LEDEN 2027 ───────────────────────────────────────────────
-      '2027-01-04': { mon: L3, wed: P },
+      '2027-01-04': { mon: L3, wed: P, thu: TG },
       '2027-01-11': { mon: L4, wed: Z },
-      '2027-01-18': { mon: L5, wed: K, thu: TG },
+      '2027-01-18': { mon: L5, wed: K },
       '2027-01-25': { mon: L1, wed: V },
       // ── ÚNOR 2027 ────────────────────────────────────────────────
-      '2027-02-01': { mon: L2, wed: D },
+      '2027-02-01': { mon: L2, wed: D, thu: TG },
       '2027-02-08': { mon: L3, wed: P },
-      '2027-02-15': { mon: L4, wed: Z, thu: TG },
+      '2027-02-15': { mon: L4, wed: Z },
       '2027-02-22': { mon: L5, wed: K },
       // ── BŘEZEN 2027 ──────────────────────────────────────────────
-      '2027-03-01': { mon: L1, wed: V },
+      '2027-03-01': { mon: L1, wed: V, thu: TG },
       '2027-03-08': { mon: L2, wed: D },
-      '2027-03-15': { mon: L3, wed: P, thu: TG },
+      '2027-03-15': { mon: L3, wed: P },
       '2027-03-22': { mon: L4, wed: Z },
-      '2027-03-29': { mon: L5, wed: K },
+      '2027-03-29': { mon: L5, wed: K, thu: TG },
       // ── DUBEN 2027 ───────────────────────────────────────────────
       '2027-04-05': { mon: L1, wed: V },
-      '2027-04-12': { mon: L2, wed: D, thu: TG },
+      '2027-04-12': { mon: L2, wed: D },
       '2027-04-19': { mon: L3, wed: P },
-      '2027-04-26': { mon: L4, wed: Z },
+      '2027-04-26': { mon: L4, wed: Z, thu: TG },
       // ── KVĚTEN 2027 ──────────────────────────────────────────────
       '2027-05-03': { mon: L5, wed: K },
-      '2027-05-10': { mon: L1, wed: V, thu: TG },
+      '2027-05-10': { mon: L1, wed: V },
       '2027-05-17': { mon: L2, wed: D },
       '2027-05-24': { mon: L3, wed: P },
       '2027-05-31': { mon: L4, wed: Z },
@@ -243,24 +248,24 @@
       '2027-08-30': { mon: L3 },
       // ── ZÁŘÍ 2027 ────────────────────────────────────────────────
       '2027-09-06': { mon: L4, wed: Z },
-      '2027-09-13': { mon: L5, wed: K },
+      '2027-09-13': { mon: L5, wed: K, thu: TG },
       '2027-09-20': { mon: L1, wed: V },
-      '2027-09-27': { mon: L2, wed: D, thu: TG },
+      '2027-09-27': { mon: L2, wed: D },
       // ── ŘÍJEN 2027 ───────────────────────────────────────────────
       '2027-10-04': { mon: L3, wed: P },
-      '2027-10-11': { mon: L4, wed: Z },
+      '2027-10-11': { mon: L4, wed: Z, thu: TG },
       '2027-10-18': { mon: L5, wed: K },
-      '2027-10-25': { mon: L1, wed: V, thu: TG },
+      '2027-10-25': { mon: L1, wed: V },
       // ── LISTOPAD 2027 ────────────────────────────────────────────
       '2027-11-01': { mon: L2, wed: D },
-      '2027-11-08': { mon: L3, wed: P },
+      '2027-11-08': { mon: L3, wed: P, thu: TG },
       '2027-11-15': { mon: L4, wed: Z },
-      '2027-11-22': { mon: L5, wed: K, thu: TG },
+      '2027-11-22': { mon: L5, wed: K },
       '2027-11-29': { mon: L1, wed: V },
       // ── PROSINEC 2027 ────────────────────────────────────────────
-      '2027-12-06': { mon: L2, wed: D },
+      '2027-12-06': { mon: L2, wed: D, thu: TG },
       '2027-12-13': { mon: L3, wed: P },
-      '2027-12-20': { mon: L4, wed: Z, thu: TG },
+      '2027-12-20': { mon: L4, wed: Z },
       '2027-12-27': { mon: L5, wed: K },
     };
 
@@ -1137,7 +1142,7 @@
         }
         const cThu = CAL[wk]?.thu;
         if (cThu && !cThu.isOff && cThu.sector) {
-          const d = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(mondayD, 3);
+          const d = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(mondayD, gymOffset(mondayD));
           add(iso(d), { wall: 'Tělocvična', sector: cThu.sector, cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' });
         }
       });
@@ -1251,7 +1256,7 @@
                 }
                 // Tělocvična — Thursday (+3)
                 if (calEntry?.thu && !calEntry.thu.isOff) {
-                  const sessionDate = addDays(monDate, 3);
+                  const sessionDate = addDays(monDate, gymOffset(monDate));
                   if (sessionDate.getFullYear() === year && sessionDate.getMonth() === month) {
                     thuTotal += 2;
                     thuFill += (wd.thursday || []).slice(0, 2).filter(Boolean).length;
@@ -1943,7 +1948,7 @@
           _thuSector: (calThu && !calThu.isOff && calThu.sector) ? calThu.sector : null,
           _monDate:   weekData.monDateOverride || toIso(addDays(monBase, lOff)),
           _wedDate:   weekData.wedDateOverride || toIso(addDays(monBase, wOff)),
-          _thuDate:   weekData.thuDateOverride || toIso(addDays(monBase, 3)),
+          _thuDate:   weekData.thuDateOverride || toIso(addDays(monBase, gymOffset(monBase))),
           _monCancelled: weekData.monSectorOverride?.isOff === true ? true : null,
           _wedCancelled: weekData.wedSectorOverride?.isOff === true ? true : null,
           // Navázat na shift LIST (zdroj pravdy), ne na monSavedSetters — ty může
@@ -2238,7 +2243,7 @@
       // + 'T12:00:00' aby se ISO date-only string neparsoval jako UTC midnight (timezone off-by-one)
       const monDate = inWk(week.monDateOverride) ? new Date(week.monDateOverride + 'T12:00:00') : addDays(monday, monOffset);
       const wedDate = inWk(week.wedDateOverride) ? new Date(week.wedDateOverride + 'T12:00:00') : addDays(monday, wedOffset);
-      const thuDate = inWk(week.thuDateOverride) ? new Date(week.thuDateOverride + 'T12:00:00') : addDays(monday, 3);
+      const thuDate = inWk(week.thuDateOverride) ? new Date(week.thuDateOverride + 'T12:00:00') : addDays(monday, gymOffset(monday));
       function setMonDate(iso) { setWeek(w => ({ ...w, monDateOverride: iso })); }
       function setWedDate(iso) { setWeek(w => ({ ...w, wedDateOverride: iso })); }
       function setThuDate(iso) { setWeek(w => ({ ...w, thuDateOverride: iso })); }
@@ -2752,7 +2757,7 @@
           (wd.monday || []).forEach(s => tally(s, effectiveMon));
           tallyLano(wd.mondayLano, effectiveMon);  // lano zvlášť
           (wd.wednesday || []).forEach(s => tally(s, effectiveWed));
-          const effectiveThu = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(defaultMonDate, 3);
+          const effectiveThu = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(defaultMonDate, gymOffset(defaultMonDate));
           (wd.thursday || []).forEach(s => tally(s, effectiveThu));
         }
 
@@ -3057,7 +3062,7 @@
                   if (calThu) {
                     slots.push({
                       stavba: <SessionCard
-                        session="thursday" day="Čtvrtek" date={thuDate} theme="green"
+                        session="thursday" day={isNewSchedule(monday) ? "Pátek" : "Čtvrtek"} date={thuDate} theme="green"
                         slots={week.thursday || E4()} calInfo={calThu}
                         sel={sel}
                         onSlotClick={i => onThuSlotClick(i)}
@@ -3352,7 +3357,7 @@
                   const monOff = lanovkaOffset(monday);
                   const monDate = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : addDays(monday, monOff);
                   const wedDate = wd.wedDateOverride ? new Date(wd.wedDateOverride + 'T12:00:00') : addDays(monday, wedOff);
-                  const thuDate = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(monday, 3);
+                  const thuDate = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(monday, gymOffset(monday));
                   const sessions = [
                     calMon && !calMon.isOff ? { date: monDate, label: 'Lanovka', sector: calMon.sector, color: 'text-amber-500' } : null,
                     calWed && !calWed.isOff ? { date: wedDate, label: 'Limit',    sector: calWed.sector, color: 'text-pink-500'  } : null,
