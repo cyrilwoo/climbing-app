@@ -179,8 +179,8 @@
     // Vrátí { isState, text } nebo null pro dané datum stavění.
     function holidayNote(d) {
       const s = stateHoliday(d), p = schoolHoliday(d);
-      if (s && p) return { isState: true, text: `${s} · ${p}` };
-      if (s)      return { isState: true, text: s };
+      if (s && p) return { isState: true, text: `Svátek! ${s} · ${p}` };
+      if (s)      return { isState: true, text: `Svátek! ${s}` };
       if (p)      return { isState: false, text: p };
       return null;
     }
