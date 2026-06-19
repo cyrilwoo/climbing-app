@@ -136,6 +136,54 @@
     function gymOffset(monday) {
       return isNewSchedule(monday) ? 4 : 3;
     }
+    // ── Státní svátky + školní prázdniny (jen INFORMATIVNÍ štítek na kartě;
+    //    případný přesun stavění řeší obsluha ručně) ──────────────────────────
+    function easterSunday(year) {
+      const a=year%19, b=Math.floor(year/100), c=year%100, d=Math.floor(b/4), e=b%4,
+            f=Math.floor((b+8)/25), g=Math.floor((b-f+1)/3),
+            h=(19*a+b-d-g+15)%30, i=Math.floor(c/4), k=c%4,
+            l=(32+2*e+2*i-h-k)%7, m=Math.floor((a+11*h+22*l)/451),
+            mon=Math.floor((h+l-7*m+114)/31), day=((h+l-7*m+114)%31)+1;
+      return new Date(year, mon-1, day);
+    }
+    function stateHoliday(d) {
+      const md = (d.getMonth()+1)*100 + d.getDate();
+      const fixed = { 101:'Nový rok', 501:'Svátek práce', 508:'Den vítězství',
+        705:'Cyril a Metoděj', 706:'Mistr Jan Hus', 928:'Den české státnosti',
+        1028:'Vznik ČSR', 1117:'Den boje za svobodu a demokracii',
+        1224:'Štědrý den', 1225:'1. svátek vánoční', 1226:'2. svátek vánoční' };
+      if (fixed[md]) return fixed[md];
+      const es = easterSunday(d.getFullYear());
+      const vp = addDays(es, -2), vm = addDays(es, 1);
+      if (d.getMonth()===vp.getMonth() && d.getDate()===vp.getDate()) return 'Velký pátek';
+      if (d.getMonth()===vm.getMonth() && d.getDate()===vm.getDate()) return 'Velikonoční pondělí';
+      return null;
+    }
+    // Školní prázdniny — okres České Budějovice (zdroj MŠMT; jarní jsou KRAJOVÉ).
+    // ⚠️ Aktualizovat každý školní rok podle oficiálního kalendáře MŠMT.
+    const SCHOOL_HOLIDAYS = [
+      { from:'2026-10-29', to:'2026-10-30', name:'podzimní prázdniny' },
+      { from:'2026-12-23', to:'2027-01-03', name:'vánoční prázdniny' },
+      { from:'2027-01-29', to:'2027-01-29', name:'pololetní prázdniny' },
+      { from:'2027-02-15', to:'2027-02-21', name:'jarní prázdniny' },        // ČB
+      { from:'2027-03-25', to:'2027-03-29', name:'velikonoční prázdniny' },
+      { from:'2027-07-01', to:'2027-08-31', name:'letní prázdniny' },
+      { from:'2027-10-27', to:'2027-10-29', name:'podzimní prázdniny' },
+      { from:'2027-12-23', to:'2028-01-02', name:'vánoční prázdniny' },
+    ];
+    function schoolHoliday(d) {
+      const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      for (const h of SCHOOL_HOLIDAYS) if (iso >= h.from && iso <= h.to) return h.name;
+      return null;
+    }
+    // Vrátí { isState, text } nebo null pro dané datum stavění.
+    function holidayNote(d) {
+      const s = stateHoliday(d), p = schoolHoliday(d);
+      if (s && p) return { isState: true, text: `${s} · ${p}` };
+      if (s)      return { isState: true, text: s };
+      if (p)      return { isState: false, text: p };
+      return null;
+    }
     const CAL = {
       // ── LEDEN–BŘEZEN: Lanovka bez sektoru, Limit ještě nezačal ───
       '2026-01-05': { mon: M },
@@ -572,6 +620,17 @@
                   </>
                 )}
               </div>
+              {/* Svátek / prázdniny — informativní štítek (přesun řeší obsluha ručně) */}
+              {(() => {
+                const hn = holidayNote(date);
+                return hn ? (
+                  <span title="Stavění připadá na svátek/prázdniny — případně přesuň v rámci týdne"
+                    className={`inline-flex items-center gap-1 mt-1.5 text-[11px] font-bold px-2 py-0.5 rounded-md
+                      ${hn.isState ? 'bg-red-100 text-red-800' : 'bg-sky-100 text-sky-800'}`}>
+                    {hn.isState ? '🎌' : '🏖️'} {hn.text}
+                  </span>
+                ) : null;
+              })()}
               {/* Řádek 3: profil (plná šířka) */}
               {calInfo?.sector && (
                 <span className={`inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full
