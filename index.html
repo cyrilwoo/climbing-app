@@ -162,6 +162,7 @@
     // Školní prázdniny — okres České Budějovice (zdroj MŠMT; jarní jsou KRAJOVÉ).
     // ⚠️ Aktualizovat každý školní rok podle oficiálního kalendáře MŠMT.
     const SCHOOL_HOLIDAYS = [
+      { from:'2026-07-01', to:'2026-08-31', name:'letní prázdniny' },
       { from:'2026-10-29', to:'2026-10-30', name:'podzimní prázdniny' },
       { from:'2026-12-23', to:'2027-01-03', name:'vánoční prázdniny' },
       { from:'2027-01-29', to:'2027-01-29', name:'pololetní prázdniny' },
@@ -1220,10 +1221,12 @@
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-4 pt-4 pb-2 border-b border-gray-100 flex items-center justify-between">
             <h2 className="font-bold text-gray-900 text-sm capitalize">{MONTHS_CS[month]} {year}</h2>
-            <div className="flex items-center gap-2 text-[10px] font-bold">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-bold justify-end">
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-300 inline-block"/>Lanovka</span>
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-pink-300 inline-block"/>Limit</span>
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-300 inline-block"/>Těloc.</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-300 inline-block"/>svátek</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-sky-300 inline-block"/>prázdniny</span>
             </div>
           </div>
           <div className="p-2">
@@ -1237,12 +1240,34 @@
                 const evs = sessions[k] || [];
                 const isToday = d.getTime() === today.getTime();
                 const weekend = (d.getDay() === 0 || d.getDay() === 6);
+                const sh = inMonth ? stateHoliday(d) : null;   // státní svátek
+                const bh = inMonth ? schoolHoliday(d) : null;  // školní prázdniny
+                const dayBg = !inMonth ? 'bg-gray-50/40 border-transparent'
+                  : sh ? 'bg-red-50 border-red-200'
+                  : bh ? 'bg-sky-50 border-sky-200'
+                  : weekend ? 'bg-gray-50/60 border-gray-100'
+                  : 'bg-white border-gray-100';
+                const dayNumCls = !inMonth ? 'text-gray-300'
+                  : isToday ? 'text-blue-600'
+                  : sh ? 'text-red-600' : bh ? 'text-sky-700' : 'text-gray-500';
                 return (
                   <div key={i}
-                    className={`min-h-[58px] rounded-lg border p-1 flex flex-col gap-0.5
-                      ${inMonth ? (weekend ? 'bg-gray-50/60 border-gray-100' : 'bg-white border-gray-100') : 'bg-gray-50/40 border-transparent'}
+                    title={sh ? `Státní svátek: ${sh}` : bh ? `Prázdniny: ${bh}` : undefined}
+                    className={`min-h-[58px] rounded-lg border p-1 flex flex-col gap-0.5 ${dayBg}
                       ${isToday ? 'ring-2 ring-blue-400 ring-inset' : ''}`}>
-                    <span className={`text-[10px] font-bold leading-none ${inMonth ? (isToday ? 'text-blue-600' : 'text-gray-500') : 'text-gray-300'}`}>{d.getDate()}</span>
+                    <span className={`text-[10px] font-bold leading-none ${dayNumCls}`}>{d.getDate()}</span>
+                    {sh && (
+                      <span title={`Státní svátek: ${sh}`}
+                        className="text-[9px] leading-tight font-bold px-1 py-0.5 rounded bg-red-100 text-red-700 break-words">
+                        🎌 svátek
+                      </span>
+                    )}
+                    {!sh && bh && bh !== 'letní prázdniny' && (
+                      <span title={`Prázdniny: ${bh}`}
+                        className="text-[9px] leading-tight font-semibold px-1 py-0.5 rounded bg-sky-100 text-sky-700 break-words">
+                        🏖️ {bh.split(' ')[0]}
+                      </span>
+                    )}
                     {inMonth && evs.map((e, j) => (
                       <span key={j} title={`${e.wall}: ${e.sector}`}
                         className={`text-[9px] leading-tight font-semibold px-1 py-0.5 rounded border break-words ${e.cls}`}>
