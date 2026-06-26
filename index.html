@@ -630,14 +630,7 @@
                   </span>
                 ) : null;
               })()}
-              {/* Řádek 3: profil (plná šířka) */}
-              {calInfo?.sector && (
-                <span className={`inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full
-                  ${isYellow ? 'bg-black/10 text-gray-800' : 'bg-white/10 text-white/80'}`}>
-                  {calInfo.sector}
-                  {calInfo.note && <span className="ml-1 opacity-60">· {calInfo.note}</span>}
-                </span>
-              )}
+              {/* Profil aktivního stavění je níž v boxu (ne duplicitně i tady nahoře) */}
               {calInfo?.isOff && (
                 <span className={`inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full
                   ${isYellow ? 'bg-black/10 text-gray-700' : 'bg-white/10 text-white/60'}`}>
@@ -652,12 +645,16 @@
               )}
             </div>
 
-            {/* Sector label — výška sjednocena s Limit sektor gridem */}
-            {calInfo?.sector && !calInfo.isOff && isYellow && (
-              <div className="mt-3 rounded-lg px-3 py-2.5 flex items-center justify-center bg-black/10 ring-1 ring-black/10">
-                <span className={`font-black text-center leading-tight tracking-tight break-words w-full text-amber-900
+            {/* Profil, který se staví — jen ten jeden (jednotně pro všechny stěny).
+                Lanovka žlutá, Limit růžový, Tělocvična zelený. */}
+            {calInfo?.sector && !calInfo.isOff && (
+              <div className={`mt-3 rounded-lg px-3 py-2.5 flex items-center justify-center ring-1
+                ${isYellow ? 'bg-black/10 ring-black/10' : isGreen ? 'bg-emerald-600 ring-emerald-400' : 'bg-pink-600 ring-pink-400'}`}>
+                <span className={`font-black text-center leading-tight tracking-tight break-words w-full
+                  ${isYellow ? 'text-amber-900' : 'text-white'}
                   ${calInfo.sector.length > 20 ? 'text-sm' : calInfo.sector.length > 12 ? 'text-base' : 'text-lg'}`}>
                   {calInfo.sector}
+                  {calInfo.note && <span className="block text-[11px] font-semibold opacity-70 mt-0.5">{calInfo.note}</span>}
                 </span>
               </div>
             )}
@@ -670,30 +667,6 @@
                 </span>
               </div>
             )}
-            {/* Limit sequence: Dětská → Přední převis → Zadní převis → Kolmice */}
-            {calInfo?.sector && !calInfo.isOff && !isYellow && !isGreen && (() => {
-              const active = getLimitSectors(calInfo.sector);
-              const steps = [
-                { id: 1, label: 'Dětská' },
-                { id: 2, label: 'Přední převis' },
-                { id: 3, label: 'Zadní převis' },
-                { id: 4, label: 'Kolmice' },
-              ];
-              return (
-                <div className="mt-3 grid grid-cols-4 gap-1.5">
-                  {steps.map(({ id, label }) => (
-                    <div key={id} className={`rounded-lg py-2.5 px-0.5 text-center
-                      ${active.has(id) ? 'bg-pink-600 ring-1 ring-pink-400' : 'bg-white/5 ring-1 ring-white/10'}`}>
-                      <div className={`text-[11px] font-black leading-tight tracking-tight break-words
-                        ${active.has(id) ? 'text-white' : 'text-white/30'}`}>
-                        {label}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-
             {/* Progress */}
             <div className="mt-3 flex items-center gap-2.5">
               <div className={`flex-1 ${progTrack} rounded-full h-1.5`}>
