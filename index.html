@@ -76,7 +76,7 @@
 
     // ── Team & constants ─────────────────────────────────────────────────────
     const TEAM = ['Cyril', 'Vašek', 'Morčák', 'Kuba', 'Máza', 'Sebastián'];
-    const REMOVAL_TEAM = ['Áďa', 'Korchy', 'Míví', 'Kuba D.', 'Kuba M.', 'Terezka'];
+    const REMOVAL_TEAM = ['Áďa', 'Korchy', 'Míví', 'Kuba D.', 'Kuba M.', 'Ondra', 'Terezka'];
     // Kanonický tým je vždy přítomen — chrání před nechtěným smazáním člena přes UI/sync.
     function withCoreTeam(arr) {
       const base = Array.isArray(arr) ? arr.filter(x => typeof x === 'string') : [];
@@ -425,7 +425,7 @@
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5">Mytí chytů</p>
               <div className="flex flex-wrap gap-1.5">
-                {['Korchy', 'Terezka', 'Kuba D.'].map(name => (
+                {['Korchy', 'Terezka', 'Kuba D.', 'Ondra'].map(name => (
                   <button key={name} onClick={() => onToggleMyti(name)}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all
                       ${myti === name ? 'bg-blue-600 text-white border-transparent' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-100'}`}>
