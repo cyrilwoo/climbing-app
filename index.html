@@ -105,6 +105,11 @@
     const isDetskaWed = s => s?.toLowerCase().includes('dět') || s?.toLowerCase().includes('det');
     // Sektory Limitu — pro modal "Přidat závod"
     const LIMIT_SECTORS = ['Dětská', 'Přední převis', 'Zadní převis', 'Kolmice'];
+    // Sektory Lanovky — pro modal "Extra stavění"
+    const LANOVKA_SECTORS = ['Převis + Bizár', 'Dole kout + Strop', 'Nový profil + nahoře kolmice', 'Hříbek', 'Dole kolmice + převis'];
+    // Extra stavění — jednorázové stavění mimo rotaci (nic neposouvá, jen se přidá).
+    // ID = datum + stěna → na jednu stěnu jedno extra za den, obě stěny v jeden den OK.
+    const extraId = (date, venue) => `${date}_${venue}`;
     // ── Rozvrh dnů: od září 2026 se Lanovka staví v úterý, Limit ve čtvrtek (vždy) ──
     // Před zářím 2026: Lanovka pondělí (+0), Limit středa (+2) nebo čtvrtek pro Dětskou (+3).
     function isNewSchedule(monday) {
@@ -1149,7 +1154,7 @@
     }
 
     // ── MonthCalendar — měsíční mřížka pod stěnami (jen profily) ──────────
-    function MonthCalendar({ data, viewMonday, rotationShifts }) {
+    function MonthCalendar({ data, viewMonday, rotationShifts, extras }) {
       const MONTHS_CS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
       const base = viewMonday instanceof Date ? viewMonday : new Date();
       const year = base.getFullYear();
@@ -1177,6 +1182,17 @@
           const d = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(mondayD, gymOffset(mondayD));
           add(iso(d), { wall: 'Tělocvična', sector: cThu.sector, cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' });
         }
+      });
+      // Extra stavění — mimo rotaci, výraznější odstín + „+" prefix
+      Object.values(extras || {}).forEach(ex => {
+        if (!ex?.date) return;
+        const isLan = ex.venue === 'lanovka';
+        const label = (ex.sectors || []).join(' + ') || (ex.lano ? 'Lano' : ex.name || 'Extra');
+        add(ex.date, {
+          wall: `Extra ${isLan ? 'Lanovka' : 'Limit'}`,
+          sector: `+ ${ex.lano && (ex.sectors || []).length ? `${label} + Lano` : label}`,
+          cls: isLan ? 'bg-amber-200 text-amber-900 border-amber-400' : 'bg-pink-200 text-pink-900 border-pink-400',
+        });
       });
 
       // Mřížka pondělím počínaje
@@ -1256,7 +1272,7 @@
     }
 
     // ── MonthlyOccupancy ─────────────────────────────────────────────────
-    function MonthlyOccupancy({ data, viewMonday, rotationShifts }) {
+    function MonthlyOccupancy({ data, viewMonday, rotationShifts, extras }) {
       // Zobrazené 3 měsíce vychází z týdne, na který se uživatel právě dívá
       const base = viewMonday instanceof Date ? viewMonday : new Date();
       const months = [0, 1, 2].map(offset => {
@@ -1317,6 +1333,21 @@
                     thuTotal += 2;
                     thuFill += (wd.thursday || []).slice(0, 2).filter(Boolean).length;
                   }
+                }
+              });
+
+              // Extra stavění — započítáno do obsazenosti své stěny (lano zvlášť)
+              Object.values(extras || {}).forEach(ex => {
+                if (!ex?.date) return;
+                const d = new Date(ex.date + 'T12:00:00');
+                if (d.getFullYear() !== year || d.getMonth() !== month) return;
+                const n = ex.slotCount || 0;
+                const fill = (ex.setters || []).slice(0, n).filter(Boolean).length;
+                if (ex.venue === 'lanovka') {
+                  monSetterTotal += n; monSetterFill += fill;
+                  if (ex.lano) { monLanoTotal += 1; monLanoFill += ex.lanoSetter ? 1 : 0; }
+                } else {
+                  wedTotal += n; wedFill += fill;
                 }
               });
 
@@ -1445,8 +1476,8 @@
       );
     }
 
-    // ── RacesPanel — obsazenost slotů závodů a dostavby ──────────────────────
-    function RacesPanel({ races }) {
+    // ── RacesPanel — obsazenost slotů závodů, dostavby a extra stavění ───────
+    function RacesPanel({ races, extras }) {
       const fmtShort = iso => {
         const d = new Date(iso + 'T12:00:00');
         return `${d.getDate()}.${d.getMonth()+1}.`;
@@ -1465,19 +1496,30 @@
           if (day?.date) items.push({ kind: 'dostavba', race, day, idx, date: day.date });
         });
       });
+      // Extra stavění — stejný cutoff, do stejného seznamu
+      Object.entries(extras || {}).forEach(([id, ex]) => {
+        if (!ex?.date) return;
+        if (new Date(ex.date + 'T12:00:00') > cutoff) return;
+        items.push({ kind: 'extra', extra: { ...ex, id }, date: ex.date });
+      });
       items.sort((a, b) => a.date.localeCompare(b.date) || (a.kind === 'race' ? -1 : 1));
       if (items.length === 0) return null;
       return (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-4 pt-4 pb-2 border-b border-gray-100">
-            <h2 className="font-bold text-gray-900 text-sm">Závody</h2>
+            <h2 className="font-bold text-gray-900 text-sm">Závody + extra stavění</h2>
           </div>
           <div className="p-3 space-y-2.5">
             {items.map((it, i) => {
-              const isRace = it.kind === 'race';
-              const total  = isRace ? (it.race.slotCount || 0) : (it.day.slotCount || 0);
-              const setters = isRace ? it.race.setters : it.day.setters;
-              const filled = (setters || []).slice(0, total).filter(Boolean).length;
+              const isRace  = it.kind === 'race';
+              const isExtra = it.kind === 'extra';
+              const isLanExtra = isExtra && it.extra.venue === 'lanovka';
+              const total = isExtra ? ((it.extra.slotCount || 0) + (it.extra.lano ? 1 : 0))
+                          : isRace  ? (it.race.slotCount || 0)
+                          : (it.day.slotCount || 0);
+              const setters = isExtra ? it.extra.setters : isRace ? it.race.setters : it.day.setters;
+              const filled = (setters || []).slice(0, isExtra ? (it.extra.slotCount || 0) : total).filter(Boolean).length
+                + (isExtra && it.extra.lano && it.extra.lanoSetter ? 1 : 0);
               const pct    = total ? Math.round(filled / total * 100) : 0;
               const allFilled = total > 0 && filled === total;
               const itemDate = new Date(it.date + 'T12:00:00');
@@ -1485,9 +1527,18 @@
               return (
                 <div key={`${it.kind}-${it.date}-${i}`}
                   className={`rounded-xl border px-3 py-2.5 transition-opacity
-                    ${isPast ? 'border-gray-100 bg-gray-50 opacity-60' : 'border-pink-200 bg-pink-50/40'}`}>
+                    ${isPast ? 'border-gray-100 bg-gray-50 opacity-60'
+                      : isLanExtra ? 'border-amber-200 bg-amber-50/40'
+                      : 'border-pink-200 bg-pink-50/40'}`}>
                   <div className="flex items-baseline justify-between gap-2 mb-1.5">
-                    {isRace ? (
+                    {isExtra ? (
+                      <p className="text-sm font-black truncate uppercase tracking-wide">
+                        <span className={isLanExtra ? 'text-amber-600' : 'text-pink-500'}>Extra</span>
+                        <span className="text-gray-400 font-bold tracking-normal normal-case ml-1">
+                          · {it.extra.name || (isLanExtra ? 'Lanovka' : 'Limit')}
+                        </span>
+                      </p>
+                    ) : isRace ? (
                       <p className={`text-sm font-black truncate
                         ${it.race.name ? 'text-pink-500 uppercase tracking-wide' : 'text-gray-500 italic'}`}>
                         {it.race.name || '(bez názvu)'}
@@ -1504,11 +1555,12 @@
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all duration-500 ${allFilled ? 'bg-pink-600' : 'bg-pink-400'}`}
+                      <div className={`h-full rounded-full transition-all duration-500
+                        ${isLanExtra ? (allFilled ? 'bg-amber-600' : 'bg-amber-400') : (allFilled ? 'bg-pink-600' : 'bg-pink-400')}`}
                         style={{ width: `${pct}%` }} />
                     </div>
                     <span className={`text-sm font-bold tabular-nums w-10 text-right
-                      ${allFilled ? 'text-pink-500' : 'text-gray-600'}`}>
+                      ${allFilled ? (isLanExtra ? 'text-amber-600' : 'text-pink-500') : 'text-gray-600'}`}>
                       {filled}/{total}
                     </span>
                   </div>
@@ -1521,9 +1573,16 @@
     }
 
     // ── DatePickerCalendar (Limit brand) ─────────────────────────────────────
-    function DatePickerCalendar({ value, onChange }) {
+    // Jednodenní výběr: value + onChange. Více termínů: values (pole ISO) + onChange
+    // (rodič si klik přepíná sám). accent: 'pink' (Limit/závod) | 'amber' (Lanovka).
+    function DatePickerCalendar({ value, onChange, values, accent = 'pink' }) {
+      const multi = Array.isArray(values);
+      const isOn = iso => multi ? values.includes(iso) : value === iso;
+      const selCls   = accent === 'amber' ? 'bg-amber-500 text-gray-900 ring-2 ring-amber-300' : 'bg-pink-600 text-white ring-2 ring-pink-400';
+      const todayCls = accent === 'amber' ? 'bg-zinc-800 text-amber-400 hover:bg-zinc-700'     : 'bg-zinc-800 text-pink-400 hover:bg-zinc-700';
       const today = new Date(); today.setHours(0,0,0,0);
-      const initial = value ? new Date(value + 'T12:00:00') : today;
+      const firstSel = multi ? (values.slice().sort()[0] || null) : value;
+      const initial = firstSel ? new Date(firstSel + 'T12:00:00') : today;
       const [month, setMonth] = useState(new Date(initial.getFullYear(), initial.getMonth(), 1));
       const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       const firstWeekday = ((new Date(month).getDay() + 6) % 7); // Po=0, Ne=6
@@ -1554,13 +1613,13 @@
               if (!d) return <span key={i} />;
               const isToday    = d.getTime() === today.getTime();
               const isPast     = d < today;
-              const isSelected = value === iso(d);
+              const isSelected = isOn(iso(d));
               return (
                 <button key={i} onClick={() => !isPast && onChange(iso(d))} disabled={isPast}
                   className={`aspect-square rounded-lg text-sm font-bold transition-colors
-                    ${isSelected ? 'bg-pink-600 text-white ring-2 ring-pink-400'
+                    ${isSelected ? selCls
                       : isPast ? 'text-zinc-700 cursor-not-allowed'
-                      : isToday ? 'bg-zinc-800 text-pink-400 hover:bg-zinc-700'
+                      : isToday ? todayCls
                       : 'text-zinc-300 hover:bg-zinc-800'}`}>
                   {d.getDate()}
                 </button>
@@ -1849,14 +1908,19 @@
 
           {/* Header */}
           <div className="bg-[#1e1e20] p-4 min-h-[13rem] flex flex-col justify-between text-white">
-            <div className="flex items-start justify-between gap-3 pr-24">
+            <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <h3 className="text-xl font-black leading-none">{displayDay}</h3>
-                <p className="text-sm font-medium text-white/50 mt-0.5">{fmtFull(date)}</p>
+                {/* pr-24 jen na řádku s datem — pod tlačítkem Smazat je plná šířka,
+                    jinak se dlouhý název závodu lámal doprostřed slova */}
+                <div className="pr-24">
+                  <h3 className="text-xl font-black leading-none">{displayDay}</h3>
+                  <p className="text-sm font-medium text-white/50 mt-0.5">{fmtFull(date)}</p>
+                </div>
                 {isDostavba ? (
                   <>
                     {race.name && (
-                      <h4 className="mt-2 text-base font-black tracking-tight text-pink-500/80 leading-tight break-words uppercase">
+                      <h4 className={`mt-2 font-black tracking-tight text-pink-500/80 leading-tight break-words uppercase
+                        ${race.name.length > 16 ? 'text-sm' : 'text-base'}`}>
                         {race.name}
                       </h4>
                     )}
@@ -1864,7 +1928,8 @@
                   </>
                 ) : race.name ? (
                   <>
-                    <h4 className="mt-2 text-2xl font-black tracking-tight text-pink-500 leading-tight break-words uppercase">
+                    <h4 className={`mt-2 font-black tracking-tight text-pink-500 leading-tight break-words uppercase
+                      ${race.name.length > 16 ? 'text-lg' : race.name.length > 10 ? 'text-xl' : 'text-2xl'}`}>
                       {race.name}
                     </h4>
                     <span className="inline-block mt-1 text-[10px] font-black tracking-widest text-pink-400/60 uppercase">Závod · Limit</span>
@@ -1916,6 +1981,280 @@
       );
     }
 
+    // ── ExtraCard — jednorázové stavění mimo rotaci ──────────────────────────
+    // Nezasahuje do rotace ani do standardních karet, jen se přidá vedle nich.
+    function ExtraCard({ extra, sel, onSlotClick, onLanoClick, onDelete }) {
+      const isLan = extra.venue === 'lanovka';
+      const date = new Date(extra.date + 'T12:00:00');
+      const rawDay = date.toLocaleString('cs-CZ', { weekday: 'long' });
+      const displayDay = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
+      const n = extra.slotCount || 0;
+      const setters = extra.setters || [];
+      const total  = n + (extra.lano ? 1 : 0);
+      const filled = setters.slice(0, n).filter(Boolean).length + (extra.lano && extra.lanoSetter ? 1 : 0);
+      const allFilled = total > 0 && filled === total;
+      const hdr      = isLan ? 'bg-gradient-to-br from-amber-400 to-yellow-400' : 'bg-[#1e1e20]';
+      const hdrText  = isLan ? 'text-gray-900' : 'text-white';
+      const hdrSub   = isLan ? 'text-gray-600' : 'text-white/50';
+      const progTrack= isLan ? 'bg-black/15'   : 'bg-white/10';
+      const progFill = isLan ? 'bg-gray-700'   : 'bg-[#e6007e]';
+      const countCol = allFilled ? (isLan ? 'text-gray-900' : 'text-[#e6007e]') : (isLan ? 'text-gray-600' : 'text-white/60');
+      const chip     = isLan ? 'bg-black/10 text-amber-900 ring-1 ring-black/10' : 'bg-pink-600 text-white ring-1 ring-pink-400';
+      const slotProps = {
+        sel,
+        emptyBg:  isLan ? 'border-amber-200 hover:border-amber-400 hover:bg-amber-50' : 'border-zinc-200 hover:border-pink-400 hover:bg-zinc-50',
+        filledBg: isLan ? 'bg-amber-50 border-amber-200' : 'bg-zinc-50 border-zinc-200',
+        filledText: isLan ? 'text-gray-900' : 'text-zinc-800',
+        numEmpty: isLan ? 'bg-amber-100 text-amber-600' : 'bg-zinc-100 text-zinc-400',
+        selRing:  isLan ? 'ring-2 ring-amber-400 ring-offset-1' : 'ring-2 ring-pink-400 ring-offset-1',
+        onDragOver: e => e.preventDefault(),
+      };
+      const hn = holidayNote(date);
+      return (
+        <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-200 relative">
+          {onDelete && (
+            <button onClick={onDelete} title="Smazat extra stavění"
+              className={`absolute top-2.5 right-2.5 z-10 inline-flex items-center gap-1 px-2 py-1 rounded-lg transition-colors
+                ${isLan ? 'bg-black/10 text-gray-800 hover:bg-red-500 hover:text-white' : 'bg-zinc-800/90 text-pink-400 hover:bg-pink-600 hover:text-white'}`}>
+              <X c="w-3 h-3" />
+              <span className="text-[10px] font-black uppercase tracking-widest">Smazat</span>
+            </button>
+          )}
+
+          {/* Header */}
+          <div className={`${hdr} p-4 min-h-[13rem] flex flex-col justify-between ${hdrText}`}>
+            <div>
+              {/* pr-24 jen na řádku s datem — pod tlačítkem Smazat už je plná šířka,
+                  jinak se dlouhý název lámal doprostřed slova */}
+              <div className="pr-24">
+                <h3 className="text-xl font-black leading-none">{displayDay}</h3>
+                <p className={`text-sm font-medium mt-0.5 ${hdrSub}`}>{fmtFull(date)}</p>
+              </div>
+              {extra.name && (
+                <h4 className={`mt-2 font-black tracking-tight leading-tight break-words uppercase
+                  ${extra.name.length > 16 ? 'text-sm' : extra.name.length > 10 ? 'text-base' : 'text-lg'}
+                  ${isLan ? 'text-amber-900' : 'text-pink-500'}`}>{extra.name}</h4>
+              )}
+              <span className={`inline-block mt-1 text-sm font-black tracking-widest
+                ${isLan ? 'text-amber-900' : 'text-pink-500'}`}>
+                EXTRA · {isLan ? 'LANOVKA' : 'LIMIT'}
+              </span>
+              {hn && (
+                <span className={`block w-fit mt-1.5 text-[11px] font-bold px-2 py-0.5 rounded-md
+                  ${hn.isState ? 'bg-red-100 text-red-800' : 'bg-sky-100 text-sky-800'}`}>
+                  {hn.isState ? '🎌' : '🏖️'} {hn.text}
+                </span>
+              )}
+            </div>
+
+            {/* Co se staví */}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {(extra.sectors || []).map(s => (
+                <span key={s} className={`px-2 py-1.5 rounded-lg text-[11px] font-black leading-tight tracking-tight ${chip}`}>
+                  {s}
+                </span>
+              ))}
+              {extra.lano && (
+                <span className={`px-2 py-1.5 rounded-lg text-[11px] font-black leading-tight tracking-tight ${chip}`}>
+                  LANO
+                </span>
+              )}
+              {(extra.sectors || []).length === 0 && !extra.lano && (
+                <span className={`text-xs font-bold ${hdrSub}`}>bez profilu</span>
+              )}
+            </div>
+
+            {/* Progress */}
+            <div className="mt-3 flex items-center gap-2.5">
+              <div className={`flex-1 ${progTrack} rounded-full h-1.5`}>
+                <div className={`${progFill} rounded-full h-1.5 transition-all duration-500`}
+                  style={{ width: `${total ? (filled / total) * 100 : 0}%` }} />
+              </div>
+              <span className={`text-xs font-bold tabular-nums ${countCol}`}>
+                {allFilled && '✓ '}{filled}/{total}
+              </span>
+            </div>
+          </div>
+
+          {/* Slots */}
+          <div className="p-3 space-y-2">
+            {Array.from({ length: n }).map((_, i) => (
+              <Slot key={i} num={i+1} name={setters[i] ?? null} {...slotProps}
+                onClick={() => onSlotClick(i)}
+                onDragStart={() => {}}
+                onDrop={() => {}} />
+            ))}
+            {extra.lano && (
+              <div className={`mt-3 pt-3 border-t ${isLan ? 'border-amber-100' : 'border-zinc-100'}`}>
+                <p className="text-xs font-bold text-amber-700 mb-2">Lano</p>
+                <Slot num="L" name={extra.lanoSetter ?? null} {...slotProps}
+                  emptyBg="border-amber-300 hover:border-amber-500 hover:bg-amber-50"
+                  numEmpty="bg-amber-200 text-amber-700"
+                  onClick={onLanoClick}
+                  onDragStart={() => {}}
+                  onDrop={() => {}} />
+              </div>
+            )}
+            {n === 0 && !extra.lano && (
+              <div className="text-center py-4 text-sm font-medium rounded-xl text-gray-400 bg-gray-50">
+                Bez slotů
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ── AddExtraModal — přidání extra stavění (1 a více termínů) ─────────────
+    function AddExtraModal({ onClose, onSave, existingIds }) {
+      const [venue,     setVenue]     = useState('lanovka');
+      const [name,      setName]      = useState('');
+      const [dates,     setDates]     = useState([]);
+      const [sectors,   setSectors]   = useState([]);
+      const [lano,      setLano]      = useState(false);
+      const [slotCount, setSlotCount] = useState(2);
+      const isLan = venue === 'lanovka';
+      const sectorList = isLan ? LANOVKA_SECTORS : LIMIT_SECTORS;
+      const acc = isLan
+        ? { on: 'bg-amber-500 text-gray-900 ring-2 ring-amber-300', title: 'text-amber-400',
+            btn: 'bg-amber-500 text-gray-900 hover:bg-amber-400', warn: 'text-amber-400' }
+        : { on: 'bg-pink-600 text-white ring-2 ring-pink-400',      title: 'text-pink-500',
+            btn: 'bg-pink-600 text-white hover:bg-pink-500',        warn: 'text-pink-400' };
+      const off = 'bg-zinc-900 text-zinc-300 ring-1 ring-zinc-800 hover:ring-zinc-700 hover:bg-zinc-800';
+      // Přepnutí stěny: profily patří jiné stěně → vyčistit; lano má jen Lanovka.
+      const switchVenue = v => {
+        if (v === venue) return;
+        setVenue(v); setSectors([]);
+        if (v !== 'lanovka') setLano(false);
+      };
+      const toggleDate   = iso => setDates(cur => cur.includes(iso) ? cur.filter(x => x !== iso) : [...cur, iso].sort());
+      const toggleSector = s   => setSectors(cur => cur.includes(s) ? cur.filter(x => x !== s) : [...cur, s]);
+      const conflicts = dates.filter(d => existingIds.has(extraId(d, venue)));
+      const valid = dates.length > 0 && (sectors.length > 0 || lano) && (slotCount > 0 || lano) && conflicts.length === 0;
+      const fmtShort = iso => { const d = new Date(iso + 'T12:00:00');
+        const wd = d.toLocaleString('cs-CZ', { weekday: 'short' });
+        return `${wd.charAt(0).toUpperCase() + wd.slice(1)} ${d.getDate()}.${d.getMonth()+1}.`; };
+      const handleSave = () => { if (valid) onSave({ venue, name: name.trim(), dates, sectors, slotCount, lano }); };
+
+      return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+          <div className="relative bg-zinc-950 text-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-zinc-800 shadow-2xl">
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4 border-b border-zinc-800 flex items-start justify-between gap-4">
+              <div>
+                <h2 className={`text-2xl font-black tracking-widest leading-none ${acc.title}`}>EXTRA STAVĚNÍ</h2>
+                <p className="text-[11px] uppercase tracking-widest text-zinc-500 mt-2 font-bold">Mimo rotaci — nic neposouvá</p>
+              </div>
+              <button onClick={onClose} className="p-2 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white">
+                <X c="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-6">
+              {/* Stěna */}
+              <section>
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">1 · Stěna</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {[['lanovka','Lanovka'], ['limit','Limit']].map(([v, label]) => (
+                    <button key={v} onClick={() => switchVenue(v)}
+                      className={`px-3 py-3 rounded-xl text-sm font-black uppercase tracking-wide transition-all
+                        ${venue === v ? acc.on : off}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* Termíny */}
+              <section>
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">
+                  2 · Termíny ({dates.length}) <span className="text-zinc-600 font-bold normal-case tracking-normal">— klikni na víc dní</span>
+                </h3>
+                <DatePickerCalendar values={dates} onChange={toggleDate} accent={isLan ? 'amber' : 'pink'} />
+                {dates.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {dates.map(d => (
+                      <button key={d} onClick={() => toggleDate(d)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-black tabular-nums ${acc.on}`}>
+                        {fmtShort(d)} <X c="w-3 h-3" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {conflicts.length > 0 && (
+                  <p className={`text-xs font-bold mt-2 ${acc.warn}`}>
+                    ⚠ Extra stavění už na této stěně existuje: {conflicts.map(fmtShort).join(', ')}
+                  </p>
+                )}
+              </section>
+
+              {/* Co se staví */}
+              <section>
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">3 · Co se staví ({sectors.length + (lano ? 1 : 0)})</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {sectorList.map(s => (
+                    <button key={s} onClick={() => toggleSector(s)}
+                      className={`px-3 py-3 rounded-xl text-sm font-black uppercase tracking-wide transition-all leading-tight
+                        ${sectors.includes(s) ? acc.on : off}`}>
+                      {s}
+                    </button>
+                  ))}
+                  {isLan && (
+                    <button onClick={() => setLano(l => !l)}
+                      className={`px-3 py-3 rounded-xl text-sm font-black uppercase tracking-wide transition-all
+                        ${lano ? acc.on : off}`}>
+                      Lano
+                    </button>
+                  )}
+                </div>
+              </section>
+
+              {/* Počet stavěčů */}
+              <section>
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">
+                  4 · Počet stavěčů{lano && <span className="text-zinc-600 font-bold normal-case tracking-normal"> — bez lano slotu</span>}
+                </h3>
+                <div className="grid grid-cols-9 gap-1">
+                  {[0,1,2,3,4,5,6,7,8].map(n => (
+                    <button key={n} onClick={() => setSlotCount(n)} disabled={n === 0 && !lano}
+                      className={`aspect-square rounded-xl text-base font-black tabular-nums transition-all
+                        ${slotCount === n ? acc.on : off} ${n === 0 && !lano ? 'opacity-30 cursor-not-allowed' : ''}`}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* Název */}
+              <section>
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">
+                  5 · Název <span className="text-zinc-600 font-bold normal-case tracking-normal">(volitelné)</span>
+                </h3>
+                <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={40}
+                  placeholder="např. Dostavba lana"
+                  className={`w-full px-3.5 py-3 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 focus:ring-2 outline-none text-sm font-black uppercase tracking-wider placeholder-zinc-600 placeholder:font-medium placeholder:normal-case placeholder:tracking-normal
+                    ${isLan ? 'text-amber-400 focus:ring-amber-500' : 'text-pink-400 focus:ring-pink-500'}`} />
+              </section>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-zinc-800 flex items-center justify-end gap-3 bg-zinc-950 sticky bottom-0">
+              <button onClick={onClose}
+                className="px-4 py-2 rounded-xl text-sm font-bold text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors">
+                Zrušit
+              </button>
+              <button onClick={handleSave} disabled={!valid}
+                className={`px-6 py-2.5 rounded-xl text-sm font-black tracking-widest uppercase disabled:opacity-30 disabled:cursor-not-allowed transition-colors ${acc.btn}`}>
+                Přidat {dates.length > 1 ? `${dates.length} ${dates.length < 5 ? 'termíny' : 'termínů'}` : 'stavění'}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // ── App ──────────────────────────────────────────────────────────────────
     function App() {
       const [team,    setTeam]    = useState(() => {
@@ -1938,9 +2277,14 @@
       const [races,   setRaces]   = useState(() => {
         try { const s = localStorage.getItem('climbing-races'); return s ? JSON.parse(s) : {}; } catch { return {}; }
       });
+      // Extra stavění — jednorázová stavění mimo rotaci (id = datum_stěna)
+      const [extras,  setExtras]  = useState(() => {
+        try { const s = localStorage.getItem('climbing-extras'); return s ? JSON.parse(s) : {}; } catch { return {}; }
+      });
       const [sel,     setSel]     = useState(null);
       const [drag,    setDrag]    = useState(null);  // { from, climber, session, idx? }
       const [showAddRace, setShowAddRace] = useState(false);
+      const [showAddExtra, setShowAddExtra] = useState(false);
       const [replaceModal, setReplaceModal] = useState(null); // { venue: 'mon'|'wed' } | null
       const [calMonths, setCalMonths] = useState(2); // počet měsíců v kalendáři (2 nebo 3)
       const [firebaseReady, setFirebaseReady] = useState(false);
@@ -1956,11 +2300,13 @@
       });
       const skipFirebaseWeeks = React.useRef(new Set());
       const skipFirebaseRaces = React.useRef(new Set());
+      const skipFirebaseExtras = React.useRef(new Set());
       const skipFirebaseTeam  = React.useRef(false);
       const skipFirebaseRotation = React.useRef(false);
       const pendingFlushRef   = React.useRef(null);
       const lastFlushedRef    = React.useRef({}); // weekId → JSON naposledy zapsaného docu (flush jen změn)
       const lastFlushedRacesRef = React.useRef({}); // raceId → JSON naposledy zapsaného (flush jen změn)
+      const lastFlushedExtrasRef = React.useRef({}); // extraId → JSON naposledy zapsaného
 
       // ── Firestore helpers: null ↔ "__NULL__" ────────────────────────────────
       function toFirestore(weekData) {
@@ -2108,6 +2454,37 @@
           });
         });
 
+        // Extra stavění — počáteční fetch + real-time listener
+        db.collection('extras').get().then(snapshot => {
+          if (!snapshot.empty) {
+            const loaded = {};
+            snapshot.forEach(doc => { loaded[doc.id] = fromFirestore(doc.data()); });
+            Object.keys(loaded).forEach(id => { lastFlushedExtrasRef.current[id] = JSON.stringify(toFirestore(loaded[id])); });
+            setExtras(prev => ({ ...prev, ...loaded }));
+          }
+        }).catch(() => {});
+        const unsubE = db.collection('extras').onSnapshot(snapshot => {
+          const loaded = {};
+          const removed = [];
+          snapshot.docChanges().forEach(change => {
+            const doc = change.doc;
+            if (change.type === 'removed') { removed.push(doc.id); return; }
+            if (skipFirebaseExtras.current.has(doc.id)) {
+              skipFirebaseExtras.current.delete(doc.id);
+              return;
+            }
+            loaded[doc.id] = fromFirestore(doc.data());
+          });
+          if (Object.keys(loaded).length === 0 && removed.length === 0) return;
+          setExtras(prev => {
+            const merged = { ...prev, ...loaded };
+            removed.forEach(id => { delete merged[id]; delete lastFlushedExtrasRef.current[id]; });
+            if (JSON.stringify(merged) === JSON.stringify(prev)) return prev;
+            Object.keys(loaded).forEach(id => { lastFlushedExtrasRef.current[id] = JSON.stringify(toFirestore(merged[id])); });
+            return merged;
+          });
+        });
+
         // Team listener — propaguje hosty a změny týmu mezi uživateli
         const unsubT = db.collection('team').doc('roster').onSnapshot(doc => {
           if (skipFirebaseTeam.current) {
@@ -2149,7 +2526,7 @@
           setRotationShifts(prev => JSON.stringify(prev) !== JSON.stringify(next) ? next : prev);
         });
 
-        return () => { unsub(); unsubR(); unsubT(); unsubRot(); };
+        return () => { unsub(); unsubR(); unsubE(); unsubT(); unsubRot(); };
       }, []);
 
       // Persist rotationShifts do localStorage + Firestore
@@ -2210,6 +2587,24 @@
         const t = setTimeout(() => flushRaces(races), 800);
         return () => clearTimeout(t);
       }, [races, firebaseReady]);
+
+      // ── Save extras to localStorage + Firestore ───────────────────────────
+      React.useEffect(() => {
+        try { localStorage.setItem('climbing-extras', JSON.stringify(extras)); } catch {}
+        if (!firebaseReady) return;
+        function flushExtras(snap) {
+          Object.entries(snap).forEach(([id, exData]) => {
+            const payload = toFirestore(exData);
+            const sig = JSON.stringify(payload);
+            if (lastFlushedExtrasRef.current[id] === sig) return; // zapiš jen změněná
+            lastFlushedExtrasRef.current[id] = sig;
+            skipFirebaseExtras.current.add(id);
+            db.collection('extras').doc(id).set(payload, { merge: true }).catch(() => {});
+          });
+        }
+        const t = setTimeout(() => flushExtras(extras), 800);
+        return () => clearTimeout(t);
+      }, [extras, firebaseReady]);
 
       // ── Flush při skrytí tabu (zavření okna, přepnutí tabu) ──────────────────
       React.useEffect(() => {
@@ -2287,6 +2682,13 @@
         ? _consume(it => it.venue === 'mon' && _dayOf(it) === _monDayMatch)
         : null;
       const _remainingWeekItems = _pool;
+
+      // Extra stavění v tomto týdnu — přidají se jako další karty vedle standardních.
+      // Vědomě NEvstupují do replacement logiky: extra nic neposouvá ani nenahrazuje.
+      const _weekExtras = Object.entries(extras || {})
+        .map(([id, e]) => ({ ...e, id }))
+        .filter(e => e?.date && e.date >= _wkStartIso && e.date <= _wkEndIso)
+        .sort((a, b) => a.date.localeCompare(b.date) || String(a.venue).localeCompare(String(b.venue)));
 
       // Den stavění: Lanovka pondělí/úterý (od září 2026), Limit středa/čtvrtek (od září 2026 vždy čtvrtek)
       const monOffset = lanovkaOffset(monday);
@@ -2616,6 +3018,52 @@
         });
       }
 
+      // ── Extra stavění handlers ────────────────────────────────────────────
+      // Jeden termín = jedno extra. Rotace ani standardní karty se nemění.
+      function addExtras({ venue, name, dates, sectors, slotCount, lano }) {
+        setExtras(cur => {
+          const out = { ...cur };
+          (dates || []).forEach(date => {
+            const id = extraId(date, venue);
+            out[id] = {
+              id, date, venue, name: name || '',
+              sectors: sectors || [], slotCount, lano: !!lano,
+              setters: Array.from({ length: slotCount }, () => null),
+              lanoSetter: null,
+            };
+          });
+          return out;
+        });
+        setShowAddExtra(false);
+      }
+      function deleteExtra(id) {
+        if (!window.confirm('Opravdu smazat toto extra stavění?')) return;
+        setExtras(cur => { const n = { ...cur }; delete n[id]; return n; });
+        db.collection('extras').doc(id).delete().catch(() => {});
+      }
+      function onExtraSlotClick(id, idx) {
+        const ex = extras[id]; if (!ex) return;
+        const arr = ex.setters || [];
+        if (arr[idx]) {
+          setExtras(r => ({ ...r, [id]: { ...r[id], setters: arr.map((s, i) => i === idx ? null : s) } }));
+          if (sel === arr[idx]) setSel(null);
+        } else if (sel) {
+          if (arr.includes(sel) || ex.lanoSetter === sel) return; // 1× v rámci jednoho extra
+          setExtras(r => ({ ...r, [id]: { ...r[id], setters: arr.map((s, i) => i === idx ? sel : s) } }));
+        }
+      }
+      function onExtraLanoClick(id) {
+        const ex = extras[id]; if (!ex) return;
+        if (ex.lanoSetter) {
+          const who = ex.lanoSetter;
+          setExtras(r => ({ ...r, [id]: { ...r[id], lanoSetter: null } }));
+          if (sel === who) setSel(null);
+        } else if (sel) {
+          if ((ex.setters || []).includes(sel)) return;
+          setExtras(r => ({ ...r, [id]: { ...r[id], lanoSetter: sel } }));
+        }
+      }
+
       // ── Click ─────────────────────────────────────────────────────────────
       function onSlotClick(session, idx) {
         if ((week[session] || E4())[idx]) remove(session, idx);
@@ -2711,6 +3159,18 @@
               sundavaci: filArr(r.sundavaci),
               myti:      nul(r.myti),
               dostavba:  (r.dostavba || []).map(d => ({ ...d, setters: nulArr(d.setters) })),
+            };
+          }
+          return out;
+        });
+        // …a z extra stavění
+        setExtras(es => {
+          const out = {};
+          for (const [k, e] of Object.entries(es)) {
+            out[k] = {
+              ...e,
+              setters: e.setters == null ? e.setters : e.setters.map(v => v === name ? null : v),
+              lanoSetter: e.lanoSetter === name ? null : e.lanoSetter,
             };
           }
           return out;
@@ -2849,6 +3309,16 @@
             if (!day?.date) return;
             tallyRaceSetters(day.setters, new Date(day.date + 'T12:00:00'));
           });
+        });
+        // Extra stavění — stejně jako běžné stavění (lano zvlášť do lano statistiky)
+        Object.values(extras || {}).forEach(ex => {
+          if (!ex?.date) return;
+          const d = new Date(ex.date + 'T12:00:00');
+          tallyRaceSetters((ex.setters || []).slice(0, ex.slotCount || 0), d);
+          if (ex.lanoSetter && stats[ex.lanoSetter] && d.getFullYear() === thisYear) {
+            stats[ex.lanoSetter].lanoYear++;
+            if (d.getMonth() === thisMonth) stats[ex.lanoSetter].lanoMonth++;
+          }
         });
         return stats;
       }
@@ -3161,6 +3631,17 @@
                     }
                   });
 
+                  // Extra stavění — vždy jako poslední karty v řádku
+                  _weekExtras.forEach(ex => {
+                    slots.push({
+                      stavba: <ExtraCard extra={ex} sel={sel}
+                        onSlotClick={i => onExtraSlotClick(ex.id, i)}
+                        onLanoClick={() => onExtraLanoClick(ex.id)}
+                        onDelete={() => deleteExtra(ex.id)} />,
+                      sundavani: null,
+                    });
+                  });
+
                   const hasSundavani = slots.some(s => s.sundavani != null);
                   return (
                     <>
@@ -3252,8 +3733,8 @@
 
               {/* Stats — mobile only, na desktopu jsou v pravém sidebaru */}
               <div className="lg:hidden px-4 pb-2 space-y-3">
-                <MonthlyOccupancy data={data} viewMonday={monday} rotationShifts={rotationShifts} />
-                <RacesPanel races={races} />
+                <MonthlyOccupancy data={data} viewMonday={monday} rotationShifts={rotationShifts} extras={extras} />
+                <RacesPanel races={races} extras={extras} />
                 <StatsPanel stats={computeStats()} team={team} />
                 <RemovalStatsPanel stats={computeRemovalStats()} />
               </div>
@@ -3285,7 +3766,7 @@
                 {Array.from({ length: calMonths }, (_, i) => (
                   <MonthCalendar key={i} data={data}
                     viewMonday={i === 0 ? monday : new Date(monday.getFullYear(), monday.getMonth() + i, 15)}
-                    rotationShifts={rotationShifts} />
+                    rotationShifts={rotationShifts} extras={extras} />
                 ))}
                 <button onClick={() => setCalMonths(m => m === 2 ? 3 : 2)}
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-600 text-sm font-semibold transition-colors">
@@ -3382,12 +3863,19 @@
                     </div>
                   )}
 
-                  {/* + Přidat závod — vystředěný dole, plná šířka */}
-                  <button onClick={() => setShowAddRace(true)}
-                    className="w-full px-5 py-3.5 rounded-xl bg-gradient-to-br from-pink-600 to-pink-700 hover:from-pink-500 hover:to-pink-600 text-white text-sm font-black uppercase tracking-widest shadow-sm transition-colors flex items-center justify-center gap-2">
-                    <span className="text-lg leading-none">+</span>
-                    <span>Přidat závod</span>
-                  </button>
+                  {/* + Přidat závod / + Extra stavění — vedle sebe dole */}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button onClick={() => setShowAddRace(true)}
+                      className="flex-1 px-5 py-3.5 rounded-xl bg-gradient-to-br from-pink-600 to-pink-700 hover:from-pink-500 hover:to-pink-600 text-white text-sm font-black uppercase tracking-widest shadow-sm transition-colors flex items-center justify-center gap-2">
+                      <span className="text-lg leading-none">+</span>
+                      <span>Přidat závod</span>
+                    </button>
+                    <button onClick={() => setShowAddExtra(true)}
+                      className="flex-1 px-5 py-3.5 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 hover:from-slate-600 hover:to-slate-800 text-white text-sm font-black uppercase tracking-widest shadow-sm transition-colors flex items-center justify-center gap-2">
+                      <span className="text-lg leading-none">+</span>
+                      <span>Extra stavění</span>
+                    </button>
+                  </div>
                 </div>
               );
             })()}
@@ -3438,8 +3926,8 @@
                   </div>
                 );
               })()}
-              <MonthlyOccupancy data={data} viewMonday={monday} rotationShifts={rotationShifts} />
-              <RacesPanel races={races} />
+              <MonthlyOccupancy data={data} viewMonday={monday} rotationShifts={rotationShifts} extras={extras} />
+              <RacesPanel races={races} extras={extras} />
               </div>
               <div className="hidden lg:block space-y-3">
                 <StatsPanel stats={computeStats()} team={team} />
@@ -3455,6 +3943,14 @@
               existingRaceDates={new Set(Object.values(races || {}).flatMap(r => [r.date, ...((r.dostavba || []).map(d => d.date))]).filter(Boolean))}
               onClose={() => setShowAddRace(false)}
               onSave={addRace} />
+          )}
+
+          {/* Modal: Extra stavění */}
+          {showAddExtra && (
+            <AddExtraModal
+              existingIds={new Set(Object.keys(extras || {}))}
+              onClose={() => setShowAddExtra(false)}
+              onSave={addExtras} />
           )}
 
           {/* Modal: Nahradit profil (prohození s jiným týdnem téže stěny) */}
