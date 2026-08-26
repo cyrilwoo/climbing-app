@@ -2085,7 +2085,7 @@
                 onDrop={() => {}} />
             ))}
             {extra.lano && (
-              <div className={`mt-3 pt-3 border-t ${isLan ? 'border-amber-100' : 'border-zinc-100'}`}>
+              <div className={n > 0 ? `mt-3 pt-3 border-t ${isLan ? 'border-amber-100' : 'border-zinc-100'}` : ''}>
                 <p className="text-xs font-bold text-amber-700 mb-2">Lano</p>
                 <Slot num="L" name={extra.lanoSetter ?? null} {...slotProps}
                   emptyBg="border-amber-300 hover:border-amber-500 hover:bg-amber-50"
@@ -2125,10 +2125,22 @@
       const switchVenue = v => {
         if (v === venue) return;
         setVenue(v); setSectors([]);
-        if (v !== 'lanovka') setLano(false);
+        if (v !== 'lanovka') { setLano(false); if (slotCount === 0) setSlotCount(2); }
       };
       const toggleDate   = iso => setDates(cur => cur.includes(iso) ? cur.filter(x => x !== iso) : [...cur, iso].sort());
-      const toggleSector = s   => setSectors(cur => cur.includes(s) ? cur.filter(x => x !== s) : [...cur, s]);
+      // Profil bez stavěče nedává smysl → první vybraný profil vrátí počet z 0 na 2.
+      const toggleSector = s => {
+        const next = sectors.includes(s) ? sectors.filter(x => x !== s) : [...sectors, s];
+        setSectors(next);
+        if (next.length > 0 && slotCount === 0) setSlotCount(2);
+      };
+      // „Jen lano" — když se staví pouze lano, přednastav 0 stavěčů (jde přepsat).
+      const toggleLano = () => {
+        const next = !lano;
+        setLano(next);
+        if (next && sectors.length === 0) setSlotCount(0);
+        if (!next && slotCount === 0) setSlotCount(2);
+      };
       const conflicts = dates.filter(d => existingIds.has(extraId(d, venue)));
       const valid = dates.length > 0 && (sectors.length > 0 || lano) && (slotCount > 0 || lano) && conflicts.length === 0;
       const fmtShort = iso => { const d = new Date(iso + 'T12:00:00');
@@ -2202,7 +2214,7 @@
                     </button>
                   ))}
                   {isLan && (
-                    <button onClick={() => setLano(l => !l)}
+                    <button onClick={toggleLano}
                       className={`px-3 py-3 rounded-xl text-sm font-black uppercase tracking-wide transition-all
                         ${lano ? acc.on : off}`}>
                       Lano
@@ -2214,7 +2226,11 @@
               {/* Počet stavěčů */}
               <section>
                 <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">
-                  4 · Počet stavěčů{lano && <span className="text-zinc-600 font-bold normal-case tracking-normal"> — bez lano slotu</span>}
+                  4 · Počet stavěčů{lano && (
+                    <span className="text-zinc-600 font-bold normal-case tracking-normal">
+                      {' '}— bez lano slotu{slotCount === 0 ? ' · jen lano' : ', 0 = jen lano'}
+                    </span>
+                  )}
                 </h3>
                 <div className="grid grid-cols-9 gap-1">
                   {[0,1,2,3,4,5,6,7,8].map(n => (
