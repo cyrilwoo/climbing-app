@@ -110,9 +110,15 @@
     // Extra stavění — jednorázové stavění mimo rotaci (nic neposouvá, jen se přidá).
     // ID = datum + stěna → na jednu stěnu jedno extra za den, obě stěny v jeden den OK.
     const extraId = (date, venue) => `${date}_${venue}`;
-    // „Lano" má dvě role: profil (co se staví) a samostatný slot navíc.
-    // Dají se mít odděleně — starší extra bez pole lanoSlot mají slot vždy.
-    const extraHasLanoSlot = ex => !!ex?.lano && ex.lanoSlot !== false;
+    // „Lano" má dvě role: profil (co se staví) a samostatný slot „L" navíc.
+    // Slot navíc je výslovná volba (lanoSlot === true). Starší extra pole nemají,
+    // tak jim ho necháme jen tam, kde by o něco přišla: obsazený lano slot,
+    // lano jako přídavek k profilům, nebo karta, která jinak nemá žádný slot.
+    const extraHasLanoSlot = ex => !!ex?.lano && (
+      ex.lanoSlot === true || (ex.lanoSlot === undefined && (
+        !!ex.lanoSetter || (ex.sectors || []).length > 0 || !(ex.slotCount > 0)
+      ))
+    );
     // Staví se jen lano a bez samostatného slotu → běžné sloty JSOU lano
     // (jinak by se lanová dostavba počítala do běžné obsazenosti a statistiky).
     const extraSlotsAreLano = ex => !!ex?.lano && !extraHasLanoSlot(ex) && (ex.sectors || []).length === 0;
@@ -1990,7 +1996,7 @@
 
     // ── ExtraCard — jednorázové stavění mimo rotaci ──────────────────────────
     // Nezasahuje do rotace ani do standardních karet, jen se přidá vedle nich.
-    function ExtraCard({ extra, sel, onSlotClick, onLanoClick, onDelete }) {
+    function ExtraCard({ extra, sel, onSlotClick, onLanoClick, onDelete, onToggleLanoSlot }) {
       const isLan = extra.venue === 'lanovka';
       const date = new Date(extra.date + 'T12:00:00');
       const rawDay = date.toLocaleString('cs-CZ', { weekday: 'long' });
@@ -2094,7 +2100,15 @@
             ))}
             {hasLanoSlot && (
               <div className={n > 0 ? `mt-3 pt-3 border-t ${isLan ? 'border-amber-100' : 'border-zinc-100'}` : ''}>
-                <p className="text-xs font-bold text-amber-700 mb-2">Lano</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-bold text-amber-700">Lano</p>
+                  {onToggleLanoSlot && (
+                    <button onClick={onToggleLanoSlot} title="Zrušit samostatný lano slot"
+                      className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-red-500 transition-colors">
+                      Bez slotu
+                    </button>
+                  )}
+                </div>
                 <Slot num="L" name={extra.lanoSetter ?? null} {...slotProps}
                   emptyBg="border-amber-300 hover:border-amber-500 hover:bg-amber-50"
                   numEmpty="bg-amber-200 text-amber-700"
@@ -2108,6 +2122,12 @@
                 Bez slotů
               </div>
             )}
+            {extra.lano && !hasLanoSlot && onToggleLanoSlot && (
+              <button onClick={onToggleLanoSlot}
+                className="w-full mt-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-amber-700 hover:bg-amber-50 transition-colors">
+                + Lano slot
+              </button>
+            )}
           </div>
         </div>
       );
@@ -2120,7 +2140,7 @@
       const [dates,     setDates]     = useState([]);
       const [sectors,   setSectors]   = useState([]);
       const [lano,      setLano]      = useState(false);
-      const [lanoSlot,  setLanoSlot]  = useState(true);   // samostatný slot „L" navíc
+      const [lanoSlot,  setLanoSlot]  = useState(false);  // samostatný slot „L" navíc
       const [slotCount, setSlotCount] = useState(2);
       const isLan = venue === 'lanovka';
       const sectorList = isLan ? LANOVKA_SECTORS : LIMIT_SECTORS;
@@ -2134,7 +2154,7 @@
       const switchVenue = v => {
         if (v === venue) return;
         setVenue(v); setSectors([]);
-        if (v !== 'lanovka') { setLano(false); setLanoSlot(true); if (slotCount === 0) setSlotCount(2); }
+        if (v !== 'lanovka') { setLano(false); setLanoSlot(false); if (slotCount === 0) setSlotCount(2); }
       };
       const toggleDate   = iso => setDates(cur => cur.includes(iso) ? cur.filter(x => x !== iso) : [...cur, iso].sort());
       // Profil bez stavěče nedává smysl → první vybraný profil vrátí počet z 0 na 2.
@@ -2143,14 +2163,14 @@
         setSectors(next);
         if (next.length > 0 && slotCount === 0) setSlotCount(2);
       };
-      // „Jen lano" — když se staví pouze lano, přednastav 0 stavěčů (jde přepsat).
+      // Lano se ve výchozím stavu staví běžnými sloty — žádný slot „L" navíc.
       const toggleLano = () => {
         const next = !lano;
         setLano(next);
-        if (next) { setLanoSlot(true); if (sectors.length === 0) setSlotCount(0); }
-        else { setLanoSlot(true); if (slotCount === 0) setSlotCount(2); }
+        setLanoSlot(false);
+        if (slotCount === 0) setSlotCount(1);
       };
-      // Lano slot vypnutý → lano staví běžní stavěči, takže musí zůstat aspoň jeden.
+      // Slot „L" navíc — teprve tady se lano odděluje od běžných stavěčů.
       const toggleLanoSlot = () => {
         const next = !lanoSlot;
         setLanoSlot(next);
@@ -2244,7 +2264,7 @@
                 <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">
                   4 · Počet stavěčů{lano && lanoSlot && (
                     <span className="text-zinc-600 font-bold normal-case tracking-normal">
-                      {' '}— bez lano slotu{slotCount === 0 ? ' · jen lano' : ', 0 = jen lano'}
+                      {' '}— mimo slot L{slotCount === 0 ? ' · staví jen slot L' : ', 0 = jen slot L'}
                     </span>
                   )}
                 </h3>
@@ -2261,7 +2281,7 @@
                   <button onClick={toggleLanoSlot}
                     className={`mt-2 w-full px-3 py-3 rounded-xl text-sm font-black uppercase tracking-wide transition-all
                       ${lanoSlot ? acc.on : off}`}>
-                    {lanoSlot ? '+ samostatný lano slot' : 'bez lano slotu — lano staví tihle'}
+                    {lanoSlot ? 'slot „L" navíc — lano staví někdo mimo ně' : 'lano staví stavěči výše — bez slotu „L"'}
                   </button>
                 )}
               </section>
@@ -3075,6 +3095,21 @@
         });
         setShowAddExtra(false);
       }
+      // Lano slot „L" jde na kartě kdykoli přidat i zrušit — bez mazání celého extra.
+      function toggleExtraLanoSlot(id) {
+        const ex = extras[id]; if (!ex) return;
+        const has = extraHasLanoSlot(ex);
+        if (has && ex.lanoSetter && !window.confirm(`Zrušit lano slot? „${ex.lanoSetter}" z něj vypadne.`)) return;
+        setExtras(cur => {
+          const c = cur[id]; if (!c) return cur;
+          if (has) {
+            const slotCount = Math.max(c.slotCount || 0, 1);   // ať karta nezůstane bez slotu
+            const setters = Array.from({ length: slotCount }, (_, i) => (c.setters || [])[i] ?? null);
+            return { ...cur, [id]: { ...c, lanoSlot: false, lanoSetter: null, slotCount, setters } };
+          }
+          return { ...cur, [id]: { ...c, lanoSlot: true } };
+        });
+      }
       function deleteExtra(id) {
         if (!window.confirm('Opravdu smazat toto extra stavění?')) return;
         setExtras(cur => { const n = { ...cur }; delete n[id]; return n; });
@@ -3691,6 +3726,7 @@
                     const card = <ExtraCard extra={ex} sel={sel}
                       onSlotClick={i => onExtraSlotClick(ex.id, i)}
                       onLanoClick={() => onExtraLanoClick(ex.id)}
+                      onToggleLanoSlot={() => toggleExtraLanoSlot(ex.id)}
                       onDelete={() => deleteExtra(ex.id)} />;
                     const host = slots.find(s => s.venue === ex.venue);
                     if (host) { if (!host.stacked) host.stacked = []; host.stacked.push(card); }
