@@ -3501,6 +3501,12 @@
                   className="p-3 sm:p-1.5 rounded-xl hover:bg-gray-100 active:bg-gray-200 text-gray-400 hover:text-gray-700 transition-colors touch-manipulation">
                   <ChevronsRight c="w-6 h-6 sm:w-5 sm:h-5" />
                 </button>
+                {/* Skok zpět na aktuální týden — po listování v jiném měsíci jeden klik */}
+                <button onClick={() => setOffset(0)} disabled={isNow} title="Zpět na aktuální týden"
+                  className={`ml-1 px-2.5 py-2 sm:py-1.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors touch-manipulation
+                    ${isNow ? 'text-gray-300 cursor-default' : 'bg-amber-100 text-amber-700 hover:bg-amber-200 active:bg-amber-300'}`}>
+                  Dnes
+                </button>
               </div>
               </div>
               {/* Second row: fill indicators */}
