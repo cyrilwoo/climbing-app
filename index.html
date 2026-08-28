@@ -110,6 +110,12 @@
     // Extra stavění — jednorázové stavění mimo rotaci (nic neposouvá, jen se přidá).
     // ID = datum + stěna → na jednu stěnu jedno extra za den, obě stěny v jeden den OK.
     const extraId = (date, venue) => `${date}_${venue}`;
+    // „Lano" má dvě role: profil (co se staví) a samostatný slot navíc.
+    // Dají se mít odděleně — starší extra bez pole lanoSlot mají slot vždy.
+    const extraHasLanoSlot = ex => !!ex?.lano && ex.lanoSlot !== false;
+    // Staví se jen lano a bez samostatného slotu → běžné sloty JSOU lano
+    // (jinak by se lanová dostavba počítala do běžné obsazenosti a statistiky).
+    const extraSlotsAreLano = ex => !!ex?.lano && !extraHasLanoSlot(ex) && (ex.sectors || []).length === 0;
     // ── Rozvrh dnů: od září 2026 se Lanovka staví v úterý, Limit ve čtvrtek (vždy) ──
     // Před zářím 2026: Lanovka pondělí (+0), Limit středa (+2) nebo čtvrtek pro Dětskou (+3).
     function isNewSchedule(monday) {
@@ -1344,8 +1350,9 @@
                 const n = ex.slotCount || 0;
                 const fill = (ex.setters || []).slice(0, n).filter(Boolean).length;
                 if (ex.venue === 'lanovka') {
-                  monSetterTotal += n; monSetterFill += fill;
-                  if (ex.lano) { monLanoTotal += 1; monLanoFill += ex.lanoSetter ? 1 : 0; }
+                  if (extraSlotsAreLano(ex)) { monLanoTotal += n; monLanoFill += fill; }
+                  else { monSetterTotal += n; monSetterFill += fill; }
+                  if (extraHasLanoSlot(ex)) { monLanoTotal += 1; monLanoFill += ex.lanoSetter ? 1 : 0; }
                 } else {
                   wedTotal += n; wedFill += fill;
                 }
@@ -1514,12 +1521,12 @@
               const isRace  = it.kind === 'race';
               const isExtra = it.kind === 'extra';
               const isLanExtra = isExtra && it.extra.venue === 'lanovka';
-              const total = isExtra ? ((it.extra.slotCount || 0) + (it.extra.lano ? 1 : 0))
+              const total = isExtra ? ((it.extra.slotCount || 0) + (extraHasLanoSlot(it.extra) ? 1 : 0))
                           : isRace  ? (it.race.slotCount || 0)
                           : (it.day.slotCount || 0);
               const setters = isExtra ? it.extra.setters : isRace ? it.race.setters : it.day.setters;
               const filled = (setters || []).slice(0, isExtra ? (it.extra.slotCount || 0) : total).filter(Boolean).length
-                + (isExtra && it.extra.lano && it.extra.lanoSetter ? 1 : 0);
+                + (isExtra && extraHasLanoSlot(it.extra) && it.extra.lanoSetter ? 1 : 0);
               const pct    = total ? Math.round(filled / total * 100) : 0;
               const allFilled = total > 0 && filled === total;
               const itemDate = new Date(it.date + 'T12:00:00');
@@ -1990,8 +1997,9 @@
       const displayDay = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
       const n = extra.slotCount || 0;
       const setters = extra.setters || [];
-      const total  = n + (extra.lano ? 1 : 0);
-      const filled = setters.slice(0, n).filter(Boolean).length + (extra.lano && extra.lanoSetter ? 1 : 0);
+      const hasLanoSlot = extraHasLanoSlot(extra);
+      const total  = n + (hasLanoSlot ? 1 : 0);
+      const filled = setters.slice(0, n).filter(Boolean).length + (hasLanoSlot && extra.lanoSetter ? 1 : 0);
       const allFilled = total > 0 && filled === total;
       const hdr      = isLan ? 'bg-gradient-to-br from-amber-400 to-yellow-400' : 'bg-[#1e1e20]';
       const hdrText  = isLan ? 'text-gray-900' : 'text-white';
@@ -2084,7 +2092,7 @@
                 onDragStart={() => {}}
                 onDrop={() => {}} />
             ))}
-            {extra.lano && (
+            {hasLanoSlot && (
               <div className={n > 0 ? `mt-3 pt-3 border-t ${isLan ? 'border-amber-100' : 'border-zinc-100'}` : ''}>
                 <p className="text-xs font-bold text-amber-700 mb-2">Lano</p>
                 <Slot num="L" name={extra.lanoSetter ?? null} {...slotProps}
@@ -2095,7 +2103,7 @@
                   onDrop={() => {}} />
               </div>
             )}
-            {n === 0 && !extra.lano && (
+            {n === 0 && !hasLanoSlot && (
               <div className="text-center py-4 text-sm font-medium rounded-xl text-gray-400 bg-gray-50">
                 Bez slotů
               </div>
@@ -2112,6 +2120,7 @@
       const [dates,     setDates]     = useState([]);
       const [sectors,   setSectors]   = useState([]);
       const [lano,      setLano]      = useState(false);
+      const [lanoSlot,  setLanoSlot]  = useState(true);   // samostatný slot „L" navíc
       const [slotCount, setSlotCount] = useState(2);
       const isLan = venue === 'lanovka';
       const sectorList = isLan ? LANOVKA_SECTORS : LIMIT_SECTORS;
@@ -2125,7 +2134,7 @@
       const switchVenue = v => {
         if (v === venue) return;
         setVenue(v); setSectors([]);
-        if (v !== 'lanovka') { setLano(false); if (slotCount === 0) setSlotCount(2); }
+        if (v !== 'lanovka') { setLano(false); setLanoSlot(true); if (slotCount === 0) setSlotCount(2); }
       };
       const toggleDate   = iso => setDates(cur => cur.includes(iso) ? cur.filter(x => x !== iso) : [...cur, iso].sort());
       // Profil bez stavěče nedává smysl → první vybraný profil vrátí počet z 0 na 2.
@@ -2138,15 +2147,22 @@
       const toggleLano = () => {
         const next = !lano;
         setLano(next);
-        if (next && sectors.length === 0) setSlotCount(0);
-        if (!next && slotCount === 0) setSlotCount(2);
+        if (next) { setLanoSlot(true); if (sectors.length === 0) setSlotCount(0); }
+        else { setLanoSlot(true); if (slotCount === 0) setSlotCount(2); }
+      };
+      // Lano slot vypnutý → lano staví běžní stavěči, takže musí zůstat aspoň jeden.
+      const toggleLanoSlot = () => {
+        const next = !lanoSlot;
+        setLanoSlot(next);
+        if (!next && slotCount === 0) setSlotCount(1);
       };
       const conflicts = dates.filter(d => existingIds.has(extraId(d, venue)));
-      const valid = dates.length > 0 && (sectors.length > 0 || lano) && (slotCount > 0 || lano) && conflicts.length === 0;
+      const valid = dates.length > 0 && (sectors.length > 0 || lano)
+        && (slotCount > 0 || (lano && lanoSlot)) && conflicts.length === 0;
       const fmtShort = iso => { const d = new Date(iso + 'T12:00:00');
         const wd = d.toLocaleString('cs-CZ', { weekday: 'short' });
         return `${wd.charAt(0).toUpperCase() + wd.slice(1)} ${d.getDate()}.${d.getMonth()+1}.`; };
-      const handleSave = () => { if (valid) onSave({ venue, name: name.trim(), dates, sectors, slotCount, lano }); };
+      const handleSave = () => { if (valid) onSave({ venue, name: name.trim(), dates, sectors, slotCount, lano, lanoSlot: lano && lanoSlot }); };
 
       return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -2226,7 +2242,7 @@
               {/* Počet stavěčů */}
               <section>
                 <h3 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 mb-3">
-                  4 · Počet stavěčů{lano && (
+                  4 · Počet stavěčů{lano && lanoSlot && (
                     <span className="text-zinc-600 font-bold normal-case tracking-normal">
                       {' '}— bez lano slotu{slotCount === 0 ? ' · jen lano' : ', 0 = jen lano'}
                     </span>
@@ -2234,13 +2250,20 @@
                 </h3>
                 <div className="grid grid-cols-9 gap-1">
                   {[0,1,2,3,4,5,6,7,8].map(n => (
-                    <button key={n} onClick={() => setSlotCount(n)} disabled={n === 0 && !lano}
+                    <button key={n} onClick={() => setSlotCount(n)} disabled={n === 0 && !(lano && lanoSlot)}
                       className={`aspect-square rounded-xl text-base font-black tabular-nums transition-all
-                        ${slotCount === n ? acc.on : off} ${n === 0 && !lano ? 'opacity-30 cursor-not-allowed' : ''}`}>
+                        ${slotCount === n ? acc.on : off} ${n === 0 && !(lano && lanoSlot) ? 'opacity-30 cursor-not-allowed' : ''}`}>
                       {n}
                     </button>
                   ))}
                 </div>
+                {lano && (
+                  <button onClick={toggleLanoSlot}
+                    className={`mt-2 w-full px-3 py-3 rounded-xl text-sm font-black uppercase tracking-wide transition-all
+                      ${lanoSlot ? acc.on : off}`}>
+                    {lanoSlot ? '+ samostatný lano slot' : 'bez lano slotu — lano staví tihle'}
+                  </button>
+                )}
               </section>
 
               {/* Název */}
@@ -3036,14 +3059,14 @@
 
       // ── Extra stavění handlers ────────────────────────────────────────────
       // Jeden termín = jedno extra. Rotace ani standardní karty se nemění.
-      function addExtras({ venue, name, dates, sectors, slotCount, lano }) {
+      function addExtras({ venue, name, dates, sectors, slotCount, lano, lanoSlot }) {
         setExtras(cur => {
           const out = { ...cur };
           (dates || []).forEach(date => {
             const id = extraId(date, venue);
             out[id] = {
               id, date, venue, name: name || '',
-              sectors: sectors || [], slotCount, lano: !!lano,
+              sectors: sectors || [], slotCount, lano: !!lano, lanoSlot: !!(lano && lanoSlot),
               setters: Array.from({ length: slotCount }, () => null),
               lanoSetter: null,
             };
@@ -3327,11 +3350,21 @@
           });
         });
         // Extra stavění — stejně jako běžné stavění (lano zvlášť do lano statistiky)
+        const tallyLanoSetters = (setters, date) => {
+          if (date.getFullYear() !== thisYear) return;
+          (setters || []).forEach(name => {
+            if (!name || !stats[name]) return;
+            stats[name].lanoYear++;
+            if (date.getMonth() === thisMonth) stats[name].lanoMonth++;
+          });
+        };
         Object.values(extras || {}).forEach(ex => {
           if (!ex?.date) return;
           const d = new Date(ex.date + 'T12:00:00');
-          tallyRaceSetters((ex.setters || []).slice(0, ex.slotCount || 0), d);
-          if (ex.lanoSetter && stats[ex.lanoSetter] && d.getFullYear() === thisYear) {
+          const exSetters = (ex.setters || []).slice(0, ex.slotCount || 0);
+          if (extraSlotsAreLano(ex)) tallyLanoSetters(exSetters, d);
+          else tallyRaceSetters(exSetters, d);
+          if (extraHasLanoSlot(ex) && ex.lanoSetter && stats[ex.lanoSetter] && d.getFullYear() === thisYear) {
             stats[ex.lanoSetter].lanoYear++;
             if (d.getMonth() === thisMonth) stats[ex.lanoSetter].lanoMonth++;
           }
@@ -3534,6 +3567,7 @@
                   // Mon
                   if (monReplacement) {
                     slots.push({
+                      venue: 'lanovka',
                       stavba: renderReplacementStavba(monReplacement),
                       sundavani: monReplacement.kind === 'race' ? renderRaceSund(monReplacement.race) : null,
                     });
@@ -3544,6 +3578,7 @@
                     // zůstávají uložená, jen se nezobrazuje prázdná karta.
                   } else {
                     slots.push({
+                      venue: 'lanovka',
                       stavba: <SessionCard
                         session="monday" day="Pondělí" date={monDate} theme="yellow"
                         slots={week.monday} lanoSlot={hasLanoBuild(monday) ? week.mondayLano : undefined} calInfo={calMon}
@@ -3571,6 +3606,7 @@
                   // Wed
                   if (wedReplacement) {
                     slots.push({
+                      venue: 'limit',
                       stavba: renderReplacementStavba(wedReplacement),
                       sundavani: wedReplacement.kind === 'race' ? renderRaceSund(wedReplacement.race) : null,
                     });
@@ -3579,6 +3615,7 @@
                     // OFF karta nezobrazuje sloty, jen "není stavění". Data zůstávají.
                   } else {
                     slots.push({
+                      venue: 'limit',
                       stavba: <SessionCard
                         session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} theme="dark"
                         slots={week.wednesday} calInfo={calWed}
@@ -3647,15 +3684,17 @@
                     }
                   });
 
-                  // Extra stavění — vždy jako poslední karty v řádku
+                  // Extra stavění — pod kartu své stěny (Lanovka pod Lanovku, Limit pod Limit).
+                  // Když stěna ten týden kartu nemá (prázdniny, skrytý volný týden),
+                  // přidá se extra jako samostatný sloupec na konec řádku.
                   _weekExtras.forEach(ex => {
-                    slots.push({
-                      stavba: <ExtraCard extra={ex} sel={sel}
-                        onSlotClick={i => onExtraSlotClick(ex.id, i)}
-                        onLanoClick={() => onExtraLanoClick(ex.id)}
-                        onDelete={() => deleteExtra(ex.id)} />,
-                      sundavani: null,
-                    });
+                    const card = <ExtraCard extra={ex} sel={sel}
+                      onSlotClick={i => onExtraSlotClick(ex.id, i)}
+                      onLanoClick={() => onExtraLanoClick(ex.id)}
+                      onDelete={() => deleteExtra(ex.id)} />;
+                    const host = slots.find(s => s.venue === ex.venue);
+                    if (host) { if (!host.stacked) host.stacked = []; host.stacked.push(card); }
+                    else slots.push({ venue: ex.venue, stavba: card, sundavani: null });
                   });
 
                   const hasSundavani = slots.some(s => s.sundavani != null);
@@ -3672,8 +3711,11 @@
                       )}
                       <div className="flex gap-4 lg:flex-wrap lg:justify-center items-start">
                         {slots.map((s, i) => (
-                          <div key={`stav-${i}`} className={cardClass}>
+                          <div key={`stav-${i}`} className={`${cardClass} space-y-4`}>
                             {s.stavba}
+                            {(s.stacked || []).map((c, j) => (
+                              <React.Fragment key={`extra-${j}`}>{c}</React.Fragment>
+                            ))}
                           </div>
                         ))}
                       </div>
