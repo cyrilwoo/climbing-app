@@ -548,13 +548,22 @@
     function SessionCard({ session, day, date, theme, slots, lanoSlot, calInfo,
       sel, onSlotClick, onDragStartSlot, onDragOverSlot, onDropSlot,
       onLanoClick, onDragStartLano, onDropLano, onClear, onDateChange,
-      onShift, nextSector, weekMin, weekMax }) {
+      onShift, nextSector, weekMin, weekMax, baseDate }) {
 
       const [editingDate, setEditingDate] = React.useState(false);
       const isYellow = theme === 'yellow';
       const isGreen  = theme === 'green';
       const rawDay = date.toLocaleString('cs-CZ', { weekday: 'long' });
       const displayDay = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
+      // Přesunuté stavění: datum se liší od standardního dne rotace → výrazné upozornění,
+      // ať si nikdo nesplete den (baseDate = den, na který stavění normálně padá).
+      const movedFrom = baseDate && baseDate.toDateString() !== date.toDateString() ? baseDate : null;
+      // 2. pád, ať štítek zní česky („místo čtvrtka", ne „místo čtvrtek")
+      const DAY_GEN = { 'pondělí': 'pondělí', 'úterý': 'úterý', 'středa': 'středy',
+        'čtvrtek': 'čtvrtka', 'pátek': 'pátku', 'sobota': 'soboty', 'neděle': 'neděle' };
+      const movedFromDay = movedFrom
+        ? (r => DAY_GEN[r] || r)(movedFrom.toLocaleString('cs-CZ', { weekday: 'long' }))
+        : '';
       // Defenzivní: data z Firestore mohou mít chybějící pole (např. týden má jen monday bez wednesday)
       const safeSlots = Array.isArray(slots) ? slots : [null, null, null, null];
       // Slot count: Tělocvična=2, Lanovka=variable, Limit=variable
@@ -650,6 +659,15 @@
                   );
                 })()}
               </div>
+              {/* Přesunuto na jiný den než obvykle — výrazně, aby to nikdo nepřehlédl */}
+              {movedFrom && (
+                <span title={`Standardně by se stavělo v ${movedFromDay} ${fmtFull(movedFrom)}`}
+                  className="inline-flex items-center gap-1 mt-1.5 px-2 py-1 rounded-md
+                    bg-red-600 text-white ring-2 ring-red-300 shadow-sm
+                    text-[11px] font-black uppercase tracking-widest">
+                  Jiný den · místo {movedFromDay} {fmt(movedFrom)}
+                </span>
+              )}
               {/* Svátek / prázdniny — informativní štítek (přesun řeší obsluha ručně) */}
               {(() => {
                 const hn = holidayNote(date);
@@ -2771,9 +2789,13 @@
       const weekMax = toIso(addDays(monday, 6));
       const inWk = iso => !!iso && iso >= weekMin && iso <= weekMax;
       // + 'T12:00:00' aby se ISO date-only string neparsoval jako UTC midnight (timezone off-by-one)
-      const monDate = inWk(week.monDateOverride) ? new Date(week.monDateOverride + 'T12:00:00') : addDays(monday, monOffset);
-      const wedDate = inWk(week.wedDateOverride) ? new Date(week.wedDateOverride + 'T12:00:00') : addDays(monday, wedOffset);
-      const thuDate = inWk(week.thuDateOverride) ? new Date(week.thuDateOverride + 'T12:00:00') : addDays(monday, gymOffset(monday));
+      // Standardní (nepřesunuté) datum — karta podle něj pozná, že je stavění jinde
+      const monBaseDate = addDays(monday, monOffset);
+      const wedBaseDate = addDays(monday, wedOffset);
+      const thuBaseDate = addDays(monday, gymOffset(monday));
+      const monDate = inWk(week.monDateOverride) ? new Date(week.monDateOverride + 'T12:00:00') : monBaseDate;
+      const wedDate = inWk(week.wedDateOverride) ? new Date(week.wedDateOverride + 'T12:00:00') : wedBaseDate;
+      const thuDate = inWk(week.thuDateOverride) ? new Date(week.thuDateOverride + 'T12:00:00') : thuBaseDate;
       function setMonDate(iso) { setWeek(w => ({ ...w, monDateOverride: iso })); }
       function setWedDate(iso) { setWeek(w => ({ ...w, wedDateOverride: iso })); }
       function setThuDate(iso) { setWeek(w => ({ ...w, thuDateOverride: iso })); }
@@ -3634,7 +3656,7 @@
                     slots.push({
                       venue: 'lanovka',
                       stavba: <SessionCard
-                        session="monday" day="Pondělí" date={monDate} theme="yellow"
+                        session="monday" day="Pondělí" date={monDate} baseDate={monBaseDate} theme="yellow"
                         slots={week.monday} lanoSlot={hasLanoBuild(monday) ? week.mondayLano : undefined} calInfo={calMon}
                         sel={sel}
                         onSlotClick={i => onSlotClick('monday', i)}
@@ -3671,7 +3693,7 @@
                     slots.push({
                       venue: 'limit',
                       stavba: <SessionCard
-                        session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} theme="dark"
+                        session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} baseDate={wedBaseDate} theme="dark"
                         slots={week.wednesday} calInfo={calWed}
                         sel={sel}
                         onSlotClick={i => onSlotClick('wednesday', i)}
@@ -3695,7 +3717,7 @@
                   if (calThu) {
                     slots.push({
                       stavba: <SessionCard
-                        session="thursday" day={isNewSchedule(monday) ? "Pátek" : "Čtvrtek"} date={thuDate} theme="green"
+                        session="thursday" day={isNewSchedule(monday) ? "Pátek" : "Čtvrtek"} date={thuDate} baseDate={thuBaseDate} theme="green"
                         slots={week.thursday || E4()} calInfo={calThu}
                         sel={sel}
                         onSlotClick={i => onThuSlotClick(i)}
