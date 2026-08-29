@@ -548,7 +548,7 @@
     function SessionCard({ session, day, date, theme, slots, lanoSlot, calInfo,
       sel, onSlotClick, onDragStartSlot, onDragOverSlot, onDropSlot,
       onLanoClick, onDragStartLano, onDropLano, onClear, onDateChange,
-      onShift, nextSector, weekMin, weekMax, baseDate }) {
+      onShift, nextSector, weekMin, weekMax, baseDates }) {
 
       const [editingDate, setEditingDate] = React.useState(false);
       const isYellow = theme === 'yellow';
@@ -557,13 +557,22 @@
       const displayDay = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
       // Přesunuté stavění: datum se liší od standardního dne rotace → výrazné upozornění,
       // ať si nikdo nesplete den (baseDate = den, na který stavění normálně padá).
-      const movedFrom = baseDate && baseDate.toDateString() !== date.toDateString() ? baseDate : null;
+      // baseDates = všechny dny, které pro tuhle stěnu platí za normální. V týdnu na
+      // přelomu srpna a září jsou dva (starý i nový rozvrh) — tam se plán teprve
+      // překlápěl, takže to není přesun a štítek se nesmí ukázat.
+      const _bd = (baseDates || []).filter(Boolean);
+      const movedFrom = _bd.length && !_bd.some(b => b.toDateString() === date.toDateString())
+        ? _bd[0] : null;
       // 2. pád, ať štítek zní česky („místo čtvrtka", ne „místo čtvrtek")
       const DAY_GEN = { 'pondělí': 'pondělí', 'úterý': 'úterý', 'středa': 'středy',
         'čtvrtek': 'čtvrtka', 'pátek': 'pátku', 'sobota': 'soboty', 'neděle': 'neděle' };
       const movedFromDay = movedFrom
         ? (r => DAY_GEN[r] || r)(movedFrom.toLocaleString('cs-CZ', { weekday: 'long' }))
         : '';
+      // Důvod přesunu se dá odvodit: na původní den padl svátek nebo prázdniny
+      const movedReason = movedFrom
+        ? [stateHoliday(movedFrom), schoolHoliday(movedFrom)].filter(Boolean).join(' · ') || null
+        : null;
       // Defenzivní: data z Firestore mohou mít chybějící pole (např. týden má jen monday bez wednesday)
       const safeSlots = Array.isArray(slots) ? slots : [null, null, null, null];
       // Slot count: Tělocvična=2, Lanovka=variable, Limit=variable
@@ -607,7 +616,7 @@
           ${flash ? 'ring-2 ring-red-400 ring-offset-2 border-red-200' : 'border-gray-200'}`}>
 
           {/* Header */}
-          <div className={`${hdr} p-4 h-52 flex flex-col justify-between`}>
+          <div className={`${hdr} p-4 min-h-[13rem] flex flex-col justify-between`}>
             <div className={hdrText}>
               {/* Řádek 1: den + stěna + reset (každý prvek má svůj prostor, nic se nepřekrývá) */}
               <div className="flex items-center justify-between gap-2">
@@ -662,10 +671,16 @@
               {/* Přesunuto na jiný den než obvykle — výrazně, aby to nikdo nepřehlédl */}
               {movedFrom && (
                 <span title={`Standardně by se stavělo v ${movedFromDay} ${fmtFull(movedFrom)}`}
-                  className="inline-flex items-center gap-1 mt-1.5 px-2 py-1 rounded-md
-                    bg-red-600 text-white ring-2 ring-red-300 shadow-sm
-                    text-[11px] font-black uppercase tracking-widest">
-                  Jiný den · místo {movedFromDay} {fmt(movedFrom)}
+                  className="block w-fit mt-1.5 px-2 py-1 rounded-md
+                    bg-red-600 text-white ring-2 ring-red-300 shadow-sm">
+                  <span className="block text-[11px] font-black uppercase tracking-widest">
+                    Jiný den · místo {movedFromDay} {fmt(movedFrom)}
+                  </span>
+                  {movedReason && (
+                    <span className="block mt-0.5 text-[11px] font-bold leading-tight">
+                      důvod: {movedReason}
+                    </span>
+                  )}
                 </span>
               )}
               {/* Svátek / prázdniny — informativní štítek (přesun řeší obsluha ručně) */}
@@ -2796,6 +2811,13 @@
       const monDate = inWk(week.monDateOverride) ? new Date(week.monDateOverride + 'T12:00:00') : monBaseDate;
       const wedDate = inWk(week.wedDateOverride) ? new Date(week.wedDateOverride + 'T12:00:00') : wedBaseDate;
       const thuDate = inWk(week.thuDateOverride) ? new Date(week.thuDateOverride + 'T12:00:00') : thuBaseDate;
+      // Týden na přelomu srpna a září 2026: pondělí je ještě ve starém rozvrhu, ale
+      // stavění už padá do září. Tehdy se plán teprve překlápěl — platí oba dny,
+      // takže se štítek „jiný den" neukáže (nebyl to přesun).
+      const _straddle = !isNewSchedule(monday) && isNewSchedule(addDays(monday, 6));
+      const monBaseDates = _straddle ? [monBaseDate, addDays(monday, 1)] : [monBaseDate];
+      const wedBaseDates = _straddle ? [wedBaseDate, addDays(monday, 3)] : [wedBaseDate];
+      const thuBaseDates = _straddle ? [thuBaseDate, addDays(monday, 4)] : [thuBaseDate];
       function setMonDate(iso) { setWeek(w => ({ ...w, monDateOverride: iso })); }
       function setWedDate(iso) { setWeek(w => ({ ...w, wedDateOverride: iso })); }
       function setThuDate(iso) { setWeek(w => ({ ...w, thuDateOverride: iso })); }
@@ -3656,7 +3678,7 @@
                     slots.push({
                       venue: 'lanovka',
                       stavba: <SessionCard
-                        session="monday" day="Pondělí" date={monDate} baseDate={monBaseDate} theme="yellow"
+                        session="monday" day="Pondělí" date={monDate} baseDates={monBaseDates} theme="yellow"
                         slots={week.monday} lanoSlot={hasLanoBuild(monday) ? week.mondayLano : undefined} calInfo={calMon}
                         sel={sel}
                         onSlotClick={i => onSlotClick('monday', i)}
@@ -3693,7 +3715,7 @@
                     slots.push({
                       venue: 'limit',
                       stavba: <SessionCard
-                        session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} baseDate={wedBaseDate} theme="dark"
+                        session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} baseDates={wedBaseDates} theme="dark"
                         slots={week.wednesday} calInfo={calWed}
                         sel={sel}
                         onSlotClick={i => onSlotClick('wednesday', i)}
@@ -3717,7 +3739,7 @@
                   if (calThu) {
                     slots.push({
                       stavba: <SessionCard
-                        session="thursday" day={isNewSchedule(monday) ? "Pátek" : "Čtvrtek"} date={thuDate} baseDate={thuBaseDate} theme="green"
+                        session="thursday" day={isNewSchedule(monday) ? "Pátek" : "Čtvrtek"} date={thuDate} baseDates={thuBaseDates} theme="green"
                         slots={week.thursday || E4()} calInfo={calThu}
                         sel={sel}
                         onSlotClick={i => onThuSlotClick(i)}
