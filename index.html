@@ -2026,7 +2026,8 @@
       const progTrack= isLan ? 'bg-black/15'   : 'bg-white/10';
       const progFill = isLan ? 'bg-gray-700'   : 'bg-[#e6007e]';
       const countCol = allFilled ? (isLan ? 'text-gray-900' : 'text-[#e6007e]') : (isLan ? 'text-gray-600' : 'text-white/60');
-      const chip     = isLan ? 'bg-black/10 text-amber-900 ring-1 ring-black/10' : 'bg-pink-600 text-white ring-1 ring-pink-400';
+      // Profil / lano se na extra kartě zobrazuje stejným boxem jako na standardních kartách
+      const chipBox  = isLan ? 'bg-black/10 ring-black/10' : 'bg-pink-600 ring-pink-400';
       const slotProps = {
         sel,
         emptyBg:  isLan ? 'border-amber-200 hover:border-amber-400 hover:bg-amber-50' : 'border-zinc-200 hover:border-pink-400 hover:bg-zinc-50',
@@ -2074,18 +2075,17 @@
               )}
             </div>
 
-            {/* Co se staví */}
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {(extra.sectors || []).map(s => (
-                <span key={s} className={`px-2 py-1.5 rounded-lg text-[11px] font-black leading-tight tracking-tight ${chip}`}>
-                  {s}
-                </span>
+            {/* Co se staví — stejně velký box jako profil u ostatních stavění */}
+            <div className="mt-3 space-y-1.5">
+              {[...(extra.sectors || []), ...(extra.lano ? ['LANO'] : [])].map(s => (
+                <div key={s} className={`rounded-lg px-3 py-2.5 flex items-center justify-center ring-1 ${chipBox}`}>
+                  <span className={`font-black text-center leading-tight tracking-tight break-words w-full
+                    ${isLan ? 'text-amber-900' : 'text-white'}
+                    ${s.length > 20 ? 'text-sm' : s.length > 12 ? 'text-base' : 'text-lg'}`}>
+                    {s}
+                  </span>
+                </div>
               ))}
-              {extra.lano && (
-                <span className={`px-2 py-1.5 rounded-lg text-[11px] font-black leading-tight tracking-tight ${chip}`}>
-                  LANO
-                </span>
-              )}
               {(extra.sectors || []).length === 0 && !extra.lano && (
                 <span className={`text-xs font-bold ${hdrSub}`}>bez profilu</span>
               )}
