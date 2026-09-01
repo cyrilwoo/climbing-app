@@ -343,5 +343,15 @@
     "date": "2026-12-24",
     "wall": "Tělocvična",
     "profile": "Tělocvična"
+  },
+  {
+    "date": "2026-12-29",
+    "wall": "Lanovka",
+    "profile": "Dole kout + Strop"
+  },
+  {
+    "date": "2026-12-31",
+    "wall": "Limit",
+    "profile": "Dětská"
   }
 ]
