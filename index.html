@@ -2466,18 +2466,31 @@
         };
         return toFirestore(enriched);
       }
+      // Signatura toho, CO UŽ LEŽÍ V DATABÁZI — promítnutá na klíče payloadu.
+      // POZOR na past: seedovat lastFlushedRef PŘEPOČÍTANÝM payloadem znamená, že
+      // se signatury vždy shodují a stará enriched pole v DB (_monDate, _wedSector…)
+      // se nikdy nepřepíšou. Když se změní pravidla (zářijový rozvrh Út/Čt) nebo je
+      // zapíše klient se starou verzí appky, sync_calendar i veřejný feed pak čtou
+      // stará data — appka ukazuje správné dny, kalendář ne. Porovnáváme proto se
+      // skutečným obsahem dokumentu → nesoulad se při prvním flushi sám opraví.
+      function storedSig(payload, rawDoc) {
+        const stored = {};
+        Object.keys(payload).forEach(k => { stored[k] = rawDoc?.[k] === undefined ? null : rawDoc[k]; });
+        return JSON.stringify(stored);
+      }
 
       // ── Load all data from Firestore on mount ─────────────────────────────
       React.useEffect(() => {
         db.collection('weeks').get().then(snapshot => {
           if (!snapshot.empty) {
             const loaded = {};
-            snapshot.forEach(doc => { loaded[doc.id] = fromFirestore(doc.data()); });
+            const rawDocs = {};
+            snapshot.forEach(doc => { loaded[doc.id] = fromFirestore(doc.data()); rawDocs[doc.id] = doc.data(); });
             // Seed lastFlushedRef — jinak první flush po načtení přepíše VŠECHNY týdny
             // (a v souběhu s jiným tabem může přepsat čerstvá data).
             Object.keys(loaded).forEach(weekId => {
               const p = weekPayload(weekId, loaded, rotationShifts);
-              if (p) lastFlushedRef.current[weekId] = JSON.stringify(p);
+              if (p) lastFlushedRef.current[weekId] = storedSig(p, rawDocs[weekId]);
             });
             setData(prev => {
               const merged = { ...prev, ...loaded };
@@ -2491,6 +2504,7 @@
         // Use docChanges() to process only added/modified docs, not the full snapshot every time
         const unsub = db.collection('weeks').onSnapshot(snapshot => {
           const loaded = {};
+          const rawDocs = {};
           const removed = [];
           snapshot.docChanges().forEach(change => {
             const doc = change.doc;
@@ -2500,6 +2514,7 @@
               return; // vlastní zápis — přeskoč
             }
             loaded[doc.id] = fromFirestore(doc.data());
+            rawDocs[doc.id] = doc.data();
           });
           if (Object.keys(loaded).length === 0 && removed.length === 0) return;
           setData(prev => {
@@ -2510,7 +2525,7 @@
             // Vzdáleně změněné týdny ber jako už-flushnuté → příští flush je nepřepíše zpět.
             Object.keys(loaded).forEach(weekId => {
               const p = weekPayload(weekId, merged, rotationShifts);
-              if (p) lastFlushedRef.current[weekId] = JSON.stringify(p);
+              if (p) lastFlushedRef.current[weekId] = storedSig(p, rawDocs[weekId]);
             });
             return merged;
           });

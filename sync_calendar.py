@@ -327,13 +327,17 @@ def sync_calendar(request):
             thu_code = cal_entry.get('thu')  # only TG, no override
 
             # ── Effective dates ─────────────────────────────────────────────
-            # Explicitní datumový override MUSÍ mít přednost před pomocným _*Date
-            # (které appka počítá jako override ?? default). Když se override zapíše
-            # mimo appku (přímý zápis do Firestore), _*Date zůstane staré → proto
-            # bereme override první a _*Date jen jako fallback.
-            raw_mon = firestore_value(fw.get('monDateOverride')) or firestore_value(fw.get('_monDate'))
-            raw_wed = firestore_value(fw.get('wedDateOverride')) or firestore_value(fw.get('_wedDate'))
-            raw_thu = firestore_value(fw.get('thuDateOverride')) or firestore_value(fw.get('_thuDate'))
+            # Pomocná pole _monDate/_wedDate/_thuDate se ZÁMĚRNĚ NEČTOU.
+            # Je to odvozená (duplicitní) informace `override ?? default`, kterou do
+            # DB zapisuje klient. Stačí jeden klient s načtenou STAROU verzí appky
+            # (tab/tablet otevřený od jara, před přechodem na zářijový rozvrh) —
+            # při flushi přepíše _*Date starými offsety (Po/St) a sync pak založí
+            # event na špatný den, přestože appka i tady počítají správně.
+            # Jediný skutečný zdroj pravdy je week_id + explicitní *DateOverride;
+            # default si spočítáme sami hned pod tím.
+            raw_mon = firestore_value(fw.get('monDateOverride'))
+            raw_wed = firestore_value(fw.get('wedDateOverride'))
+            raw_thu = firestore_value(fw.get('thuDateOverride'))
 
             # Od září 2026 se mění rozvrh: Lanovka úterý (+1), Limit vždy čtvrtek (+3).
             # (parita s isNewSchedule/lanovkaOffset/limitOffset v index.html)
