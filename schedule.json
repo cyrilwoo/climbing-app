@@ -343,5 +343,20 @@
     "date": "2026-12-31",
     "wall": "Limit",
     "profile": "Dětská"
+  },
+  {
+    "date": "2027-01-05",
+    "wall": "Lanovka",
+    "profile": "Nový profil + nahoře kolmice"
+  },
+  {
+    "date": "2027-01-07",
+    "wall": "Limit",
+    "profile": "Přední převis"
+  },
+  {
+    "date": "2027-01-08",
+    "wall": "Tělocvična",
+    "profile": "Tělocvična"
   }
 ]
