@@ -1464,15 +1464,179 @@
       );
     }
 
+    // ── Stěny pro rozpad statistik ───────────────────────────────────────
+    // Barvy stejné jako všude jinde v appce: Lanovka žlutá, lano tmavší,
+    // Limit růžová, Tělocvična zelená.
+    const STENY = [
+      { klic: 'lanovka',    label: 'Lanovka',    barva: 'text-amber-400'  },
+      { klic: 'lano',       label: 'Lano',       barva: 'text-amber-600'  },
+      { klic: 'limit',      label: 'Limit',      barva: 'text-pink-500'   },
+      { klic: 'telocvicna', label: 'Tělocvična', barva: 'text-emerald-400'},
+    ];
+
+    // ── SetterVenueModal ─────────────────────────────────────────────────
+    //  Detail statistik: tři měsíce vedle sebe a u každého stavěče rozpad,
+    //  na které stěně ty směny odstál. Karta v sidebaru je na tohle úzká —
+    //  proto přes celou obrazovku.
+    //
+    //  Šipky posouvají celou trojici o měsíc, takže se dá dojít i do loňska
+    //  i dopředu na to, co je naplánované. Výchozí trojice je minulý / tenhle
+    //  / příští měsíc.
+    function SetterVenueModal({ onClose, spocitej, jmena, poradi }) {
+      const [posun, setPosun] = React.useState(0);
+      const dnes = new Date();
+      const dnesKlic = `${dnes.getFullYear()}-${dnes.getMonth()}`;
+      const mesice = [-1, 0, 1].map(i => {
+        const d = new Date(dnes.getFullYear(), dnes.getMonth() + i + posun, 1);
+        return { year: d.getFullYear(), month: d.getMonth(), klic: `${d.getFullYear()}-${d.getMonth()}`,
+                 label: d.toLocaleString('cs-CZ', { month: 'long' }), rok: d.getFullYear() };
+      });
+      const stats = spocitej(mesice, jmena);
+
+      // Bunka = jen stěny, na kterých se ten měsíc opravdu stálo. Nuly se
+      // nevypisují: prázdné řádky by z tabulky udělaly mřížku nul, ve které
+      // se to podstatné ztratí.
+      // Souhrn pod rozpadem drží STEJNOU řeč jako karta v sidebaru: lano se do
+      // stavění nepočítá, vede se vedle (patička karty to říká — „stavění ·
+      // lano"). Kdyby se sečetlo všechno dohromady, mělo by tu září Sebastián 6,
+      // kdežto karta hlásí 5, a nikdo by nevěděl, které z těch čísel lže.
+      const Bunka = ({ v }) => {
+        const staveni = (v?.lanovka || 0) + (v?.limit || 0) + (v?.telocvicna || 0);
+        const lano = v?.lano || 0;
+        if (!staveni && !lano) return <td className="px-3 py-2.5 align-top text-zinc-700 text-sm">—</td>;
+        return (
+          <td className="px-3 py-2.5 align-top">
+            {STENY.map(s => (v?.[s.klic] || 0) > 0 && (
+              <div key={s.klic} className={`text-[13px] font-semibold whitespace-nowrap ${s.barva}`}>
+                {s.label} <span className="tabular-nums">{v[s.klic]}</span>
+              </div>
+            ))}
+            <div className="text-[11px] text-zinc-500 tabular-nums mt-1 whitespace-nowrap">
+              stavění {staveni}{lano > 0 && <> · lano {lano}</>}
+            </div>
+          </td>
+        );
+      };
+
+      const soucet = m => {
+        const c = { lanovka: 0, lano: 0, limit: 0, telocvicna: 0 };
+        jmena.forEach(n => STENY.forEach(s => { c[s.klic] += stats[n]?.[m.klic]?.[s.klic] || 0; }));
+        return c;
+      };
+
+      const Sipka = ({ smer, onClick, titulek }) => (
+        <button onClick={onClick} title={titulek}
+          className="p-2 rounded-xl text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors">
+          <svg viewBox="0 0 14 14" className="w-4 h-4" aria-hidden="true"
+            style={{ transform: smer === 'zpet' ? 'rotate(180deg)' : 'none' }}>
+            <polygon points="3,2 11,7 3,12" fill="currentColor" />
+          </svg>
+        </button>
+      );
+
+      // Do body přes portál, ne na místo v DOM. Ostatní modaly appky se
+      // vykreslují až v kořeni App a je jim to jedno; tenhle visí na kartě
+      // hluboko v sidebaru a odtud ho z-index nezachrání — hlavička appky
+      // (fixed z-50) se mu na obrazovce postavila před nadpis, i když má
+      // modal z-[100]. Vyzkoušeno: zvednout modal na 200 nepomůže, srazit
+      // hlavičku na 0 ano.
+      return ReactDOM.createPortal((
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+          <div className="relative bg-zinc-950 text-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-zinc-800 shadow-2xl">
+            <div className="px-6 pt-6 pb-4 border-b border-zinc-800 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black tracking-widest text-amber-400 leading-none">KDO KDE STAVÍ</h2>
+                <p className="text-[11px] uppercase tracking-widest text-zinc-500 mt-2 font-bold">
+                  Rozpad směn podle stěny
+                </p>
+              </div>
+              <button onClick={onClose} className="p-2 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white">
+                <X c="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5">
+              {/* Tři měsíce se na mobil nevejdou. Bez tohohle obalu táhla
+                  tabulka stranou celý panel i s nadpisem a křížkem. */}
+              <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr>
+                    <th className="w-8 pb-3">
+                      <Sipka smer="zpet" onClick={() => setPosun(p => p - 1)} titulek="O měsíc zpět" />
+                    </th>
+                    <th className="sticky left-0 bg-zinc-950 text-left text-[11px] font-black uppercase tracking-widest text-zinc-500 pb-3 pr-3">
+                      Stavěč
+                    </th>
+                    {mesice.map(m => (
+                      <th key={m.klic}
+                        className={`text-left text-[11px] font-black uppercase tracking-widest pb-3 px-3
+                          ${m.klic === dnesKlic ? 'text-white' : 'text-zinc-500'}`}>
+                        {m.label} {m.rok}
+                      </th>
+                    ))}
+                    <th className="w-8 pb-3">
+                      <Sipka smer="vpred" onClick={() => setPosun(p => p + 1)} titulek="O měsíc vpřed" />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {poradi.map(name => (
+                    <tr key={name} className="border-t border-zinc-900">
+                      <td />
+                      <td className="sticky left-0 bg-zinc-950 text-sm font-semibold text-zinc-100 pr-3 py-2.5 align-top whitespace-nowrap">
+                        {name}
+                      </td>
+                      {mesice.map(m => <Bunka key={m.klic} v={stats[name]?.[m.klic]} />)}
+                      <td />
+                    </tr>
+                  ))}
+                  {/* Součet přes všechny stavěče = obsazenost té stěny za měsíc. */}
+                  <tr className="border-t-2 border-zinc-800">
+                    <td />
+                    <td className="sticky left-0 bg-zinc-950 text-[11px] font-black uppercase tracking-widest text-zinc-500 pr-3 py-2.5 align-top">
+                      Celkem
+                    </td>
+                    {mesice.map(m => <Bunka key={m.klic} v={soucet(m)} />)}
+                    <td />
+                  </tr>
+                </tbody>
+              </table>
+              </div>
+
+              {posun !== 0 && (
+                <div className="mt-4 text-center">
+                  <button onClick={() => setPosun(0)}
+                    className="text-[11px] uppercase tracking-widest font-bold text-zinc-500 hover:text-white">
+                    Zpět na dnešek
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ), document.body);
+    }
+
     // ── StatsPanel ───────────────────────────────────────────────────────
-    function StatsPanel({ stats, team }) {
+    function StatsPanel({ stats, team, spocitejMesice }) {
       const now = new Date();
       const monthName = now.toLocaleString('cs-CZ', { month: 'long' });
       const sorted = [...team].sort((a, b) => (stats[b]?.year ?? 0) - (stats[a]?.year ?? 0));
+      const [detail, setDetail] = React.useState(false);
       return (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-4 pt-4 pb-2 border-b border-gray-100">
+          {detail && (
+            <SetterVenueModal onClose={() => setDetail(false)} spocitej={spocitejMesice}
+              jmena={team} poradi={sorted} />
+          )}
+          <div className="px-4 pt-4 pb-2 border-b border-gray-100 flex items-center justify-between gap-2">
             <h2 className="font-bold text-gray-900 text-sm">Statistiky</h2>
+            <button onClick={() => setDetail(true)} title="Kdo na které stěně staví"
+              className="text-xs font-semibold text-amber-500 hover:text-amber-600">
+              Víc
+            </button>
           </div>
           <div className="px-4 pt-2 pb-0">
             <div className="inline-grid" style={{gridTemplateColumns:'max-content 2.5rem 2.5rem 2.5rem', columnGap:'0.5rem'}}>
@@ -3395,7 +3559,10 @@
         const thisYear  = now.getFullYear();
         const thisMonth = now.getMonth(); // 0-indexed
         const stats = {};
-        TEAM.forEach(n => { stats[n] = { month: 0, year: 0, lanoMonth: 0, lanoYear: 0 }; });
+        // Seed z `team`, ne z TEAM: hosté jsou v `team` navíc, a protože se
+        // v tally() zahazuje každé jméno, které tu nemá kolonku, měl host
+        // v tabulce napořád nuly, ať stavěl kolikrát chtěl.
+        withCoreTeam(team).forEach(n => { stats[n] = { month: 0, year: 0, lanoMonth: 0, lanoYear: 0 }; });
 
         function countWeek(wd, defaultMonDate, calEntry) {
           const effectiveMon = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : addDays(defaultMonDate, lanovkaOffset(defaultMonDate));
@@ -3476,6 +3643,83 @@
             if (d.getMonth() === thisMonth) stats[ex.lanoSetter].lanoMonth++;
           }
         });
+        return stats;
+      }
+
+      // ── Rozpad stavění po měsících a stěnách — podklad pro detail statistik.
+      //
+      //  Čte ze STEJNÝCH zdrojů a stejnými pravidly jako computeStats() (včetně
+      //  posunů dnů a override datumů a toho, že se berou jen týdny skutečně
+      //  uložené v `data` — jinak by se Cyrilovi napočítal default z initWeek).
+      //  Jediný rozdíl: neptá se „letos / tento měsíc", ale na konkrétní měsíce,
+      //  takže umí i minulost a plán dopředu.
+      //
+      //  `mesice` = [{ year, month }], klíč do výsledku je `${year}-${month}`.
+      function computeMonthlyVenueStats(mesice, jmena) {
+        const klicMesice = d => `${d.getFullYear()}-${d.getMonth()}`;
+        const chtene = new Set(mesice.map(m => `${m.year}-${m.month}`));
+        const stats = {};
+        jmena.forEach(n => {
+          stats[n] = {};
+          mesice.forEach(m => {
+            stats[n][`${m.year}-${m.month}`] = { lanovka: 0, lano: 0, limit: 0, telocvicna: 0 };
+          });
+        });
+        const pricti = (name, date, stena) => {
+          if (!name || !stats[name]) return;
+          const k = klicMesice(date);
+          if (!chtene.has(k)) return;
+          stats[name][k][stena]++;
+        };
+
+        function countWeek(wd, defaultMonDate) {
+          const effectiveMon = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : addDays(defaultMonDate, lanovkaOffset(defaultMonDate));
+          const effWedSector = effSector('wed', weekKey(defaultMonDate), data, rotationShifts)?.sector;
+          const effectiveWed = wd.wedDateOverride ? new Date(wd.wedDateOverride + 'T12:00:00') : addDays(defaultMonDate, limitOffset(defaultMonDate, effWedSector));
+          const effectiveThu = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(defaultMonDate, gymOffset(defaultMonDate));
+          (wd.monday || []).forEach(n => pricti(n, effectiveMon, 'lanovka'));
+          pricti(wd.mondayLano, effectiveMon, 'lano');
+          (wd.wednesday || []).forEach(n => pricti(n, effectiveWed, 'limit'));
+          (wd.thursday || []).forEach(n => pricti(n, effectiveThu, 'telocvicna'));
+        }
+
+        Object.keys(CAL).forEach(k => {
+          if (!data[k]) return;
+          const [y, m, d] = k.split('-').map(Number);
+          countWeek(data[k], new Date(y, m-1, d));
+        });
+        Object.keys(data).forEach(k => {
+          if (CAL[k]) return;
+          const [y, m, d] = k.split('-').map(Number);
+          countWeek(data[k], new Date(y, m-1, d));
+        });
+
+        // Závody jsou vždy na Limitu (v týdenních položkách mají venue 'wed').
+        Object.values(races || {}).forEach(race => {
+          if (!race?.date) return;
+          const d = new Date(race.date + 'T12:00:00');
+          (race.setters || []).forEach(n => pricti(n, d, 'limit'));
+          (race.dostavba || []).forEach(day => {
+            if (!day?.date) return;
+            const dd = new Date(day.date + 'T12:00:00');
+            (day.setters || []).forEach(n => pricti(n, dd, 'limit'));
+          });
+        });
+
+        // Extra stavění — stěna podle ex.venue, lano zvlášť stejně jako jinde.
+        Object.values(extras || {}).forEach(ex => {
+          if (!ex?.date) return;
+          const d = new Date(ex.date + 'T12:00:00');
+          const exSetters = (ex.setters || []).slice(0, ex.slotCount || 0);
+          if (ex.venue === 'lanovka') {
+            const stena = extraSlotsAreLano(ex) ? 'lano' : 'lanovka';
+            exSetters.forEach(n => pricti(n, d, stena));
+            if (extraHasLanoSlot(ex)) pricti(ex.lanoSetter, d, 'lano');
+          } else {
+            exSetters.forEach(n => pricti(n, d, 'limit'));
+          }
+        });
+
         return stats;
       }
 
@@ -3907,7 +4151,7 @@
               <div className="lg:hidden px-4 pb-2 space-y-3">
                 <MonthlyOccupancy data={data} viewMonday={monday} rotationShifts={rotationShifts} extras={extras} />
                 <RacesPanel races={races} extras={extras} />
-                <StatsPanel stats={computeStats()} team={team} />
+                <StatsPanel stats={computeStats()} team={team} spocitejMesice={computeMonthlyVenueStats} />
                 <RemovalStatsPanel stats={computeRemovalStats()} />
               </div>
 
@@ -4102,7 +4346,7 @@
               <RacesPanel races={races} extras={extras} />
               </div>
               <div className="hidden lg:block space-y-3">
-                <StatsPanel stats={computeStats()} team={team} />
+                <StatsPanel stats={computeStats()} team={team} spocitejMesice={computeMonthlyVenueStats} />
                 <RemovalStatsPanel stats={computeRemovalStats()} />
               </div>
             </div>
