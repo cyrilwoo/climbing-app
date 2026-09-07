@@ -358,5 +358,25 @@
     "date": "2027-01-08",
     "wall": "Tělocvična",
     "profile": "Tělocvična"
+  },
+  {
+    "date": "2027-01-12",
+    "wall": "Lanovka",
+    "profile": "Hříbek"
+  },
+  {
+    "date": "2027-01-14",
+    "wall": "Limit",
+    "profile": "Zadní převis"
+  },
+  {
+    "date": "2027-01-19",
+    "wall": "Lanovka",
+    "profile": "Dole kolmice + převis"
+  },
+  {
+    "date": "2027-01-21",
+    "wall": "Limit",
+    "profile": "Kolmice"
   }
 ]
