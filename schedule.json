@@ -378,5 +378,35 @@
     "date": "2027-01-21",
     "wall": "Limit",
     "profile": "Kolmice"
+  },
+  {
+    "date": "2027-01-26",
+    "wall": "Lanovka",
+    "profile": "Převis + Bizár"
+  },
+  {
+    "date": "2027-02-02",
+    "wall": "Lanovka",
+    "profile": "Dole kout + Strop"
+  },
+  {
+    "date": "2027-02-04",
+    "wall": "Limit",
+    "profile": "Dětská"
+  },
+  {
+    "date": "2027-02-05",
+    "wall": "Tělocvična",
+    "profile": "Tělocvična"
+  },
+  {
+    "date": "2027-02-09",
+    "wall": "Lanovka",
+    "profile": "Nový profil + nahoře kolmice"
+  },
+  {
+    "date": "2027-02-11",
+    "wall": "Limit",
+    "profile": "Přední převis"
   }
 ]
