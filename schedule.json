@@ -408,5 +408,35 @@
     "date": "2027-02-11",
     "wall": "Limit",
     "profile": "Přední převis"
+  },
+  {
+    "date": "2027-02-16",
+    "wall": "Lanovka",
+    "profile": "Hříbek"
+  },
+  {
+    "date": "2027-02-18",
+    "wall": "Limit",
+    "profile": "Zadní převis"
+  },
+  {
+    "date": "2027-02-23",
+    "wall": "Lanovka",
+    "profile": "Dole kolmice + převis"
+  },
+  {
+    "date": "2027-02-25",
+    "wall": "Limit",
+    "profile": "Kolmice"
+  },
+  {
+    "date": "2027-03-02",
+    "wall": "Lanovka",
+    "profile": "Převis + Bizár"
+  },
+  {
+    "date": "2027-03-05",
+    "wall": "Tělocvična",
+    "profile": "Tělocvična"
   }
 ]
