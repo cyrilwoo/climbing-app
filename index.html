@@ -2556,6 +2556,13 @@
       const [showAddExtra, setShowAddExtra] = useState(false);
       const [replaceModal, setReplaceModal] = useState(null); // { venue: 'mon'|'wed' } | null
       const [calMonths, setCalMonths] = useState(2); // počet měsíců v kalendáři (2 nebo 3)
+      // Celý měsíc pod kartami — rozbaleno/sbaleno si pamatuje prohlížeč
+      const [monthOpen, setMonthOpen] = useState(() => {
+        try { return localStorage.getItem('climbing-month-open') === '1'; } catch { return false; }
+      });
+      React.useEffect(() => {
+        try { localStorage.setItem('climbing-month-open', monthOpen ? '1' : '0'); } catch {}
+      }, [monthOpen]);
       const [firebaseReady, setFirebaseReady] = useState(false);
       // Rotace: seznam týdnů (per stěna), na kterých došlo k „Posun" → posouvá
       // index do CAL sekvence pro všechny následující týdny. Zdroj pravdy je
@@ -2909,10 +2916,617 @@
         };
       }, []);
 
-      const monday = addDays(getMonday(new Date()), offset * 7);
-      const friday = addDays(monday, 4);
-      const key    = weekKey(monday);
-      const week   = data[key] ?? initWeek(key);
+      // ── Týden ─────────────────────────────────────────────────────────────
+      // Všechno, co patří k jednomu týdnu (odvozená data, handlery, karty Sundavání
+      // a Stavění), je v buildWeekView — „Celý měsíc" tak vykreslí další týdny
+      // stejným kódem a se stejným chováním jako hlavní týden.
+      function buildWeekView(off) {
+        const monday = addDays(getMonday(new Date()), off * 7);
+        const friday = addDays(monday, 4);
+        const key    = weekKey(monday);
+        const week   = data[key] ?? initWeek(key);
+        const calMon = effSector('mon', key, data, rotationShifts);
+        const calWed = effSector('wed', key, data, rotationShifts);
+        const calThu = CAL[key]?.thu ?? null;
+
+        // Závod NEBO dostavba, které mohou nahradit standardní Stavění sloty (Mon Lanovka / Wed Limit) když jsou zrušené.
+        // Algoritmus: shromáždíme všechny race-day a dostavba-day položky v týdnu, pro každý zrušený slot
+        // hledáme nejdřív shodu day-of-week (Mon=1, Wed=3, Thu=4 pro Dětská), pak fallback na cokoli.
+        const _wkStartIso = weekKey(monday);
+        const _wkEndIso   = weekKey(addDays(monday, 6));
+        const _allWeekItems = [];
+        Object.values(races || {}).forEach(race => {
+          if (!race?.date) return;
+          if (race.date >= _wkStartIso && race.date <= _wkEndIso) {
+            _allWeekItems.push({ kind: 'race', race, date: race.date, venue: 'wed' });
+          }
+          (race.dostavba || []).forEach((day, dIdx) => {
+            if (day?.date && day.date >= _wkStartIso && day.date <= _wkEndIso) {
+              _allWeekItems.push({ kind: 'dostavba', race, day, dIdx, date: day.date, venue: 'wed' });
+            }
+          });
+        });
+        _allWeekItems.sort((a, b) => a.date.localeCompare(b.date));
+        const _monCancelled = week?.monSectorOverride?.isOff === true;
+        const _wedCancelled = week?.wedSectorOverride?.isOff === true;
+        // Day-of-week (JS getDay: Ne=0, Po=1, ..., So=6) Lanovka a Limit dle aktuálního rozvrhu
+        const _monDayMatch = 1 + lanovkaOffset(monday);                          // 1=Po nebo 2=Út
+        const _wedDayMatch = 1 + limitOffset(monday, calWed?.sector);            // 3=St nebo 4=Čt (EFEKTIVNÍ sektor, ne raw CAL)
+        const _pool = [..._allWeekItems];
+        const _consume = pred => {
+          for (let i = 0; i < _pool.length; i++) {
+            if (pred(_pool[i])) return _pool.splice(i, 1)[0];
+          }
+          return null;
+        };
+        const _dayOf = it => new Date(it.date + 'T12:00:00').getDay();
+        // Závod/dostavba jsou VŽDY Limit (venue 'wed') → smí nahradit jen zrušený Limit slot,
+        // nikdy Lanovku. Žádný slepý fallback přes stěny (dřív hijackoval špatnou stěnu).
+        const wedReplacement = _wedCancelled
+          ? (_consume(it => it.venue === 'wed' && _dayOf(it) === _wedDayMatch)
+             || _consume(it => it.venue === 'wed'))
+          : null;
+        const monReplacement = _monCancelled
+          ? _consume(it => it.venue === 'mon' && _dayOf(it) === _monDayMatch)
+          : null;
+        const _remainingWeekItems = _pool;
+
+        // Extra stavění v tomto týdnu — přidají se jako další karty vedle standardních.
+        // Vědomě NEvstupují do replacement logiky: extra nic neposouvá ani nenahrazuje.
+        const _weekExtras = Object.entries(extras || {})
+          .map(([id, e]) => ({ ...e, id }))
+          .filter(e => e?.date && e.date >= _wkStartIso && e.date <= _wkEndIso)
+          .sort((a, b) => a.date.localeCompare(b.date) || String(a.venue).localeCompare(String(b.venue)));
+
+        // Den stavění: Lanovka pondělí/úterý (od září 2026), Limit středa/čtvrtek (od září 2026 vždy čtvrtek)
+        const monOffset = lanovkaOffset(monday);
+        const wedOffset = limitOffset(monday, calWed?.sector);
+        // Přepis data jen v rámci týdne — override mimo týden ignorujeme (dřív dělal
+        // matoucí dvojí zobrazení: karta v původním týdnu + „není stavění" v cílovém).
+        const weekMin = weekKey(monday);
+        const weekMax = toIso(addDays(monday, 6));
+        const inWk = iso => !!iso && iso >= weekMin && iso <= weekMax;
+        // + 'T12:00:00' aby se ISO date-only string neparsoval jako UTC midnight (timezone off-by-one)
+        // Standardní (nepřesunuté) datum — karta podle něj pozná, že je stavění jinde
+        const monBaseDate = addDays(monday, monOffset);
+        const wedBaseDate = addDays(monday, wedOffset);
+        const thuBaseDate = addDays(monday, gymOffset(monday));
+        const monDate = inWk(week.monDateOverride) ? new Date(week.monDateOverride + 'T12:00:00') : monBaseDate;
+        const wedDate = inWk(week.wedDateOverride) ? new Date(week.wedDateOverride + 'T12:00:00') : wedBaseDate;
+        const thuDate = inWk(week.thuDateOverride) ? new Date(week.thuDateOverride + 'T12:00:00') : thuBaseDate;
+        // Týden na přelomu srpna a září 2026: pondělí je ještě ve starém rozvrhu, ale
+        // stavění už padá do září. Tehdy se plán teprve překlápěl — platí oba dny,
+        // takže se štítek „jiný den" neukáže (nebyl to přesun).
+        const _straddle = !isNewSchedule(monday) && isNewSchedule(addDays(monday, 6));
+        const monBaseDates = _straddle ? [monBaseDate, addDays(monday, 1)] : [monBaseDate];
+        const wedBaseDates = _straddle ? [wedBaseDate, addDays(monday, 3)] : [wedBaseDate];
+        const thuBaseDates = _straddle ? [thuBaseDate, addDays(monday, 4)] : [thuBaseDate];
+        function setMonDate(iso) { setWeek(w => ({ ...w, monDateOverride: iso })); }
+        function setWedDate(iso) { setWeek(w => ({ ...w, wedDateOverride: iso })); }
+        function setThuDate(iso) { setWeek(w => ({ ...w, thuDateOverride: iso })); }
+
+        // setWeek bere buď hodnotu nebo funkční updater (w → nový w).
+        // Funkční forma je race-safe pro rychlé kliky za sebou (čte nejnovější stav z setData).
+        function setWeek(updater) {
+          setData(d => {
+            const curr = d[key] ?? week;
+            const next = typeof updater === 'function' ? updater(curr) : updater;
+            return { ...d, [key]: next };
+          });
+        }
+
+        // ── Posunout stavění (odložit o 7 dní) ────────────────────────────────
+        function toIso(d) {
+          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+        // POSUN: tento týden se stavět nebude (Volný) a profily VŠECH následujících
+        // týdnů se posunou o jeden vpřed. Realizováno přidáním týdne do globálního
+        // rotationShifts → resolver effSector kaskáduje celou rotaci automaticky.
+        // Stavěči zůstávají vázaní na DATUM (na následujících týdnech se nehýbou),
+        // jen tento (posunutý) týden se vyklidí (uloží se pro „Vrátit posun").
+        function shiftMonSector() {
+          if ((rotationShifts.lanovka || []).includes(key)) return;
+          if (!window.confirm(`Posunout rotaci Lanovky od ${fmtFull(monDate)}?\n\nTento týden se stavět nebude a profily všech dalších týdnů se posunou o jeden vpřed.`)) return;
+          setData(d => {
+            const curr = { ...(d[key] ?? initWeek(key)) };
+            curr.monSavedSetters = (d[key]?.monday) || E4();
+            curr.monSavedLano = d[key]?.mondayLano ?? null;
+            curr.monSavedSundavaci = d[key]?.mondaySundavaci || [];
+            curr.monSavedMyti = d[key]?.mondayMyti ?? null;
+            curr.monday = E4(); curr.mondayLano = null; curr.mondaySundavaci = []; curr.mondayMyti = null;
+            curr.monSectorOverride = null; // Volný řídí shift-list, ne override
+            return { ...d, [key]: curr };
+          });
+          setRotationShifts(rs => ({ ...rs, lanovka: [...(rs.lanovka || []), key].sort() }));
+        }
+        function shiftWedSector() {
+          if ((rotationShifts.limit || []).includes(key)) return;
+          if (!window.confirm(`Posunout rotaci Limitu od ${fmtFull(wedDate)}?\n\nTento týden se stavět nebude a profily všech dalších týdnů se posunou o jeden vpřed.`)) return;
+          setData(d => {
+            const curr = { ...(d[key] ?? initWeek(key)) };
+            curr.wedSavedSetters = (d[key]?.wednesday) || E4();
+            curr.wedSavedSundavaci = d[key]?.wednesdaySundavaci || [];
+            curr.wedSavedMyti = d[key]?.wednesdayMyti ?? null;
+            curr.wednesday = E4(); curr.wednesdaySundavaci = []; curr.wednesdayMyti = null;
+            curr.wedSectorOverride = null;
+            return { ...d, [key]: curr };
+          });
+          setRotationShifts(rs => ({ ...rs, limit: [...(rs.limit || []), key].sort() }));
+        }
+
+        function undoMonShift() {
+          setData(d => {
+            const curr = { ...(d[key] ?? week) };
+            if (curr.monSavedSetters) { curr.monday = curr.monSavedSetters; curr.mondayLano = curr.monSavedLano ?? null; }
+            curr.mondaySundavaci = curr.monSavedSundavaci || [];
+            curr.mondayMyti = curr.monSavedMyti ?? null;
+            curr.monSectorOverride = null;
+            curr.monSavedSetters = null; curr.monSavedLano = null;
+            curr.monSavedSundavaci = null; curr.monSavedMyti = null;
+            return { ...d, [key]: curr };
+          });
+          setRotationShifts(rs => ({ ...rs, lanovka: (rs.lanovka || []).filter(k => k !== key) }));
+        }
+        function undoWedShift() {
+          setData(d => {
+            const curr = { ...(d[key] ?? week) };
+            if (curr.wedSavedSetters) { curr.wednesday = curr.wedSavedSetters; }
+            curr.wednesdaySundavaci = curr.wedSavedSundavaci || [];
+            curr.wednesdayMyti = curr.wedSavedMyti ?? null;
+            curr.wedSectorOverride = null;
+            curr.wedSavedSetters = null;
+            curr.wedSavedSundavaci = null; curr.wedSavedMyti = null;
+            return { ...d, [key]: curr };
+          });
+          setRotationShifts(rs => ({ ...rs, limit: (rs.limit || []).filter(k => k !== key) }));
+        }
+
+        // NAHRADIT: prohodí profil tohoto týdne s jiným týdnem TÉŽE stěny.
+        // Realizováno per-week overridem na obou týdnech (kind:'swap').
+        // Stavěči zůstávají vázaní na datum (sloty se nehýbou).
+        function doReplace(venue, otherKey) {
+          const secThis  = effSector(venue, key, data, rotationShifts);
+          const secOther = effSector(venue, otherKey, data, rotationShifts);
+          if (!secThis?.sector || !secOther?.sector) return;
+          const ovKey  = venue === 'mon' ? 'monSectorOverride' : 'wedSectorOverride';
+          const arrKey = venue === 'mon' ? 'monday' : 'wednesday';
+          const slotsFor = sec => venue === 'mon' ? getLanovkaSlotCount(sec) : getWedSlotCount(sec);
+          // Po přehození na menší profil zahodit přebyteční stavěče (nad rámec nového
+          // počtu slotů) – ať nikde „nevisí". Zachová první obsazené, zbytek zahodí.
+          const trim = (arr, n) => { const kept = (arr || []).filter(Boolean).slice(0, n); while (kept.length < n) kept.push(null); return kept; };
+          setData(d => {
+            const out = { ...d };
+            // Pojistka: je-li některá strana už ve swapu s JINÝM týdnem, nejdřív uvolni
+            // jejího starého partnera (jinak zůstane „visící" odkaz a undo to rozbije).
+            for (const k of [key, otherKey]) {
+              const ov = d[k]?.[ovKey];
+              if (ov?.kind === 'swap' && ov.partner && ov.partner !== key && ov.partner !== otherKey && d[ov.partner]) {
+                out[ov.partner] = { ...d[ov.partner], [ovKey]: null };
+              }
+            }
+            out[key]      = { ...(d[key] ?? initWeek(key)),           [ovKey]: { sector: secOther.sector, kind: 'swap', partner: otherKey, lano: null, setters: [] }, [arrKey]: trim(d[key]?.[arrKey],      slotsFor(secOther.sector)) };
+            out[otherKey] = { ...(d[otherKey] ?? initWeek(otherKey)), [ovKey]: { sector: secThis.sector,  kind: 'swap', partner: key,      lano: null, setters: [] }, [arrKey]: trim(d[otherKey]?.[arrKey], slotsFor(secThis.sector)) };
+            return out;
+          });
+          setReplaceModal(null);
+        }
+        // Zrušit nahrazení (vrátit oba týdny – tento i jeho partnera – do počítané rotace)
+        function undoReplace(venue) {
+          const ovKey = venue === 'mon' ? 'monSectorOverride' : 'wedSectorOverride';
+          const ov = venue === 'mon' ? week.monSectorOverride : week.wedSectorOverride;
+          const partner = ov?.partner;
+          setData(d => {
+            const out = { ...d, [key]: { ...(d[key] ?? week), [ovKey]: null } };
+            if (partner && d[partner]) out[partner] = { ...d[partner], [ovKey]: null };
+            return out;
+          });
+        }
+
+        // ── Smazat stavění (volný týden) ──────────────────────────────────────
+        function cancelMonSector() {
+          setData(d => {
+            const curr = d[key] ?? initWeek(key);
+            return { ...d, [key]: {
+              ...curr,
+              monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null,
+              monSectorOverride: { isOff: true, sector: 'Volný týden' },
+              monCancelledSetters: curr.monday,
+              monCancelledLano: curr.mondayLano,
+              monCancelledSundavaci: curr.mondaySundavaci || [],
+              monCancelledMyti: curr.mondayMyti,
+            }};
+          });
+        }
+        function undoMonCancel() {
+          setData(d => {
+            const curr = d[key] ?? initWeek(key);
+            return { ...d, [key]: {
+              ...curr,
+              monday: curr.monCancelledSetters || E4(),
+              mondayLano: curr.monCancelledLano ?? null,
+              mondaySundavaci: curr.monCancelledSundavaci || [],
+              mondayMyti: curr.monCancelledMyti ?? null,
+              monSectorOverride: null,
+              monCancelledSetters: null, monCancelledLano: null,
+              monCancelledSundavaci: null, monCancelledMyti: null,
+            }};
+          });
+        }
+        function cancelWedSector() {
+          setData(d => {
+            const curr = d[key] ?? initWeek(key);
+            return { ...d, [key]: {
+              ...curr,
+              wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null,
+              wedSectorOverride: { isOff: true, sector: 'Volný týden' },
+              wedCancelledSetters: curr.wednesday,
+              wedCancelledSundavaci: curr.wednesdaySundavaci || [],
+              wedCancelledMyti: curr.wednesdayMyti,
+            }};
+          });
+        }
+        function undoWedCancel() {
+          setData(d => {
+            const curr = d[key] ?? initWeek(key);
+            return { ...d, [key]: {
+              ...curr,
+              wednesday: curr.wedCancelledSetters || E4(),
+              wednesdaySundavaci: curr.wedCancelledSundavaci || [],
+              wednesdayMyti: curr.wedCancelledMyti ?? null,
+              wedSectorOverride: null,
+              wedCancelledSetters: null, wedCancelledSundavaci: null, wedCancelledMyti: null,
+            }};
+          });
+        }
+
+        // ── Badge helpers (display only) ──────────────────────────────────────
+        function isMonday(c)    { return (week.monday || []).includes(c) || week.mondayLano === c; }
+        function isWednesday(c) { return (week.wednesday || []).includes(c); }
+
+        // ── Assign / remove ───────────────────────────────────────────────────
+        function assign(climber, session, idx) {
+          if (session === 'mondayLano') {
+            if (week.mondayLano != null) return false; // != handles both null a undefined
+            setWeek(w => w.mondayLano != null ? w : { ...w, mondayLano: climber });
+            return true;
+          }
+          const arr = week[session] || E4();
+          if (arr[idx] != null) return false; // cílový slot obsazený – nepřepisuj
+          setWeek(w => {
+            const cur = w[session] || E4();
+            if (cur[idx] != null) return w;
+            // Je-li stavěč v téhle session už jinde (typicky „navíc" po přehození na
+            // menší profil), PŘESUŇ ho sem – uvolni starou pozici – místo blokování.
+            // Tím jde vždy zapsat a nikde „nezůstane viset". Bez duplicit (max 1× v session).
+            const moved = cur.map(s => s === climber ? null : s);
+            moved[idx] = climber;
+            return { ...w, [session]: moved };
+          });
+          return true;
+        }
+
+        function remove(session, idx) {
+          if (session === 'mondayLano') {
+            const c = week.mondayLano;
+            if (!c) return;
+            if (!window.confirm(`Odebrat „${c}" z lano slotu?`)) return;
+            setWeek(w => ({ ...w, mondayLano: null }));
+            if (sel === c) setSel(null);
+            return;
+          }
+          const arr = week[session] || E4();
+          const c = arr[idx];
+          if (!c) return;
+          if (!window.confirm(`Odebrat „${c}" ze slotu?`)) return;
+          setWeek(w => {
+            const cur = w[session] || E4();
+            return { ...w, [session]: cur.map((s,i) => i === idx ? null : s) };
+          });
+          if (sel === c) setSel(null);
+        }
+
+        function clearSession(session) {
+          if (session === 'monday') {
+            setWeek(w => ({ ...w, monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null }));
+          } else if (session === 'wednesday') {
+            setWeek(w => ({ ...w, wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null }));
+          } else {
+            setWeek(w => ({ ...w, thursday: E4() }));
+          }
+          setSel(null);
+        }
+        function clearWeek() {
+          if (!window.confirm('Resetovat celý týden? Smažou se všichni stavěči, sundavači i případný posun/zrušení.')) return;
+          setData(d => { const n={...d}; delete n[key]; return n; });
+          db.collection('weeks').doc(key).delete().catch(() => {}); // smazat i z Firestore
+          setSel(null);
+        }
+        function toggleSundavac(session, name) {
+          const fld = session === 'monday' ? 'mondaySundavaci' : 'wednesdaySundavaci';
+          setWeek(w => {
+            const curr = w[fld] || [];
+            return { ...w, [fld]: curr.includes(name) ? curr.filter(x => x !== name) : [...curr, name] };
+          });
+        }
+        function toggleMyti(session, name) {
+          const fld = session === 'monday' ? 'mondayMyti' : 'wednesdayMyti';
+          setWeek(w => ({ ...w, [fld]: w[fld] === name ? null : name }));
+        }
+
+        // ── Click ─────────────────────────────────────────────────────────────
+        function onSlotClick(session, idx) {
+          if ((week[session] || E4())[idx]) remove(session, idx);
+          else if (sel) assign(sel, session, idx);
+          // sel stays active — assign to multiple slots/sessions in one go
+        }
+        function onLanoClick() {
+          if (week.mondayLano) remove('mondayLano', 0);
+          else if (sel) assign(sel, 'mondayLano', 0);
+        }
+        function onThuSlotClick(idx) {
+          if ((week.thursday || E4())[idx]) remove('thursday', idx);
+          else if (sel) assign(sel, 'thursday', idx);
+        }
+
+        // ── Drag ──────────────────────────────────────────────────────────────
+        function onDragStartSlot(session, idx, name) { setDrag({ from:'slot', climber:name, session, idx, key }); }
+        function onDragStartLano(name) { if (name) setDrag({ from:'lano', climber:name, key }); }
+
+        function onDropSlot(session, idx) {
+          if (!drag) return;
+          // Mezi týdny se netahá — zdrojový slot patří jinému týdnu
+          if (drag.from !== 'pool' && drag.key !== key) { setDrag(null); return; }
+          const { from, climber, session: src, idx: srcIdx } = drag;
+          setDrag(null);
+          if (from === 'pool') {
+            assign(climber, session, idx);
+          } else if (from === 'lano') {
+            // lano → regular slot
+            if ((week[session] || E4())[idx] != null) return;
+            setWeek(w => {
+              const dst = w[session] || E4();
+              if (dst[idx] != null) return w;
+              return { ...w, mondayLano: null, [session]: dst.map((s,i) => i===idx ? climber : s) };
+            });
+          } else {
+            const dstArr = week[session] || E4();
+            if (src === session) {
+              if (idx === srcIdx || dstArr[idx] != null) return;
+              setWeek(w => {
+                const cur = w[session] || E4();
+                if (cur[idx] != null) return w;
+                const s = [...cur]; s[srcIdx]=null; s[idx]=climber;
+                return { ...w, [session]: s };
+              });
+            } else {
+              // cross-session drag: remove from source, assign to target in one update
+              if (dstArr[idx] != null) return;
+              if (dstArr.includes(climber)) return;
+              setWeek(w => {
+                const dst = w[session] || E4();
+                const src2 = w[src] || E4();
+                if (dst[idx] != null || dst.includes(climber)) return w;
+                const newSrc = [...src2]; newSrc[srcIdx] = null;
+                const newDst = [...dst];  newDst[idx]    = climber;
+                return { ...w, [src]: newSrc, [session]: newDst };
+              });
+            }
+          }
+        }
+        function onDropLano() {
+          if (!drag) return;
+          // Mezi týdny se netahá — zdrojový slot patří jinému týdnu
+          if (drag.from !== 'pool' && drag.key !== key) { setDrag(null); return; }
+          const { from, climber, session: src, idx: srcIdx } = drag;
+          setDrag(null);
+          if (from === 'pool') {
+            assign(climber, 'mondayLano', 0);
+          } else if (from === 'slot') {
+            if (week.mondayLano != null) return; // != handles both null a undefined
+            setWeek(w => {
+              if (w.mondayLano != null) return w;
+              const s = [...(w[src] || E4())]; s[srcIdx] = null;
+              return { ...w, [src]: s, mondayLano: climber };
+            });
+          }
+        }
+
+        // Karty Sundavání + Stavění tohoto týdne (sloty vázané pozičně)
+        function renderSlots(emptyNote) {
+          // Max 3 karty vedle sebe (každá 1/3 šířky); 4. a další wrapuje na další řádek a vystředí se
+          const cardClass = "w-[calc(100vw-2rem)] flex-shrink-0 snap-start lg:w-auto lg:flex-shrink lg:flex-grow-0 lg:basis-[calc((100%-2rem)/3)] lg:max-w-[calc((100%-2rem)/3)]";
+          const renderRaceSund = race => (
+            <SundavaniCard
+              session={`race-${race.date}`} theme="dark"
+              date={addDays(new Date(race.date + 'T12:00:00'), -1)}
+              sundavaci={race.sundavaci || []} myti={race.myti || null}
+              onToggleSundavac={n => toggleRaceSundavac(race.date, n)}
+              onToggleMyti={n => toggleRaceMyti(race.date, n)} />
+          );
+          const renderReplacementStavba = repl => (
+            <RaceCard
+              kind={repl.kind}
+              race={repl.race}
+              day={repl.day}
+              sel={sel}
+              onSlotClick={i => repl.kind === 'race'
+                ? onRaceSlotClick(repl.race.date, i)
+                : onDostavbaSlotClick(repl.race.date, repl.dIdx, i)}
+              onDragStartSlot={() => {}}
+              onDragOverSlot={e => e.preventDefault()}
+              onDropSlot={() => {}}
+              onDelete={repl.kind === 'race' ? () => deleteRace(repl.race.date) : undefined} />
+          );
+
+          const slots = [];
+          // Mon
+          if (monReplacement) {
+            slots.push({
+              venue: 'lanovka',
+              stavba: renderReplacementStavba(monReplacement),
+              sundavani: monReplacement.kind === 'race' ? renderRaceSund(monReplacement.race) : null,
+            });
+          } else if ((monday.getMonth() === 6 || monday.getMonth() === 7) && calMon?.isOff) {
+            // O prázdninách (čvc–srp) skryj nestavící Lanovku ("Volný týden") —
+            // OFF karta stejně nezobrazuje žádné sloty, jen "není stavění", takže
+            // skrytí nic viditelného neztratí. Data (případní zbytkoví stavěči)
+            // zůstávají uložená, jen se nezobrazuje prázdná karta.
+          } else {
+            slots.push({
+              venue: 'lanovka',
+              stavba: <SessionCard
+                session="monday" day="Pondělí" date={monDate} baseDates={monBaseDates} theme="yellow"
+                slots={week.monday} lanoSlot={hasLanoBuild(monday) ? week.mondayLano : undefined} calInfo={calMon}
+                sel={sel}
+                onSlotClick={i => onSlotClick('monday', i)}
+                onDragStartSlot={(i,n) => onDragStartSlot('monday',i,n)}
+                onDragOverSlot={e => e.preventDefault()}
+                onDropSlot={i => onDropSlot('monday', i)}
+                onLanoClick={onLanoClick}
+                onDragStartLano={onDragStartLano}
+                onDropLano={onDropLano}
+                onClear={() => clearSession('monday')}
+                onDateChange={setMonDate}
+                weekMin={weekMin} weekMax={weekMax}
+                onShift={shiftMonSector}
+                nextSector={getNextSector(key, 'mon')} />,
+              sundavani: (calMon != null && !calMon.isOff)
+                ? <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
+                    sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
+                    onToggleSundavac={name => toggleSundavac('monday', name)}
+                    onToggleMyti={name => toggleMyti('monday', name)} />
+                : null,
+            });
+          }
+          // Wed
+          if (wedReplacement) {
+            slots.push({
+              venue: 'limit',
+              stavba: renderReplacementStavba(wedReplacement),
+              sundavani: wedReplacement.kind === 'race' ? renderRaceSund(wedReplacement.race) : null,
+            });
+          } else if ((monday.getMonth() === 6 || monday.getMonth() === 7) && calWed?.isOff) {
+            // O prázdninách (čvc–srp) skryj nestavící Limit ("Volný týden") —
+            // OFF karta nezobrazuje sloty, jen "není stavění". Data zůstávají.
+          } else {
+            slots.push({
+              venue: 'limit',
+              stavba: <SessionCard
+                session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} baseDates={wedBaseDates} theme="dark"
+                slots={week.wednesday} calInfo={calWed}
+                sel={sel}
+                onSlotClick={i => onSlotClick('wednesday', i)}
+                onDragStartSlot={(i,n) => onDragStartSlot('wednesday',i,n)}
+                onDragOverSlot={e => e.preventDefault()}
+                onDropSlot={i => onDropSlot('wednesday', i)}
+                onClear={() => clearSession('wednesday')}
+                onDateChange={setWedDate}
+                weekMin={weekMin} weekMax={weekMax}
+                onShift={shiftWedSector}
+                nextSector={getNextSector(key, 'wed')} />,
+              sundavani: (calWed != null && !calWed.isOff)
+                ? <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
+                    sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
+                    onToggleSundavac={name => toggleSundavac('wednesday', name)}
+                    onToggleMyti={name => toggleMyti('wednesday', name)} />
+                : null,
+            });
+          }
+          // Thu (jen pokud je v týdnu)
+          if (calThu) {
+            slots.push({
+              stavba: <SessionCard
+                session="thursday" day={isNewSchedule(monday) ? "Pátek" : "Čtvrtek"} date={thuDate} baseDates={thuBaseDates} theme="green"
+                slots={week.thursday || E4()} calInfo={calThu}
+                sel={sel}
+                onSlotClick={i => onThuSlotClick(i)}
+                onDragStartSlot={(i,n) => onDragStartSlot('thursday',i,n)}
+                onDragOverSlot={e => e.preventDefault()}
+                onDropSlot={i => onDropSlot('thursday', i)}
+                onClear={() => clearSession('thursday')}
+                onDateChange={setThuDate}
+                weekMin={weekMin} weekMax={weekMax} />,
+              sundavani: null,
+            });
+          }
+          // Extras — neumístěné race/dostavba dny — připojeny jako další sloty do stejného řádku
+          _remainingWeekItems.forEach(item => {
+            if (item.kind === 'race') {
+              slots.push({
+                stavba: <RaceCard
+                  race={item.race}
+                  sel={sel}
+                  onSlotClick={i => onRaceSlotClick(item.race.date, i)}
+                  onDragStartSlot={() => {}}
+                  onDragOverSlot={e => e.preventDefault()}
+                  onDropSlot={() => {}}
+                  onDelete={() => deleteRace(item.race.date)} />,
+                sundavani: renderRaceSund(item.race),
+              });
+            } else {
+              slots.push({
+                stavba: <RaceCard
+                  kind="dostavba"
+                  race={item.race}
+                  day={item.day}
+                  sel={sel}
+                  onSlotClick={i => onDostavbaSlotClick(item.race.date, item.dIdx, i)}
+                  onDragStartSlot={() => {}}
+                  onDragOverSlot={e => e.preventDefault()}
+                  onDropSlot={() => {}} />,
+                sundavani: null,
+              });
+            }
+          });
+
+          // Extra stavění — pod kartu své stěny (Lanovka pod Lanovku, Limit pod Limit).
+          // Když stěna ten týden kartu nemá (prázdniny, skrytý volný týden),
+          // přidá se extra jako samostatný sloupec na konec řádku.
+          _weekExtras.forEach(ex => {
+            const card = <ExtraCard extra={ex} sel={sel}
+              onSlotClick={i => onExtraSlotClick(ex.id, i)}
+              onLanoClick={() => onExtraLanoClick(ex.id)}
+              onToggleLanoSlot={() => toggleExtraLanoSlot(ex.id)}
+              onDelete={() => deleteExtra(ex.id)} />;
+            const host = slots.find(s => s.venue === ex.venue);
+            if (host) { if (!host.stacked) host.stacked = []; host.stacked.push(card); }
+            else slots.push({ venue: ex.venue, stavba: card, sundavani: null });
+          });
+
+          if (!slots.length && emptyNote) return emptyNote;
+          const hasSundavani = slots.some(s => s.sundavani != null);
+          return (
+            <>
+              {hasSundavani && (
+                <div className="flex gap-4 lg:flex-wrap lg:justify-center items-start">
+                  {slots.map((s, i) => (
+                    <div key={`sund-${i}`} className={cardClass}>
+                      {s.sundavani}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-4 lg:flex-wrap lg:justify-center items-start">
+                {slots.map((s, i) => (
+                  <div key={`stav-${i}`} className={`${cardClass} space-y-4`}>
+                    {s.stavba}
+                    {(s.stacked || []).map((c, j) => (
+                      <React.Fragment key={`extra-${j}`}>{c}</React.Fragment>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </>
+          );
+        }
+
+        return { monday, friday, key, week, calMon, calWed, calThu, monDate, wedDate, monReplacement, wedReplacement, toIso, isMonday, isWednesday, shiftMonSector, shiftWedSector, undoMonShift, undoWedShift, doReplace, undoReplace, cancelMonSector, undoMonCancel, cancelWedSector, undoWedCancel, renderSlots, remove };
+      }
+
+      const curView = buildWeekView(offset);
+      const { monday, friday, key, week, calMon, calWed, calThu, monDate, wedDate, monReplacement, wedReplacement, toIso, isMonday, isWednesday, shiftMonSector, shiftWedSector, undoMonShift, undoWedShift, doReplace, undoReplace, cancelMonSector, undoMonCancel, cancelWedSector, undoWedCancel, renderSlots } = curView;
+      // Celý měsíc — další 4 týdny pod hlavním týdnem (jen když je rozbalený)
+      const monthViews = monthOpen ? [1, 2, 3, 4].map(i => buildWeekView(offset + i)) : [];
       // Skok o měsíc — přepočítá offset (v týdnech) na týden cílového měsíce
       function shiftMonth(delta) {
         const t = new Date(monday);
@@ -2920,333 +3534,6 @@
         const targetMonday = getMonday(t);
         const base = getMonday(new Date());
         setOffset(Math.round((targetMonday.getTime() - base.getTime()) / (7 * 86400000)));
-      }
-      const calMon = effSector('mon', key, data, rotationShifts);
-      const calWed = effSector('wed', key, data, rotationShifts);
-      const calThu = CAL[key]?.thu ?? null;
-
-      // Závod NEBO dostavba, které mohou nahradit standardní Stavění sloty (Mon Lanovka / Wed Limit) když jsou zrušené.
-      // Algoritmus: shromáždíme všechny race-day a dostavba-day položky v týdnu, pro každý zrušený slot
-      // hledáme nejdřív shodu day-of-week (Mon=1, Wed=3, Thu=4 pro Dětská), pak fallback na cokoli.
-      const _wkStartIso = weekKey(monday);
-      const _wkEndIso   = weekKey(addDays(monday, 6));
-      const _allWeekItems = [];
-      Object.values(races || {}).forEach(race => {
-        if (!race?.date) return;
-        if (race.date >= _wkStartIso && race.date <= _wkEndIso) {
-          _allWeekItems.push({ kind: 'race', race, date: race.date, venue: 'wed' });
-        }
-        (race.dostavba || []).forEach((day, dIdx) => {
-          if (day?.date && day.date >= _wkStartIso && day.date <= _wkEndIso) {
-            _allWeekItems.push({ kind: 'dostavba', race, day, dIdx, date: day.date, venue: 'wed' });
-          }
-        });
-      });
-      _allWeekItems.sort((a, b) => a.date.localeCompare(b.date));
-      const _monCancelled = week?.monSectorOverride?.isOff === true;
-      const _wedCancelled = week?.wedSectorOverride?.isOff === true;
-      // Day-of-week (JS getDay: Ne=0, Po=1, ..., So=6) Lanovka a Limit dle aktuálního rozvrhu
-      const _monDayMatch = 1 + lanovkaOffset(monday);                          // 1=Po nebo 2=Út
-      const _wedDayMatch = 1 + limitOffset(monday, calWed?.sector);            // 3=St nebo 4=Čt (EFEKTIVNÍ sektor, ne raw CAL)
-      const _pool = [..._allWeekItems];
-      const _consume = pred => {
-        for (let i = 0; i < _pool.length; i++) {
-          if (pred(_pool[i])) return _pool.splice(i, 1)[0];
-        }
-        return null;
-      };
-      const _dayOf = it => new Date(it.date + 'T12:00:00').getDay();
-      // Závod/dostavba jsou VŽDY Limit (venue 'wed') → smí nahradit jen zrušený Limit slot,
-      // nikdy Lanovku. Žádný slepý fallback přes stěny (dřív hijackoval špatnou stěnu).
-      const wedReplacement = _wedCancelled
-        ? (_consume(it => it.venue === 'wed' && _dayOf(it) === _wedDayMatch)
-           || _consume(it => it.venue === 'wed'))
-        : null;
-      const monReplacement = _monCancelled
-        ? _consume(it => it.venue === 'mon' && _dayOf(it) === _monDayMatch)
-        : null;
-      const _remainingWeekItems = _pool;
-
-      // Extra stavění v tomto týdnu — přidají se jako další karty vedle standardních.
-      // Vědomě NEvstupují do replacement logiky: extra nic neposouvá ani nenahrazuje.
-      const _weekExtras = Object.entries(extras || {})
-        .map(([id, e]) => ({ ...e, id }))
-        .filter(e => e?.date && e.date >= _wkStartIso && e.date <= _wkEndIso)
-        .sort((a, b) => a.date.localeCompare(b.date) || String(a.venue).localeCompare(String(b.venue)));
-
-      // Den stavění: Lanovka pondělí/úterý (od září 2026), Limit středa/čtvrtek (od září 2026 vždy čtvrtek)
-      const monOffset = lanovkaOffset(monday);
-      const wedOffset = limitOffset(monday, calWed?.sector);
-      // Přepis data jen v rámci týdne — override mimo týden ignorujeme (dřív dělal
-      // matoucí dvojí zobrazení: karta v původním týdnu + „není stavění" v cílovém).
-      const weekMin = weekKey(monday);
-      const weekMax = toIso(addDays(monday, 6));
-      const inWk = iso => !!iso && iso >= weekMin && iso <= weekMax;
-      // + 'T12:00:00' aby se ISO date-only string neparsoval jako UTC midnight (timezone off-by-one)
-      // Standardní (nepřesunuté) datum — karta podle něj pozná, že je stavění jinde
-      const monBaseDate = addDays(monday, monOffset);
-      const wedBaseDate = addDays(monday, wedOffset);
-      const thuBaseDate = addDays(monday, gymOffset(monday));
-      const monDate = inWk(week.monDateOverride) ? new Date(week.monDateOverride + 'T12:00:00') : monBaseDate;
-      const wedDate = inWk(week.wedDateOverride) ? new Date(week.wedDateOverride + 'T12:00:00') : wedBaseDate;
-      const thuDate = inWk(week.thuDateOverride) ? new Date(week.thuDateOverride + 'T12:00:00') : thuBaseDate;
-      // Týden na přelomu srpna a září 2026: pondělí je ještě ve starém rozvrhu, ale
-      // stavění už padá do září. Tehdy se plán teprve překlápěl — platí oba dny,
-      // takže se štítek „jiný den" neukáže (nebyl to přesun).
-      const _straddle = !isNewSchedule(monday) && isNewSchedule(addDays(monday, 6));
-      const monBaseDates = _straddle ? [monBaseDate, addDays(monday, 1)] : [monBaseDate];
-      const wedBaseDates = _straddle ? [wedBaseDate, addDays(monday, 3)] : [wedBaseDate];
-      const thuBaseDates = _straddle ? [thuBaseDate, addDays(monday, 4)] : [thuBaseDate];
-      function setMonDate(iso) { setWeek(w => ({ ...w, monDateOverride: iso })); }
-      function setWedDate(iso) { setWeek(w => ({ ...w, wedDateOverride: iso })); }
-      function setThuDate(iso) { setWeek(w => ({ ...w, thuDateOverride: iso })); }
-
-      // setWeek bere buď hodnotu nebo funkční updater (w → nový w).
-      // Funkční forma je race-safe pro rychlé kliky za sebou (čte nejnovější stav z setData).
-      function setWeek(updater) {
-        setData(d => {
-          const curr = d[key] ?? week;
-          const next = typeof updater === 'function' ? updater(curr) : updater;
-          return { ...d, [key]: next };
-        });
-      }
-
-      // ── Posunout stavění (odložit o 7 dní) ────────────────────────────────
-      function toIso(d) {
-        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      }
-      // POSUN: tento týden se stavět nebude (Volný) a profily VŠECH následujících
-      // týdnů se posunou o jeden vpřed. Realizováno přidáním týdne do globálního
-      // rotationShifts → resolver effSector kaskáduje celou rotaci automaticky.
-      // Stavěči zůstávají vázaní na DATUM (na následujících týdnech se nehýbou),
-      // jen tento (posunutý) týden se vyklidí (uloží se pro „Vrátit posun").
-      function shiftMonSector() {
-        if ((rotationShifts.lanovka || []).includes(key)) return;
-        if (!window.confirm(`Posunout rotaci Lanovky od ${fmtFull(monDate)}?\n\nTento týden se stavět nebude a profily všech dalších týdnů se posunou o jeden vpřed.`)) return;
-        setData(d => {
-          const curr = { ...(d[key] ?? initWeek(key)) };
-          curr.monSavedSetters = (d[key]?.monday) || E4();
-          curr.monSavedLano = d[key]?.mondayLano ?? null;
-          curr.monSavedSundavaci = d[key]?.mondaySundavaci || [];
-          curr.monSavedMyti = d[key]?.mondayMyti ?? null;
-          curr.monday = E4(); curr.mondayLano = null; curr.mondaySundavaci = []; curr.mondayMyti = null;
-          curr.monSectorOverride = null; // Volný řídí shift-list, ne override
-          return { ...d, [key]: curr };
-        });
-        setRotationShifts(rs => ({ ...rs, lanovka: [...(rs.lanovka || []), key].sort() }));
-      }
-      function shiftWedSector() {
-        if ((rotationShifts.limit || []).includes(key)) return;
-        if (!window.confirm(`Posunout rotaci Limitu od ${fmtFull(wedDate)}?\n\nTento týden se stavět nebude a profily všech dalších týdnů se posunou o jeden vpřed.`)) return;
-        setData(d => {
-          const curr = { ...(d[key] ?? initWeek(key)) };
-          curr.wedSavedSetters = (d[key]?.wednesday) || E4();
-          curr.wedSavedSundavaci = d[key]?.wednesdaySundavaci || [];
-          curr.wedSavedMyti = d[key]?.wednesdayMyti ?? null;
-          curr.wednesday = E4(); curr.wednesdaySundavaci = []; curr.wednesdayMyti = null;
-          curr.wedSectorOverride = null;
-          return { ...d, [key]: curr };
-        });
-        setRotationShifts(rs => ({ ...rs, limit: [...(rs.limit || []), key].sort() }));
-      }
-
-      function undoMonShift() {
-        setData(d => {
-          const curr = { ...(d[key] ?? week) };
-          if (curr.monSavedSetters) { curr.monday = curr.monSavedSetters; curr.mondayLano = curr.monSavedLano ?? null; }
-          curr.mondaySundavaci = curr.monSavedSundavaci || [];
-          curr.mondayMyti = curr.monSavedMyti ?? null;
-          curr.monSectorOverride = null;
-          curr.monSavedSetters = null; curr.monSavedLano = null;
-          curr.monSavedSundavaci = null; curr.monSavedMyti = null;
-          return { ...d, [key]: curr };
-        });
-        setRotationShifts(rs => ({ ...rs, lanovka: (rs.lanovka || []).filter(k => k !== key) }));
-      }
-      function undoWedShift() {
-        setData(d => {
-          const curr = { ...(d[key] ?? week) };
-          if (curr.wedSavedSetters) { curr.wednesday = curr.wedSavedSetters; }
-          curr.wednesdaySundavaci = curr.wedSavedSundavaci || [];
-          curr.wednesdayMyti = curr.wedSavedMyti ?? null;
-          curr.wedSectorOverride = null;
-          curr.wedSavedSetters = null;
-          curr.wedSavedSundavaci = null; curr.wedSavedMyti = null;
-          return { ...d, [key]: curr };
-        });
-        setRotationShifts(rs => ({ ...rs, limit: (rs.limit || []).filter(k => k !== key) }));
-      }
-
-      // NAHRADIT: prohodí profil tohoto týdne s jiným týdnem TÉŽE stěny.
-      // Realizováno per-week overridem na obou týdnech (kind:'swap').
-      // Stavěči zůstávají vázaní na datum (sloty se nehýbou).
-      function doReplace(venue, otherKey) {
-        const secThis  = effSector(venue, key, data, rotationShifts);
-        const secOther = effSector(venue, otherKey, data, rotationShifts);
-        if (!secThis?.sector || !secOther?.sector) return;
-        const ovKey  = venue === 'mon' ? 'monSectorOverride' : 'wedSectorOverride';
-        const arrKey = venue === 'mon' ? 'monday' : 'wednesday';
-        const slotsFor = sec => venue === 'mon' ? getLanovkaSlotCount(sec) : getWedSlotCount(sec);
-        // Po přehození na menší profil zahodit přebyteční stavěče (nad rámec nového
-        // počtu slotů) – ať nikde „nevisí". Zachová první obsazené, zbytek zahodí.
-        const trim = (arr, n) => { const kept = (arr || []).filter(Boolean).slice(0, n); while (kept.length < n) kept.push(null); return kept; };
-        setData(d => {
-          const out = { ...d };
-          // Pojistka: je-li některá strana už ve swapu s JINÝM týdnem, nejdřív uvolni
-          // jejího starého partnera (jinak zůstane „visící" odkaz a undo to rozbije).
-          for (const k of [key, otherKey]) {
-            const ov = d[k]?.[ovKey];
-            if (ov?.kind === 'swap' && ov.partner && ov.partner !== key && ov.partner !== otherKey && d[ov.partner]) {
-              out[ov.partner] = { ...d[ov.partner], [ovKey]: null };
-            }
-          }
-          out[key]      = { ...(d[key] ?? initWeek(key)),           [ovKey]: { sector: secOther.sector, kind: 'swap', partner: otherKey, lano: null, setters: [] }, [arrKey]: trim(d[key]?.[arrKey],      slotsFor(secOther.sector)) };
-          out[otherKey] = { ...(d[otherKey] ?? initWeek(otherKey)), [ovKey]: { sector: secThis.sector,  kind: 'swap', partner: key,      lano: null, setters: [] }, [arrKey]: trim(d[otherKey]?.[arrKey], slotsFor(secThis.sector)) };
-          return out;
-        });
-        setReplaceModal(null);
-      }
-      // Zrušit nahrazení (vrátit oba týdny – tento i jeho partnera – do počítané rotace)
-      function undoReplace(venue) {
-        const ovKey = venue === 'mon' ? 'monSectorOverride' : 'wedSectorOverride';
-        const ov = venue === 'mon' ? week.monSectorOverride : week.wedSectorOverride;
-        const partner = ov?.partner;
-        setData(d => {
-          const out = { ...d, [key]: { ...(d[key] ?? week), [ovKey]: null } };
-          if (partner && d[partner]) out[partner] = { ...d[partner], [ovKey]: null };
-          return out;
-        });
-      }
-
-      // ── Smazat stavění (volný týden) ──────────────────────────────────────
-      function cancelMonSector() {
-        setData(d => {
-          const curr = d[key] ?? initWeek(key);
-          return { ...d, [key]: {
-            ...curr,
-            monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null,
-            monSectorOverride: { isOff: true, sector: 'Volný týden' },
-            monCancelledSetters: curr.monday,
-            monCancelledLano: curr.mondayLano,
-            monCancelledSundavaci: curr.mondaySundavaci || [],
-            monCancelledMyti: curr.mondayMyti,
-          }};
-        });
-      }
-      function undoMonCancel() {
-        setData(d => {
-          const curr = d[key] ?? initWeek(key);
-          return { ...d, [key]: {
-            ...curr,
-            monday: curr.monCancelledSetters || E4(),
-            mondayLano: curr.monCancelledLano ?? null,
-            mondaySundavaci: curr.monCancelledSundavaci || [],
-            mondayMyti: curr.monCancelledMyti ?? null,
-            monSectorOverride: null,
-            monCancelledSetters: null, monCancelledLano: null,
-            monCancelledSundavaci: null, monCancelledMyti: null,
-          }};
-        });
-      }
-      function cancelWedSector() {
-        setData(d => {
-          const curr = d[key] ?? initWeek(key);
-          return { ...d, [key]: {
-            ...curr,
-            wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null,
-            wedSectorOverride: { isOff: true, sector: 'Volný týden' },
-            wedCancelledSetters: curr.wednesday,
-            wedCancelledSundavaci: curr.wednesdaySundavaci || [],
-            wedCancelledMyti: curr.wednesdayMyti,
-          }};
-        });
-      }
-      function undoWedCancel() {
-        setData(d => {
-          const curr = d[key] ?? initWeek(key);
-          return { ...d, [key]: {
-            ...curr,
-            wednesday: curr.wedCancelledSetters || E4(),
-            wednesdaySundavaci: curr.wedCancelledSundavaci || [],
-            wednesdayMyti: curr.wedCancelledMyti ?? null,
-            wedSectorOverride: null,
-            wedCancelledSetters: null, wedCancelledSundavaci: null, wedCancelledMyti: null,
-          }};
-        });
-      }
-
-      // ── Badge helpers (display only) ──────────────────────────────────────
-      function isMonday(c)    { return (week.monday || []).includes(c) || week.mondayLano === c; }
-      function isWednesday(c) { return (week.wednesday || []).includes(c); }
-
-      // ── Assign / remove ───────────────────────────────────────────────────
-      function assign(climber, session, idx) {
-        if (session === 'mondayLano') {
-          if (week.mondayLano != null) return false; // != handles both null a undefined
-          setWeek(w => w.mondayLano != null ? w : { ...w, mondayLano: climber });
-          return true;
-        }
-        const arr = week[session] || E4();
-        if (arr[idx] != null) return false; // cílový slot obsazený – nepřepisuj
-        setWeek(w => {
-          const cur = w[session] || E4();
-          if (cur[idx] != null) return w;
-          // Je-li stavěč v téhle session už jinde (typicky „navíc" po přehození na
-          // menší profil), PŘESUŇ ho sem – uvolni starou pozici – místo blokování.
-          // Tím jde vždy zapsat a nikde „nezůstane viset". Bez duplicit (max 1× v session).
-          const moved = cur.map(s => s === climber ? null : s);
-          moved[idx] = climber;
-          return { ...w, [session]: moved };
-        });
-        return true;
-      }
-
-      function remove(session, idx) {
-        if (session === 'mondayLano') {
-          const c = week.mondayLano;
-          if (!c) return;
-          if (!window.confirm(`Odebrat „${c}" z lano slotu?`)) return;
-          setWeek(w => ({ ...w, mondayLano: null }));
-          if (sel === c) setSel(null);
-          return;
-        }
-        const arr = week[session] || E4();
-        const c = arr[idx];
-        if (!c) return;
-        if (!window.confirm(`Odebrat „${c}" ze slotu?`)) return;
-        setWeek(w => {
-          const cur = w[session] || E4();
-          return { ...w, [session]: cur.map((s,i) => i === idx ? null : s) };
-        });
-        if (sel === c) setSel(null);
-      }
-
-      function clearSession(session) {
-        if (session === 'monday') {
-          setWeek(w => ({ ...w, monday: E4(), mondayLano: null, mondaySundavaci: [], mondayMyti: null }));
-        } else if (session === 'wednesday') {
-          setWeek(w => ({ ...w, wednesday: E4(), wednesdaySundavaci: [], wednesdayMyti: null }));
-        } else {
-          setWeek(w => ({ ...w, thursday: E4() }));
-        }
-        setSel(null);
-      }
-      function clearWeek() {
-        if (!window.confirm('Resetovat celý týden? Smažou se všichni stavěči, sundavači i případný posun/zrušení.')) return;
-        setData(d => { const n={...d}; delete n[key]; return n; });
-        db.collection('weeks').doc(key).delete().catch(() => {}); // smazat i z Firestore
-        setSel(null);
-      }
-      function toggleSundavac(session, name) {
-        const fld = session === 'monday' ? 'mondaySundavaci' : 'wednesdaySundavaci';
-        setWeek(w => {
-          const curr = w[fld] || [];
-          return { ...w, [fld]: curr.includes(name) ? curr.filter(x => x !== name) : [...curr, name] };
-        });
-      }
-      function toggleMyti(session, name) {
-        const fld = session === 'monday' ? 'mondayMyti' : 'wednesdayMyti';
-        setWeek(w => ({ ...w, [fld]: w[fld] === name ? null : name }));
       }
 
       // ── Race handlers ─────────────────────────────────────────────────────
@@ -3374,21 +3661,7 @@
         }
       }
 
-      // ── Click ─────────────────────────────────────────────────────────────
-      function onSlotClick(session, idx) {
-        if ((week[session] || E4())[idx]) remove(session, idx);
-        else if (sel) assign(sel, session, idx);
-        // sel stays active — assign to multiple slots/sessions in one go
-      }
-      function onLanoClick() {
-        if (week.mondayLano) remove('mondayLano', 0);
-        else if (sel) assign(sel, 'mondayLano', 0);
-      }
       function onChipClick(name) { setSel(s => s === name ? null : name); }
-      function onThuSlotClick(idx) {
-        if ((week.thursday || E4())[idx]) remove('thursday', idx);
-        else if (sel) assign(sel, 'thursday', idx);
-      }
 
       // ── Team management ───────────────────────────────────────────────────
       // Persist team do localStorage + Firestore (sdílený seznam včetně hostů)
@@ -3489,67 +3762,12 @@
 
       // ── Drag ──────────────────────────────────────────────────────────────
       function onDragStartPool(name) { setDrag({ from:'pool', climber:name }); setSel(null); }
-      function onDragStartSlot(session, idx, name) { setDrag({ from:'slot', climber:name, session, idx }); }
-      function onDragStartLano(name) { if (name) setDrag({ from:'lano', climber:name }); }
-
-      function onDropSlot(session, idx) {
-        if (!drag) return;
-        const { from, climber, session: src, idx: srcIdx } = drag;
-        setDrag(null);
-        if (from === 'pool') {
-          assign(climber, session, idx);
-        } else if (from === 'lano') {
-          // lano → regular slot
-          if ((week[session] || E4())[idx] != null) return;
-          setWeek(w => {
-            const dst = w[session] || E4();
-            if (dst[idx] != null) return w;
-            return { ...w, mondayLano: null, [session]: dst.map((s,i) => i===idx ? climber : s) };
-          });
-        } else {
-          const dstArr = week[session] || E4();
-          if (src === session) {
-            if (idx === srcIdx || dstArr[idx] != null) return;
-            setWeek(w => {
-              const cur = w[session] || E4();
-              if (cur[idx] != null) return w;
-              const s = [...cur]; s[srcIdx]=null; s[idx]=climber;
-              return { ...w, [session]: s };
-            });
-          } else {
-            // cross-session drag: remove from source, assign to target in one update
-            if (dstArr[idx] != null) return;
-            if (dstArr.includes(climber)) return;
-            setWeek(w => {
-              const dst = w[session] || E4();
-              const src2 = w[src] || E4();
-              if (dst[idx] != null || dst.includes(climber)) return w;
-              const newSrc = [...src2]; newSrc[srcIdx] = null;
-              const newDst = [...dst];  newDst[idx]    = climber;
-              return { ...w, [src]: newSrc, [session]: newDst };
-            });
-          }
-        }
-      }
-      function onDropLano() {
-        if (!drag) return;
-        const { from, climber, session: src, idx: srcIdx } = drag;
-        setDrag(null);
-        if (from === 'pool') {
-          assign(climber, 'mondayLano', 0);
-        } else if (from === 'slot') {
-          if (week.mondayLano != null) return; // != handles both null a undefined
-          setWeek(w => {
-            if (w.mondayLano != null) return w;
-            const s = [...(w[src] || E4())]; s[srcIdx] = null;
-            return { ...w, [src]: s, mondayLano: climber };
-          });
-        }
-      }
       function onDropPool() {
         if (!drag) return;
-        if (drag.from === 'slot') remove(drag.session, drag.idx);
-        else if (drag.from === 'lano') remove('mondayLano', 0);
+        // Odebrání tažením do seznamu — z týdne, odkud se táhlo (hlavní nebo z měsíce)
+        const v = [curView, ...monthViews].find(x => x.key === drag.key);
+        if (v && drag.from === 'slot') v.remove(drag.session, drag.idx);
+        else if (v && drag.from === 'lano') v.remove('mondayLano', 0);
         setDrag(null);
       }
 
@@ -3894,192 +4112,7 @@
               <div className="flex flex-col gap-4 w-fit lg:w-full">
 
                 {/* Slot-based render: každý slot má Sundavání nahoře + Stavění dole, vázané pozičně */}
-                {(() => {
-                  // Max 3 karty vedle sebe (každá 1/3 šířky); 4. a další wrapuje na další řádek a vystředí se
-                  const cardClass = "w-[calc(100vw-2rem)] flex-shrink-0 snap-start lg:w-auto lg:flex-shrink lg:flex-grow-0 lg:basis-[calc((100%-2rem)/3)] lg:max-w-[calc((100%-2rem)/3)]";
-                  const renderRaceSund = race => (
-                    <SundavaniCard
-                      session={`race-${race.date}`} theme="dark"
-                      date={addDays(new Date(race.date + 'T12:00:00'), -1)}
-                      sundavaci={race.sundavaci || []} myti={race.myti || null}
-                      onToggleSundavac={n => toggleRaceSundavac(race.date, n)}
-                      onToggleMyti={n => toggleRaceMyti(race.date, n)} />
-                  );
-                  const renderReplacementStavba = repl => (
-                    <RaceCard
-                      kind={repl.kind}
-                      race={repl.race}
-                      day={repl.day}
-                      sel={sel}
-                      onSlotClick={i => repl.kind === 'race'
-                        ? onRaceSlotClick(repl.race.date, i)
-                        : onDostavbaSlotClick(repl.race.date, repl.dIdx, i)}
-                      onDragStartSlot={() => {}}
-                      onDragOverSlot={e => e.preventDefault()}
-                      onDropSlot={() => {}}
-                      onDelete={repl.kind === 'race' ? () => deleteRace(repl.race.date) : undefined} />
-                  );
-
-                  const slots = [];
-                  // Mon
-                  if (monReplacement) {
-                    slots.push({
-                      venue: 'lanovka',
-                      stavba: renderReplacementStavba(monReplacement),
-                      sundavani: monReplacement.kind === 'race' ? renderRaceSund(monReplacement.race) : null,
-                    });
-                  } else if ((monday.getMonth() === 6 || monday.getMonth() === 7) && calMon?.isOff) {
-                    // O prázdninách (čvc–srp) skryj nestavící Lanovku ("Volný týden") —
-                    // OFF karta stejně nezobrazuje žádné sloty, jen "není stavění", takže
-                    // skrytí nic viditelného neztratí. Data (případní zbytkoví stavěči)
-                    // zůstávají uložená, jen se nezobrazuje prázdná karta.
-                  } else {
-                    slots.push({
-                      venue: 'lanovka',
-                      stavba: <SessionCard
-                        session="monday" day="Pondělí" date={monDate} baseDates={monBaseDates} theme="yellow"
-                        slots={week.monday} lanoSlot={hasLanoBuild(monday) ? week.mondayLano : undefined} calInfo={calMon}
-                        sel={sel}
-                        onSlotClick={i => onSlotClick('monday', i)}
-                        onDragStartSlot={(i,n) => onDragStartSlot('monday',i,n)}
-                        onDragOverSlot={e => e.preventDefault()}
-                        onDropSlot={i => onDropSlot('monday', i)}
-                        onLanoClick={onLanoClick}
-                        onDragStartLano={onDragStartLano}
-                        onDropLano={onDropLano}
-                        onClear={() => clearSession('monday')}
-                        onDateChange={setMonDate}
-                        weekMin={weekMin} weekMax={weekMax}
-                        onShift={shiftMonSector}
-                        nextSector={getNextSector(key, 'mon')} />,
-                      sundavani: (calMon != null && !calMon.isOff)
-                        ? <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
-                            sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
-                            onToggleSundavac={name => toggleSundavac('monday', name)}
-                            onToggleMyti={name => toggleMyti('monday', name)} />
-                        : null,
-                    });
-                  }
-                  // Wed
-                  if (wedReplacement) {
-                    slots.push({
-                      venue: 'limit',
-                      stavba: renderReplacementStavba(wedReplacement),
-                      sundavani: wedReplacement.kind === 'race' ? renderRaceSund(wedReplacement.race) : null,
-                    });
-                  } else if ((monday.getMonth() === 6 || monday.getMonth() === 7) && calWed?.isOff) {
-                    // O prázdninách (čvc–srp) skryj nestavící Limit ("Volný týden") —
-                    // OFF karta nezobrazuje sloty, jen "není stavění". Data zůstávají.
-                  } else {
-                    slots.push({
-                      venue: 'limit',
-                      stavba: <SessionCard
-                        session="wednesday" day={isDetskaWed(calWed?.sector) ? "Čtvrtek" : "Středa"} date={wedDate} baseDates={wedBaseDates} theme="dark"
-                        slots={week.wednesday} calInfo={calWed}
-                        sel={sel}
-                        onSlotClick={i => onSlotClick('wednesday', i)}
-                        onDragStartSlot={(i,n) => onDragStartSlot('wednesday',i,n)}
-                        onDragOverSlot={e => e.preventDefault()}
-                        onDropSlot={i => onDropSlot('wednesday', i)}
-                        onClear={() => clearSession('wednesday')}
-                        onDateChange={setWedDate}
-                        weekMin={weekMin} weekMax={weekMax}
-                        onShift={shiftWedSector}
-                        nextSector={getNextSector(key, 'wed')} />,
-                      sundavani: (calWed != null && !calWed.isOff)
-                        ? <SundavaniCard session="wednesday" theme="dark" date={addDays(wedDate, -1)}
-                            sundavaci={week.wednesdaySundavaci || []} myti={week.wednesdayMyti || null}
-                            onToggleSundavac={name => toggleSundavac('wednesday', name)}
-                            onToggleMyti={name => toggleMyti('wednesday', name)} />
-                        : null,
-                    });
-                  }
-                  // Thu (jen pokud je v týdnu)
-                  if (calThu) {
-                    slots.push({
-                      stavba: <SessionCard
-                        session="thursday" day={isNewSchedule(monday) ? "Pátek" : "Čtvrtek"} date={thuDate} baseDates={thuBaseDates} theme="green"
-                        slots={week.thursday || E4()} calInfo={calThu}
-                        sel={sel}
-                        onSlotClick={i => onThuSlotClick(i)}
-                        onDragStartSlot={(i,n) => onDragStartSlot('thursday',i,n)}
-                        onDragOverSlot={e => e.preventDefault()}
-                        onDropSlot={i => onDropSlot('thursday', i)}
-                        onClear={() => clearSession('thursday')}
-                        onDateChange={setThuDate}
-                        weekMin={weekMin} weekMax={weekMax} />,
-                      sundavani: null,
-                    });
-                  }
-                  // Extras — neumístěné race/dostavba dny — připojeny jako další sloty do stejného řádku
-                  _remainingWeekItems.forEach(item => {
-                    if (item.kind === 'race') {
-                      slots.push({
-                        stavba: <RaceCard
-                          race={item.race}
-                          sel={sel}
-                          onSlotClick={i => onRaceSlotClick(item.race.date, i)}
-                          onDragStartSlot={() => {}}
-                          onDragOverSlot={e => e.preventDefault()}
-                          onDropSlot={() => {}}
-                          onDelete={() => deleteRace(item.race.date)} />,
-                        sundavani: renderRaceSund(item.race),
-                      });
-                    } else {
-                      slots.push({
-                        stavba: <RaceCard
-                          kind="dostavba"
-                          race={item.race}
-                          day={item.day}
-                          sel={sel}
-                          onSlotClick={i => onDostavbaSlotClick(item.race.date, item.dIdx, i)}
-                          onDragStartSlot={() => {}}
-                          onDragOverSlot={e => e.preventDefault()}
-                          onDropSlot={() => {}} />,
-                        sundavani: null,
-                      });
-                    }
-                  });
-
-                  // Extra stavění — pod kartu své stěny (Lanovka pod Lanovku, Limit pod Limit).
-                  // Když stěna ten týden kartu nemá (prázdniny, skrytý volný týden),
-                  // přidá se extra jako samostatný sloupec na konec řádku.
-                  _weekExtras.forEach(ex => {
-                    const card = <ExtraCard extra={ex} sel={sel}
-                      onSlotClick={i => onExtraSlotClick(ex.id, i)}
-                      onLanoClick={() => onExtraLanoClick(ex.id)}
-                      onToggleLanoSlot={() => toggleExtraLanoSlot(ex.id)}
-                      onDelete={() => deleteExtra(ex.id)} />;
-                    const host = slots.find(s => s.venue === ex.venue);
-                    if (host) { if (!host.stacked) host.stacked = []; host.stacked.push(card); }
-                    else slots.push({ venue: ex.venue, stavba: card, sundavani: null });
-                  });
-
-                  const hasSundavani = slots.some(s => s.sundavani != null);
-                  return (
-                    <>
-                      {hasSundavani && (
-                        <div className="flex gap-4 lg:flex-wrap lg:justify-center items-start">
-                          {slots.map((s, i) => (
-                            <div key={`sund-${i}`} className={cardClass}>
-                              {s.sundavani}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <div className="flex gap-4 lg:flex-wrap lg:justify-center items-start">
-                        {slots.map((s, i) => (
-                          <div key={`stav-${i}`} className={`${cardClass} space-y-4`}>
-                            {s.stavba}
-                            {(s.stacked || []).map((c, j) => (
-                              <React.Fragment key={`extra-${j}`}>{c}</React.Fragment>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  );
-                })()}
+                {renderSlots()}
 
               </div>
             </div>
@@ -4169,6 +4202,25 @@
                 </div>
               )}
             </div>
+
+            {/* Celý měsíc — další 4 týdny plnými kartami pod sebou, klikací jako hlavní týden */}
+            <button onClick={() => setMonthOpen(o => !o)} aria-expanded={monthOpen}
+              className="w-full bg-white rounded-2xl border border-gray-200 shadow-sm px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
+              <span className="text-gray-400 text-xs font-bold uppercase tracking-widest">Celý měsíc</span>
+              <span className={`text-gray-400 text-xs font-semibold transition-transform ${monthOpen ? 'rotate-180' : ''}`}>▼</span>
+            </button>
+            {monthViews.map(v => (
+              <section key={v.key} className="space-y-3">
+                <h2 className="px-1 text-sm font-black text-gray-900">
+                  Týden {fmt(v.monday)} – {fmt(addDays(v.monday, 6))}
+                </h2>
+                <div className="overflow-x-auto snap-x snap-mandatory lg:overflow-visible lg:snap-none relative z-0">
+                  <div className="flex flex-col gap-4 w-fit lg:w-full">
+                    {v.renderSlots(<p className="px-1 text-sm text-gray-400">Tento týden se nestaví.</p>)}
+                  </div>
+                </div>
+              </section>
+            ))}
 
             {/* Měsíční kalendář — pod stavěči, rozbalovací (2 měsíce pod sebou) */}
             <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
