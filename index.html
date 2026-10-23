@@ -2120,9 +2120,9 @@
       ];
       return (
         <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-200 relative">
-          {/* Delete (jen na hlavní kartě závodu) */}
-          {!isDostavba && onDelete && (
-            <button onClick={onDelete} title="Smazat závod"
+          {/* Delete — na kartě závodu smaže celý závod, na kartě dostavby jen tenhle den */}
+          {onDelete && (
+            <button onClick={onDelete} title={isDostavba ? 'Smazat tento den dostavby' : 'Smazat závod'}
               className="absolute top-2.5 right-2.5 z-10 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-800/90 text-pink-400 hover:bg-pink-600 hover:text-white transition-colors">
               <X c="w-3 h-3" />
               <span className="text-[10px] font-black uppercase tracking-widest">Smazat</span>
@@ -3355,7 +3355,9 @@
               onDragStartSlot={() => {}}
               onDragOverSlot={e => e.preventDefault()}
               onDropSlot={() => {}}
-              onDelete={repl.kind === 'race' ? () => deleteRace(repl.race.date) : undefined} />
+              onDelete={repl.kind === 'race'
+                ? () => deleteRace(repl.race.date)
+                : () => deleteDostavbaDay(repl.race.date, repl.day.date)} />
           );
 
           const slots = [];
@@ -3473,7 +3475,8 @@
                   onSlotClick={i => onDostavbaSlotClick(item.race.date, item.dIdx, i)}
                   onDragStartSlot={() => {}}
                   onDragOverSlot={e => e.preventDefault()}
-                  onDropSlot={() => {}} />,
+                  onDropSlot={() => {}}
+                  onDelete={() => deleteDostavbaDay(item.race.date, item.day.date)} />,
                 sundavani: null,
               });
             }
@@ -3555,6 +3558,17 @@
         if (!window.confirm('Opravdu smazat tento závod (včetně dostavby)?')) return;
         setRaces(r => { const n = { ...r }; delete n[date]; return n; });
         db.collection('races').doc(date).delete().catch(() => {});
+      }
+      // Smaže jen jeden den dostavby; závod a ostatní dny zůstanou. Den se hledá podle data,
+      // ne indexu (index se může posunout, když mezitím někdo jiný změní závod).
+      // Do Firestore to dostane flush závodů — pole `dostavba` se při set/merge přepíše celé.
+      function deleteDostavbaDay(raceDate, dayDate) {
+        const d = new Date(dayDate + 'T12:00:00');
+        if (!window.confirm(`Opravdu smazat dostavbu ${d.getDate()}.${d.getMonth()+1}.? Závod a ostatní dny dostavby zůstanou.`)) return;
+        setRaces(r => {
+          const cur = r[raceDate]; if (!cur) return r;
+          return { ...r, [raceDate]: { ...cur, dostavba: (cur.dostavba || []).filter(x => x?.date !== dayDate) } };
+        });
       }
       function onRaceSlotClick(date, idx) {
         const race = races[date]; if (!race) return;
