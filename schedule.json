@@ -335,11 +335,6 @@
     "profile": "Převis + Bizár"
   },
   {
-    "date": "2026-12-31",
-    "wall": "Limit",
-    "profile": "Dětská"
-  },
-  {
     "date": "2027-01-05",
     "wall": "Lanovka",
     "profile": "Nový profil + nahoře kolmice"
@@ -347,7 +342,7 @@
   {
     "date": "2027-01-07",
     "wall": "Limit",
-    "profile": "Přední převis"
+    "profile": "Dětská"
   },
   {
     "date": "2027-01-08",
@@ -362,7 +357,7 @@
   {
     "date": "2027-01-14",
     "wall": "Limit",
-    "profile": "Zadní převis"
+    "profile": "Přední převis"
   },
   {
     "date": "2027-01-19",
@@ -375,14 +370,14 @@
     "profile": "Převis + Bizár"
   },
   {
+    "date": "2027-01-28",
+    "wall": "Limit",
+    "profile": "Kolmice"
+  },
+  {
     "date": "2027-02-02",
     "wall": "Lanovka",
     "profile": "Dole kout + Strop"
-  },
-  {
-    "date": "2027-02-04",
-    "wall": "Limit",
-    "profile": "Dětská"
   },
   {
     "date": "2027-02-05",
@@ -397,7 +392,7 @@
   {
     "date": "2027-02-11",
     "wall": "Limit",
-    "profile": "Přední převis"
+    "profile": "Dětská"
   },
   {
     "date": "2027-02-16",
@@ -407,7 +402,7 @@
   {
     "date": "2027-02-18",
     "wall": "Limit",
-    "profile": "Zadní převis"
+    "profile": "Přední převis"
   },
   {
     "date": "2027-02-23",
@@ -417,12 +412,17 @@
   {
     "date": "2027-02-25",
     "wall": "Limit",
-    "profile": "Kolmice"
+    "profile": "Zadní převis"
   },
   {
     "date": "2027-03-02",
     "wall": "Lanovka",
     "profile": "Převis + Bizár"
+  },
+  {
+    "date": "2027-03-04",
+    "wall": "Limit",
+    "profile": "Kolmice"
   },
   {
     "date": "2027-03-05",
