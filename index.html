@@ -1408,7 +1408,9 @@
     // ── MonthCalendar — měsíční mřížka pod stěnami (jen profily) ──────────
     // Kalendář (Cyril 9. 11.): stavění vyplní celé pole dne a je klikací → stejný detail a úpravy jako v Kam se zapsat (onPick).
     // Den bez stavění klikací není; svátek a prázdniny jsou tichý podklad s řádkem u čísla dne, ne štítek.
-    function MonthCalendar({ data, viewMonday, rotationShifts, extras, role, stickyTop, flashMon, onPick, picked, me, dayTags = {} }) {
+    function MonthCalendar({ data, viewMonday, rotationShifts, extras, role, stickyTop, flashMon, onPick, picked, me, dayTags = {}, compact }) {
+      // Telefon (compact): mřížka jen s čísly a značkami stěn, ťuknutí na den ukáže pod měsícem jeho stavění (vzor Cron z Referu)
+      const [openDay, setOpenDay] = React.useState(null);
       const MONTHS_CS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
       const base = viewMonday instanceof Date ? viewMonday : new Date();
       const year = base.getFullYear();
@@ -1478,8 +1480,8 @@
               <span className="flex items-center gap-1"><VMark theme="yellow" size={9} />Lanovka</span>
               <span className="flex items-center gap-1"><VMark theme="dark" size={9} />Limit</span>
               {role !== 'sund' && <span className="flex items-center gap-1"><VMark theme="green" size={9} />Těloc.</span>}
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-badge bg-bad/25 inline-block"/>svátek</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-badge bg-white/15 inline-block"/>prázdniny</span>
+              <span className="hidden lg:flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-badge bg-bad/25 inline-block"/>svátek</span>
+              <span className="hidden lg:flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-badge bg-white/15 inline-block"/>prázdniny</span>
             </div>
           </div>
           <div className="p-2">
@@ -1507,6 +1509,19 @@
                 const kmon = iso(addDays(d, -((d.getDay() + 6) % 7)));
                 const note = sh || (bh && bh !== 'letní prázdniny' ? bh : null);
                 const show = inMonth ? evs : [];
+                if (compact) {
+                  const on = openDay === k;
+                  return (
+                    <button key={i} type="button" data-day={inMonth ? k : undefined} disabled={!show.length}
+                      onClick={() => setOpenDay(on ? null : k)} aria-pressed={on}
+                      className={`h-[52px] rounded-ctl flex flex-col items-center justify-start pt-1.5 gap-1 transition-colors ${dayBg.split(' ').filter(c => c.startsWith('bg-')).join(' ')}
+                        ${on ? 'ring-2 ring-inset ring-brand-text' : isToday ? 'ring-2 ring-inset ring-brand-accent' : ''} ${show.length ? 'active:bg-white/10' : ''}`}>
+                      <span className={`text-[13px] font-semibold leading-none tnum ${dayNumCls}`}>{d.getDate()}</span>
+                      {show.length > 0 && <span className="flex items-center gap-[3px]">{show.slice(0, 3).map((e, j) => <VMark key={j} theme={e.theme} size={7} outline={e.muted} />)}</span>}
+                      {inMonth && dayTags[k] && <span className="w-1 h-1 rounded-full bg-brand-accent" title={dayTags[k]} />}
+                    </button>
+                  );
+                }
                 // obrys má celý den v barvě stěny (Cyril 9. 11.: „ne uvnitř toho dne"); sundávání čárkovaně; víc akcí v jednom dni = dělené linkou
                 const hex0 = show.length ? venueUi(show[0].theme).hex : null, allMuted = show.length && show.every(e => e.muted);
                 const one = show.length === 1;
@@ -1556,6 +1571,35 @@
                 );
               })}
             </div>
+            {compact && openDay && sessions[openDay] && (() => {
+              const sd = new Date(openDay + 'T12:00:00'), note = stateHoliday(sd) || schoolHoliday(sd);
+              return (
+                <div className="mt-3 px-1 pb-1 flex flex-col gap-2 animate-fade">
+                  <p className="text-[13px] text-brand-muted capitalize">{sd.toLocaleString('cs-CZ', { weekday: 'long' })} {sd.getDate()}. {sd.getMonth() + 1}.{note ? ` · ${note}` : ''}{dayTags[openDay] ? ` · ${dayTags[openDay]}` : ''}</p>
+                  {sessions[openDay].map((e, j) => {
+                    const fill = e.muted ? e.names.length : (e.regular || []).filter(Boolean).length + (e.lano ? 1 : 0);
+                    const total = e.muted ? null : (e.regular || []).length + (e.lano !== undefined ? 1 : 0);
+                    const gap = e.muted ? (!e.names.length || !e.myti) : fill < total;
+                    return (
+                      <button key={j} type="button" onClick={() => onPick && onPick(e.pick)}
+                        className="w-full text-left rounded-ctl border-2 px-3 py-2.5 flex flex-col gap-1.5 active:bg-white/5"
+                        style={{ borderColor: e.muted ? `color-mix(in srgb, ${venueUi(e.theme).hex} 60%, transparent)` : venueUi(e.theme).hex, borderStyle: e.muted ? 'dashed' : 'solid' }}>
+                        <span className="flex items-center gap-2 text-[13px] text-brand-text/80">
+                          <VMark theme={e.theme} size={9} outline={e.muted} />{e.muted ? `Sundávání · ${e.wall.replace('Sundávání ', '')}` : e.wall}
+                          {total != null && <span className={`ml-auto tnum ${gap ? 'text-brand-accent-lite font-semibold' : ''}`}>{fill}/{total}</span>}
+                        </span>
+                        <span className="text-[15px] font-semibold text-brand-text">{e.sector}</span>
+                        <span className="flex items-center gap-2 flex-wrap">
+                          {e.muted
+                            ? <><NameMarks theme={e.theme} names={e.names.length ? e.names : [null]} me={me} size={20} /><span className="text-[11px] text-brand-text/60">mytí</span><NameMark theme={e.theme} name={e.myti} me={e.myti && e.myti === me} size={20} /></>
+                            : <NameMarks theme={e.theme} names={e.regular || []} lano={e.lano} me={me} size={20} />}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
       );
@@ -3699,16 +3743,16 @@
         // ── Click ─────────────────────────────────────────────────────────────
         function onSlotClick(session, idx) {
           if ((week[session] || E4())[idx]) remove(session, idx);
-          else if (sel) assign(sel, session, idx);
+          else if (sel || (!admin && me && team.includes(me))) assign(sel || me, session, idx);   // stavěč: ťuknutí na volné místo = zapsat sebe
           // sel stays active — assign to multiple slots/sessions in one go
         }
         function onLanoClick() {
           if (week.mondayLano) remove('mondayLano', 0);
-          else if (sel) assign(sel, 'mondayLano', 0);
+          else if (sel || (!admin && me && team.includes(me))) assign(sel || me, 'mondayLano', 0);
         }
         function onThuSlotClick(idx) {
           if ((week.thursday || E4())[idx]) remove('thursday', idx);
-          else if (sel) assign(sel, 'thursday', idx);
+          else if (sel || (!admin && me && team.includes(me))) assign(sel || me, 'thursday', idx);
         }
 
         // ── Drag ──────────────────────────────────────────────────────────────
@@ -3778,7 +3822,7 @@
         // only = { target, part } → vrátí jen obsah jednoho sloupce (plovoucí detail na Macu)
         function renderSlots(emptyNote, only) {
           // Max 3 karty vedle sebe (každá 1/3 šířky); 4. a další wrapuje na další řádek a vystředí se
-          const cardClass = "w-[calc(100vw-3.5rem)] flex-shrink-0 snap-start lg:w-auto lg:flex-shrink lg:flex-grow-0 lg:basis-[calc((100%-2rem)/3)] lg:max-w-[calc((100%-2rem)/3)]";
+          const cardClass = "w-full lg:w-auto lg:flex-shrink lg:flex-grow-0 lg:basis-[calc((100%-2rem)/3)] lg:max-w-[calc((100%-2rem)/3)]";
           const renderRaceSund = race => (
             <SundavaniCard
               build={{ title: race.name || 'Závod', date: new Date(race.date + 'T12:00:00'), hex: '#E21074',
@@ -4008,7 +4052,7 @@
           // Náhled: jeden sloupec na stěnu — stavění, extra a pod tím sundávání (den předem)
           return (
             <>
-              <div className="flex gap-6 lg:flex-wrap lg:justify-start items-start">
+              <div className="flex flex-col gap-4 lg:flex-row lg:gap-6 lg:flex-wrap lg:justify-start items-stretch lg:items-start">
                 {slots.map((s, i) => (
                   <div key={`stav-${i}`} id={`col-${key}-${s.venue || (s.stavba?.props?.theme === 'green' ? 'telocvicna' : 'x' + i)}`}
                     className={`${cardClass} space-y-6 scroll-mt-48 transition-shadow duration-300
@@ -5222,13 +5266,14 @@
           </>
         );
       };
-      const MineCards = ({ list }) => (
-        <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
+      const MineCards = ({ list, sund }) => (
+        // telefon: řádky s jemnou linkou, ne karty (Cyrilovo pravidlo „položky bez rámečku"); Mac: dlaždice ve třech sloupcích
+        <div className="flex flex-col divide-y divide-white/[0.06] lg:divide-y-0 lg:grid lg:gap-3 lg:grid-cols-3">
           {list.map((b, k) => (
-            <div key={k} onClick={() => openB(b)} className="bg-brand-surface rounded-card px-[18px] py-4 flex items-center gap-3.5 cursor-pointer min-w-0 hover:bg-brand-surface-2 transition-colors">
+            <div key={k} onClick={() => (sund ? openS(b) : openB(b))} className="py-3.5 lg:bg-brand-surface lg:rounded-card lg:px-[18px] lg:py-4 flex items-center gap-3.5 cursor-pointer min-w-0 lg:hover:bg-brand-surface-2 active:bg-white/5 transition-colors">
               <div className="w-[46px] text-center shrink-0"><b className="block text-xl leading-none">{b.date.getDate()}</b><small className="text-[11px] text-brand-muted uppercase tracking-[0.06em]">{dShort(b.date)}</small></div>
               <div className="flex-1 min-w-0"><div className="text-[15px] font-medium truncate">{b.sector}</div>
-                <small className="text-[13px] text-brand-muted flex items-center gap-1.5 whitespace-nowrap"><VMark theme={b.theme} size={10} />{b.wall} · {dm(b.date)}</small></div>
+                <small className="text-[13px] text-brand-muted flex items-center gap-1.5 whitespace-nowrap"><VMark theme={b.theme} size={10} outline={sund} />{sund ? 'sundávání · ' : ''}{b.wall} · {dm(b.date)}</small></div>
             </div>
           ))}
         </div>
@@ -5295,10 +5340,10 @@
             {view === 'moje' ? (
               <>
                 {showB && <Sec t="Tvoje stavění" right={<span className="text-[13px] text-brand-muted">příštích 8 týdnů</span>}>
-                  {myBuilds.length ? <div className="grid gap-6" style={grid}>{myBuilds.map((b, k) => <BuildCard key={k} b={b} />)}</div>
+                  {myBuilds.length ? (isDesk ? <div className="grid gap-6" style={grid}>{myBuilds.map((b, k) => <BuildCard key={k} b={b} />)}</div> : <MineCards list={myBuilds} />)
                     : <p className="text-sm text-brand-muted">Zatím nikde. Volná místa najdeš v Kam se zapsat.</p>}</Sec>}
                 {showS && <Sec t="Tvoje sundávání" right={<span className="text-[13px] text-brand-muted">příštích 8 týdnů</span>}>
-                  {mySunds.length ? <div className={`grid gap-6 ${both ? 'opacity-[0.82]' : ''}`} style={grid}>{mySunds.map((x, k) => <SundCard key={k} x={x} />)}</div>
+                  {mySunds.length ? (isDesk ? <div className={`grid gap-6 ${both ? 'opacity-[0.82]' : ''}`} style={grid}>{mySunds.map((x, k) => <SundCard key={k} x={x} />)}</div> : <MineCards list={mySunds} sund />)
                     : <p className="text-sm text-brand-muted">Zatím nikde.</p>}</Sec>}
               </>
             ) : (
@@ -5624,7 +5669,7 @@
               {tiles.map(([v, l, go, hot], k) => (
                 <button key={k} onClick={go || undefined} className={`bg-brand-surface rounded-card px-5 py-4 text-left ${go ? 'hover:bg-brand-surface-2' : 'cursor-default'} transition-colors min-w-0`}>
                   <b className={`block text-2xl lg:text-[28px] font-bold leading-tight truncate ${hot && v ? 'text-brand-accent-lite' : ''}`}>{v}</b>
-                  <span className="text-[13px] text-brand-muted">{l}</span>
+                  <span className="block text-[13px] text-brand-muted break-words">{l}</span>
                 </button>
               ))}
             </div>
@@ -5640,7 +5685,7 @@
                       <th className={th}>{role === 'sund' ? 'Jméno' : 'Stavěč'}</th>
                       {role === 'sund' ? <><th className={`${th} text-right`}>Sundávání</th><th className={`${th} text-right`}>Mytí</th></>
                         : <><th className={`${th} text-right capitalize`}>{mName}</th><th className={`${th} text-right`}>{now.getFullYear()}</th><th className={`${th} text-right`}>Lano</th></>}
-                      <th className={`${th} pl-6`}>Nejbližší</th>
+                      <th className={`${th} pl-6 hidden sm:table-cell`}>Nejbližší</th>
                     </tr></thead>
                     <tbody>
                       {people.map(n => {
@@ -5650,7 +5695,7 @@
                           <tr key={n} className="border-t border-white/5">
                             <td className="py-2.5 pr-3"><NameTag n={n} /></td>
                             {role === 'sund' ? <>{num(s0.sundYear)}{num(s0.mytiYear)}</> : <>{num(s0.month, true)}{num(s0.year)}{num(s0.lanoYear)}</>}
-                            <td className="py-2.5 pl-6 text-brand-muted whitespace-nowrap">
+                            <td className="py-2.5 pl-6 text-brand-muted whitespace-nowrap hidden sm:table-cell">
                               {nx ? <button onClick={() => (role === 'sund' ? openS(nx) : openB(nx), setView('zapsat'))} className="hover:text-brand-text">
                                 <VMark theme={nx.theme} size={10} className="mr-1.5" />{dShort(nx.date)} {dm(nx.date)} · {nx.sector}</button> : '–'}
                             </td>
@@ -5987,122 +6032,25 @@
               </div>
             </div>
             ) : (
-            <div className="px-4 lg:px-8 pt-3 pb-3">
-              <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-x-4 gap-y-1">
-                <p className="lg:hidden text-lg font-bold uppercase tracking-[0.14em] leading-none text-brand-text">
-                  <span className="inline-block w-2.5 h-2.5 bg-brand-accent mr-2 align-[0.05em]" />Stavění
-                </p>
-                <h1 className="hidden lg:block text-2xl font-bold text-brand-text shrink-0">
-                  {NAV_ITEMS.find(n => n[0] === view)?.[1]}
-                </h1>
-                <div className="flex items-center gap-2 lg:order-last">
-                  <button onClick={() => setPickMe(true)}
-                    className="lg:hidden px-3 py-2.5 rounded-ctl text-xs font-bold text-brand-text bg-brand-surface max-w-[8rem] truncate">
-                    {me || 'Kdo jsi?'}{admin ? ' · Správa' : ''}
-                  </button>
-                {/* Skok zpět na aktuální týden — po listování v jiném měsíci jeden klik */}
-                <button onClick={() => setOffset(0)} disabled={isNow} title="Zpět na aktuální týden"
-                  className={`px-3 py-2.5 sm:py-2 rounded-ctl text-xs font-bold uppercase tracking-[0.14em] transition-colors touch-manipulation
-                    ${isNow ? 'text-brand-muted ring-1 ring-inset ring-brand-border cursor-default' : 'bg-brand-accent text-white hover:bg-brand-accent-dark'}`}>
-                  Dnes
-                </button>
-                </div>
-                {slotView && (
-              <div className="flex items-center gap-1 flex-shrink-0 w-full lg:w-auto justify-between lg:justify-start">
-                <button onClick={() => shiftMonth(-1)} title="O měsíc zpět"
-                  className="p-3 sm:p-2 rounded-ctl hover:bg-brand-surface active:bg-brand-surface-2 text-brand-muted hover:text-brand-text transition-colors touch-manipulation">
-                  <ChevronsLeft c="w-6 h-6 sm:w-5 sm:h-5" />
-                </button>
-                <button onClick={() => setOffset(o => o-1)} title="O týden zpět"
-                  className="p-3 sm:p-2 rounded-ctl hover:bg-brand-surface active:bg-brand-surface-2 text-brand-text transition-colors touch-manipulation">
-                  <ChevronLeft c="w-6 h-6 sm:w-5 sm:h-5" />
-                </button>
-                <div className="text-center min-w-[132px] px-1">
-                  <p className="text-[15px] font-bold text-brand-text tabular-nums">
-                    {fmt(monday)} – {fmt(friday)}{friday.getFullYear()}
-                  </p>
-                  <p className={`text-xs font-semibold mt-0.5 ${isNow ? 'text-brand-accent-lite' : 'text-brand-muted'}`}>
-                    {isNow ? 'Aktuální týden' : `Týden ${offset>0?'+':''}${offset}`}
-                  </p>
-                </div>
-                <button onClick={() => setOffset(o => o+1)} title="O týden vpřed"
-                  className="p-3 sm:p-2 rounded-ctl hover:bg-brand-surface active:bg-brand-surface-2 text-brand-text transition-colors touch-manipulation">
-                  <ChevronRight c="w-6 h-6 sm:w-5 sm:h-5" />
-                </button>
-                <button onClick={() => shiftMonth(1)} title="O měsíc vpřed"
-                  className="p-3 sm:p-2 rounded-ctl hover:bg-brand-surface active:bg-brand-surface-2 text-brand-muted hover:text-brand-text transition-colors touch-manipulation">
-                  <ChevronsRight c="w-6 h-6 sm:w-5 sm:h-5" />
-                </button>
-              </div>
+            /* Telefon (Cyril 9. 11.: „v mobilu dost složitý"): jedna nízká lišta jako v Kam se zapsat — název, Dnes (jen v pásu týdnů,
+               když nejsi na aktuálním), kdo jsi. Role je v menu Víc, týden ukazují nadpisy týdnů v seznamu (vzor Amie / Cron z Referu). */
+            <>
+            <div className="px-4 py-3 flex items-center gap-3">
+              <span className="display text-lg text-brand-text">Stavění</span>
+              <span className="text-[13px] text-brand-muted truncate">{NAV_ITEMS.find(n => n[0] === view)?.[1]}</span>
+              <div className="ml-auto flex items-center gap-2 shrink-0">
+                {slotView && !isNow && (
+                  <button onClick={() => setOffset(0)} title="Zpět na aktuální týden" className="px-3 py-1.5 rounded-ctl text-[13px] font-semibold text-white bg-brand-accent">Dnes</button>
                 )}
+                <button onClick={() => setPickMe(true)} title="Kdo jsi?" className="w-8 h-8 rounded-full grid place-items-center bg-brand-accent text-white text-[11px] font-bold">{(me || '?').slice(0, 2).toUpperCase()}</button>
               </div>
-              <div className="mt-3"><RoleSeg /></div>
-              {sel && slotView && (
-                <p className="lg:hidden mt-2 px-3 py-2 rounded-ctl bg-brand-surface border-l-2 border-brand-accent text-sm text-brand-text text-center">
-                  Ťukni na volný slot pro <b>{sel}</b> · <button onClick={() => setSel(null)} className="underline underline-offset-2 text-brand-accent-lite">Zrušit</button>
-                </p>
-              )}
-              {view === 'tyden' && showB && (
-                <div className="lg:flex lg:justify-start">
-              {/* Second row: fill indicators */}
-              {(() => {
-                // Pomocná: spočítá fill ze závodu/dostavby (replacement objektu)
-                const replFill = repl => {
-                  if (!repl) return null;
-                  const total = repl.kind === 'race' ? (repl.race.slotCount || 0) : (repl.day.slotCount || 0);
-                  const setters = repl.kind === 'race' ? (repl.race.setters || []) : (repl.day.setters || []);
-                  const filled = setters.slice(0, total).filter(Boolean).length;
-                  return { total, filled };
-                };
-
-                // Lanovka — pokud Mon nahrazuje závod/dostavba, ukazatel reflektuje obsazenost závodu
-                let monMax, monSetterFill;
-                if (monReplacement) {
-                  const r = replFill(monReplacement);
-                  monMax = r.total; monSetterFill = r.filled;
-                } else {
-                  monMax = calMon?.sector && !calMon.isOff ? capMon(week, calMon.sector) : 0;
-                  monSetterFill = monMax ? (week.monday||[]).slice(0,monMax).filter(Boolean).length : 0;
-                }
-                const monLanoFill = (calMon?.sector && !calMon.isOff && !monReplacement) ? (week.mondayLano ? 1 : 0) : 0;
-
-                // Limit — pokud Wed nahrazuje závod/dostavba, ukazatel reflektuje obsazenost závodu
-                let wedMax, wedFill;
-                if (wedReplacement) {
-                  const r = replFill(wedReplacement);
-                  wedMax = r.total; wedFill = r.filled;
-                } else {
-                  wedMax = calWed?.sector && !calWed.isOff ? capWed(week, calWed.sector) : 0;
-                  wedFill = wedMax ? (week.wednesday||[]).slice(0,wedMax).filter(Boolean).length : 0;
-                }
-
-                const thuFill = (week.thursday||[]).slice(0,capThu(week)).filter(Boolean).length;
-                const monSetterPct = monMax ? Math.round(monSetterFill/monMax*100) : 0;
-                const monLanoPct   = (calMon?.sector && !calMon.isOff && !monReplacement) ? Math.round(monLanoFill*100) : 0;
-                const wedPct  = wedMax ? Math.round(wedFill/wedMax*100) : 0;
-                const thuPct  = calThu ? Math.round(thuFill/Math.max(1, capThu(week))*100) : 0;
-                const monIsRace = !!monReplacement;
-                const wedIsRace = !!wedReplacement;
-                // tiché štítky: tečka stěny + procento; malinově jen když chybí lidi
-                const pill = (hex, label, pct, show = true) => show && (
-                  <span key={label} className="inline-flex items-center gap-1.5 text-xs tnum text-brand-muted">
-                    <VMark hex={hex} size={10} />
-                    <span className="text-brand-text">{label}</span>
-                    <span className={pct < 100 ? 'text-brand-accent-lite font-semibold' : ''}>{pct}%</span>
-                  </span>
-                );
-                return (
-                  <div className="flex items-center justify-center flex-wrap gap-x-4 gap-y-1 mt-2">
-                    {pill(monIsRace ? '#E21074' : '#FFC83D', 'Lanovka', monSetterPct)}
-                    {pill('#FFC83D', 'Lano', monLanoPct, !monIsRace && lanoOn(monday, week))}
-                    {pill('#E21074', 'Limit', wedPct)}
-                    {pill('#4A86E8', 'Tělocvična', thuPct, !!calThu)}
-                  </div>
-                );
-              })()}
-                </div>
-              )}
             </div>
+            {sel && slotView && (
+              <p className="mx-4 mb-2 px-3 py-2 rounded-ctl bg-brand-surface border-l-2 border-brand-accent text-sm text-brand-text text-center">
+                Ťukni na volný slot pro <b>{sel}</b> · <button onClick={() => setSel(null)} className="underline underline-offset-2 text-brand-accent-lite">Zrušit</button>
+              </p>
+            )}
+            </>
             )}
           </header>
           )}
@@ -6132,55 +6080,13 @@
             {/* ── Týden ── */}
             {view === 'tyden' && (
               <>
-                {!isDesk && role === 'sund' && (
-                  <section className="grid gap-4 animate-rise">
-                    {[['Tvoje sundávání', me ? mySunds : [], 'Na příštích 8 týdnů nejsi nikde zapsaný.'], ['Chybí mytí', noMyti, 'Všude někdo myje.']].map(([t, list, empty]) => (
-                      <div key={t} className="bg-brand-surface rounded-card p-5">
-                        <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-brand-muted mb-3">{t}</h2>
-                        {list.length === 0 ? <p className="text-sm text-brand-muted">{empty}</p> : (
-                          <div className="space-y-1.5">{list.slice(0, 3).map((x, k) => (
-                            <button key={k} onClick={() => goWeek(x.i, x.target, 'sund')}
-                              className="w-full flex items-center gap-3 px-1 py-3 border-b border-white/[0.06] last:border-b-0 text-left">
-                              <VMark theme={x.theme} size={10} style={{ opacity: 0.7 }} />
-                              <span className="w-16 shrink-0">
-                                <span className="block text-[11px] font-bold uppercase tracking-wider text-brand-muted">{x.date.toLocaleString('cs-CZ', { weekday: 'short' })}</span>
-                                <span className="block text-sm font-bold text-brand-text tnum">{fmt(x.date)}</span>
-                              </span>
-                              <span className="flex-1 min-w-0">
-                                <span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-brand-muted">{x.wall}</span>
-                                <span className="block text-sm font-semibold text-brand-text truncate">{x.sector}</span>
-                                <span className="block text-xs text-brand-muted truncate">sundávání{x.myti ? ` · mytí ${x.myti}` : ' · bez mytí'}</span>
-                              </span>
-                            </button>
-                          ))}</div>
-                        )}
-                      </div>
-                    ))}
-                  </section>
-                )}
-                {!isDesk && showB && me && (myBuilds.length > 0 || freeBuilds.length > 0) && (
-                  <section className="lg:hidden grid gap-4 animate-rise">
-                    <div className="bg-brand-surface rounded-card p-5">
-                      <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-brand-muted mb-3">Tvoje stavění</h2>
-                      {myBuilds.length === 0
-                        ? <p className="text-sm text-brand-muted">Na příštích 8 týdnů nejsi nikde zapsaný.</p>
-                        : <div className="space-y-1.5">{myBuilds.slice(0, 3).map((b, k) => <BuildRow key={k} b={b} />)}</div>}
-                    </div>
-                    <div className="bg-brand-surface rounded-card p-5">
-                      <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-brand-muted mb-3">Volná místa</h2>
-                      {freeBuilds.length === 0
-                        ? <p className="text-sm text-brand-muted">Všechno je obsazené.</p>
-                        : <div className="space-y-1.5">{freeBuilds.slice(0, 3).map((b, k) => <BuildRow key={k} b={b} free />)}</div>}
-                    </div>
-                  </section>
-                )}
                 {/* ── Obsazenost dopředu: na Macu přilepená nahoře, pás týdnů pod ni zajíždí; týden nahoře v pásu je v ní zvýrazněný ── */}
-                <section id="tyden-occ" data-sticky={isDesk && occH ? '1' : undefined} className={isDesk ? `${occH ? 'sticky z-30' : ''} bg-brand-bg px-6 pt-5 pb-4 border-b border-white/5` : ''} style={isDesk && occH ? { top: hdrH } : undefined}>
+                {isDesk && <section id="tyden-occ" data-sticky={isDesk && occH ? '1' : undefined} className={isDesk ? `${occH ? 'sticky z-30' : ''} bg-brand-bg px-6 pt-5 pb-4 border-b border-white/5` : ''} style={isDesk && occH ? { top: hdrH } : undefined}>
                   <div className="flex items-baseline justify-between mb-3"><h2 className="text-[15px] font-medium">Obsazenost dopředu</h2><span className="text-[13px] text-brand-muted">klik odroluje na týden</span></div>
                   <Occ activeWk={offset} start={offset <= zS ? Math.min(offset, zS) : offset - 1} compact={showS && showB}
                     onSund={x => { setOffset(x.i); if (isDesk) setDetail({ target: x.target, part: 'sund', wk: x.i }); }}
                     onCell={b => { setOffset(b.i); if (isDesk) setDetail({ target: b.target, part: 'build', wk: b.i }); }} />
-                </section>
+                </section>}
                 {/* ── Mac: týdny jako jeden souvislý pás (vzor Rise) — přilepená hlavička se dny se přepíná podle rolování ── */}
                 {isDesk && (
                 <section className="relative bg-brand-bg [&_.border-brand-border]:border-white/[0.05]" aria-label="Týden v tabulce">
@@ -6215,25 +6121,20 @@
                 {!isDesk && (
                 <div>
                   <div ref={tydenTopRef} className="h-px" />
-                  <div id="tyden-dayhead" className="sticky z-20 -mx-4 px-4 py-2 bg-brand-bg border-b border-white/5 grid grid-cols-7 gap-1" style={{ top: hdrH }}>
-                    {Array.from({ length: 7 }, (_, di) => addDays(monday, di)).map((d, di) => (
-                      <div key={offset + ':' + di} className={`flex flex-col items-center py-1 rounded-ctl animate-fade ${toIso(d) === todayIso ? 'bg-brand-accent text-white' : ''}`}>
-                        <span className={`text-[11px] capitalize ${toIso(d) === todayIso ? 'text-white' : 'text-brand-muted'}`}>{d.toLocaleString('cs-CZ', { weekday: 'short' }).replace('.', '')}</span>
-                        <span className="text-[15px] font-bold tnum">{d.getDate()}</span>
-                      </div>
-                    ))}
-                  </div>
                   {tydenWeeks.map(w => (
                     <section key={w.i} data-wk={w.i} data-cur={w.i === offset ? '1' : undefined} className="pt-3 pb-5">
-                      <div className="flex items-center gap-3 mb-3 text-[12px] font-semibold text-brand-muted tnum"><span>{weekRange(w.v.monday)}</span><span className="flex-1 h-px bg-white/[0.06]" /></div>
-                      <div id={w.i === offset ? 'tyden-board' : undefined} className="scroll-mt-48 overflow-x-auto snap-x snap-mandatory relative z-0 -mx-4 px-4">
-                        <div className="flex flex-col gap-4 w-fit">
+                      <h3 className="sticky z-20 -mx-4 px-4 py-2 mb-2 bg-brand-bg/95 backdrop-blur text-[13px] font-semibold tnum flex items-center gap-2" style={{ top: hdrH }}>
+                        <span className="text-brand-text">{weekRange(w.v.monday)}</span>
+                        {w.i === 0 && <span className="text-brand-accent-lite">tento týden</span>}
+                      </h3>
+                      <div id={w.i === offset ? 'tyden-board' : undefined} className="scroll-mt-28 relative z-0">
+                        <div className="flex flex-col gap-4">
                           {w.i === offset ? renderSlots() : w.v.renderSlots(<p className="px-1 text-sm text-brand-muted">{role === 'sund' ? 'Tento týden se nesundává.' : 'Tento týden se nestaví.'}</p>)}
                         </div>
                       </div>
                       {/* Akce týdne (jen Správa) a lišta Stavěčů patří k aktuálnímu týdnu — na konci pásu by byly nedosažitelné */}
                       {w.i === offset && admin && showB && <div className="mt-4">{renderAdminActions(null)}</div>}
-                      {w.i === offset && <div className="mt-4">{renderPhonePool(true)}</div>}
+                      {w.i === offset && admin && <div className="mt-4">{renderPhonePool(true)}</div>}
                     </section>
                   ))}
                   <div ref={tydenEndRef} className="py-8 text-center text-sm text-brand-muted">
@@ -6261,8 +6162,8 @@
                     <h3 className="px-1 text-[15px] font-semibold text-brand-text tnum">
                       {fmt(v.monday)} – {fmt(addDays(v.monday, 6))}{v.i === 0 && <span className="ml-2 text-brand-accent-lite">tento týden</span>}
                     </h3>
-                    <div className="overflow-x-auto snap-x snap-mandatory lg:overflow-visible lg:snap-none relative z-0">
-                      <div className="flex flex-col gap-4 w-fit lg:w-full">
+                    <div className="relative z-0">
+                      <div className="flex flex-col gap-4 lg:w-full">
                         {v.renderSlots(<p className="px-1 text-sm text-brand-muted">{role === 'sund' ? 'Tento týden se nesundává.' : 'Tento týden se nestaví.'}</p>)}
                       </div>
                     </div>
@@ -6281,7 +6182,7 @@
               <div>
               <div className="space-y-6">
                 {Array.from({ length: kalCount }, (_, i) => (
-                  <MonthCalendar key={i} data={data} role={role} stickyTop={hdrH} me={me} picked={pick} dayTags={dayTags}
+                  <MonthCalendar key={i} data={data} role={role} stickyTop={hdrH} me={me} picked={pick} dayTags={dayTags} compact={!isDesk}
                     onPick={pk => { if (pk.kind === 'extra') { setView('zavody'); return; } setPanelDay(false); setPick(pk); }}
                     viewMonday={new Date(kalBase.getFullYear(), kalBase.getMonth() + i, 15)}
                     rotationShifts={rotationShifts} extras={extras} />
@@ -6326,7 +6227,7 @@
           )}
 
           {/* ── Stavěči: na Macu stálá lišta dole (táhneš rovnou do slotů), na telefonu pod kartami ── */}
-          {slotView && !isDesk && view !== 'tyden' && renderPhonePool()}
+          {slotView && !isDesk && view !== 'tyden' && admin && renderPhonePool()}
 
           {/* ── Telefon: spodní navigace ── */}
           <nav className="lg:hidden fixed inset-x-0 bottom-[var(--strip-h,0px)] z-40 bg-[#17181C] border-t border-white/5 grid grid-cols-4">
