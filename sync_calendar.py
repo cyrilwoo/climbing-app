@@ -228,6 +228,20 @@ def has_lano_build(week_id):
     return (week_dt - ref).days % 14 == 0
 
 
+def lano_on(week_id, fw):
+    """Staví se ten týden lano? Pole monLanoSlotCount z nové appky přebíjí rozpis:
+    1 = lano navíc i mimo rozpis, 0 = lano ten týden ubrané, chybí = podle has_lano_build.
+    (parita s lanoOn v index.html; stará appka pole nezapisuje → chování beze změny)"""
+    c = firestore_value(fw.get('monLanoSlotCount'))
+    if isinstance(c, dict) and 'integerValue' in c:   # REST tvar
+        c = int(c['integerValue'])
+    if c == 1:
+        return True
+    if c == 0:
+        return False
+    return has_lano_build(week_id)
+
+
 def format_setters(setters, lano=None):
     active = [s for s in (setters or []) if s and s != '__NULL__']
     parts = []
@@ -356,9 +370,10 @@ def sync_calendar(request):
             lanovka_active = mon_sector and not mon_is_off and not (mon_cancelled or mon_shifted)
 
             if lanovka_active:
-                # Lano se staví jen v určené týdny (od června 2026 každých 14 dní).
+                # Lano se staví jen v určené týdny (od června 2026 každých 14 dní),
+                # pokud Správa lano pro týden nepřidala / neubrala (monLanoSlotCount).
                 # V „no-lano" týdnech ignorujeme případný mondayLano ze starých dat.
-                lano_for_title = mon_lano if has_lano_build(week_id) else None
+                lano_for_title = mon_lano if lano_on(week_id, fw) else None
                 setters_str = format_setters(mon_setters, lano_for_title)
                 title = f"Lanovka — {mon_sector}"
                 if setters_str:
