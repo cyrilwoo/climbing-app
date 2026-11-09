@@ -1408,7 +1408,7 @@
     // ── MonthCalendar — měsíční mřížka pod stěnami (jen profily) ──────────
     // Kalendář (Cyril 9. 11.): stavění vyplní celé pole dne a je klikací → stejný detail a úpravy jako v Kam se zapsat (onPick).
     // Den bez stavění klikací není; svátek a prázdniny jsou tichý podklad s řádkem u čísla dne, ne štítek.
-    function MonthCalendar({ data, viewMonday, rotationShifts, extras, role, stickyTop, flashMon, onPick, picked, me, dayTags = {}, compact }) {
+    function MonthCalendar({ data, viewMonday, rotationShifts, extras, races, role, stickyTop, flashMon, onPick, picked, me, dayTags = {}, compact }) {
       // Telefon (compact): mřížka jen s čísly a značkami stěn, ťuknutí na den ukáže pod měsícem jeho stavění (vzor Cron z Referu)
       const [openDay, setOpenDay] = React.useState(null);
       const MONTHS_CS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
@@ -1455,10 +1455,33 @@
         const isLan = ex.venue === 'lanovka';
         const label = (ex.sectors || []).join(' + ') || (ex.lano ? 'Lano' : ex.name || 'Extra');
         add(ex.date, {
-          wall: `Extra ${isLan ? 'Lanovka' : 'Limit'}`,
-          sector: `+ ${ex.lano && (ex.sectors || []).length ? `${label} + Lano` : label}`,
-          theme: isLan ? 'yellow' : 'dark', pick: { kind: 'extra' },
+          wall: `Extra · ${isLan ? 'Lanovka' : 'Limit'}`, kind: 'Extra',
+          sector: ex.name ? `${ex.name} · ${ex.lano && (ex.sectors || []).length ? `${label} + Lano` : label}` : (ex.lano && (ex.sectors || []).length ? `${label} + Lano` : label),
+          theme: isLan ? 'yellow' : 'dark', pick: { kind: 'extra', date: ex.date, venue: ex.venue },
           regular: Array.from({ length: ex.slotCount || 0 }, (_, k) => (ex.setters || [])[k] ?? null),
+          lano: extraHasLanoSlot(ex) ? (ex.lanoSetter || null) : undefined,
+        });
+      });
+      // Závody (Cyril 9. 11.: „v kalendáři se neukazují závody"): dny závodu (Den 1, 2…), dostavby a sundávání den před závodem.
+      // Závod je vždy Limit (čtvereček, malinová); klik otevře totéž co v Závodech a extra (týden v Plánu s detailem).
+      const rList = Object.values(races || {}).filter(r => r?.date).sort((a, b) => a.date.localeCompare(b.date));
+      const rGroups = [];
+      rList.forEach(r => { const g = rGroups[rGroups.length - 1];
+        if (g && (new Date(r.date + 'T12:00:00') - new Date(g[g.length - 1].date + 'T12:00:00')) / 86400000 <= 1) g.push(r); else rGroups.push([r]); });
+      const pad = (arr, n) => Array.from({ length: n || 0 }, (_, k) => (arr || [])[k] ?? null);
+      rGroups.forEach(g => {
+        const name = g.map(r => r.name).find(Boolean) || 'Závod';
+        g.forEach((r, k) => {
+          const sundDay = iso(addDays(new Date(r.date + 'T12:00:00'), -1));
+          if ((role === 'sund' || role === 'oboje') && (k === 0 || (r.sundavaci || []).length || r.myti))
+            add(sundDay, { wall: 'Sundávání Limit', kind: 'Závod', sector: `${name} · před závodem`, theme: 'dark', muted: true,
+              pick: { kind: 'race', date: r.date, part: 'sund' }, names: r.sundavaci || [], myti: r.myti || null });
+          if (role !== 'sund') {
+            add(r.date, { wall: g.length > 1 ? `Závod · Den ${k + 1}` : 'Závod', kind: 'Závod', sector: name, theme: 'dark',
+              pick: { kind: 'race', date: r.date }, regular: pad(r.setters, r.slotCount) });
+            (r.dostavba || []).forEach(day => day?.date && add(day.date, { wall: 'Dostavba', kind: 'Závod', sector: name, theme: 'dark',
+              pick: { kind: 'race', date: r.date, dost: day.date }, regular: pad(day.setters, day.slotCount) }));
+          }
         });
       });
 
@@ -1553,7 +1576,8 @@
                             ${one ? '' : `transition-colors hover:bg-white/[0.06] ${sel ? 'bg-white/[0.09]' : ''}`} ${j > 0 ? 'border-t border-white/10 pt-1.5' : ''}`}>
                           <span className="flex items-center gap-1 text-[9px] lg:text-[10px] text-brand-text/75 min-w-0">
                             <VMark theme={e.theme} size={8} outline={e.muted} className="shrink-0" />
-                            <span className="hidden lg:inline truncate">{e.muted ? 'sundávání' : e.wall}</span>
+                            {e.kind && <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.06em] px-1 rounded-[3px] bg-brand-accent/25 text-brand-accent-lite">{e.kind}</span>}
+                            <span className="hidden lg:inline truncate">{e.muted ? 'sundávání' : e.kind ? e.wall.replace(/^(Závod|Extra)( · )?/, '') : e.wall}</span>
                             {total != null && <span className={`ml-auto tnum shrink-0 ${gap ? 'text-brand-accent-lite font-semibold' : ''}`}>{fill}/{total}</span>}
                           </span>
                           <span className="shrink-0 text-[9px] lg:text-[12px] leading-tight font-semibold text-brand-text line-clamp-2 lg:line-clamp-3 break-words">
@@ -1585,7 +1609,9 @@
                         className="w-full text-left rounded-ctl border-2 px-3 py-2.5 flex flex-col gap-1.5 active:bg-white/5"
                         style={{ borderColor: e.muted ? `color-mix(in srgb, ${venueUi(e.theme).hex} 60%, transparent)` : venueUi(e.theme).hex, borderStyle: e.muted ? 'dashed' : 'solid' }}>
                         <span className="flex items-center gap-2 text-[13px] text-brand-text/80">
-                          <VMark theme={e.theme} size={9} outline={e.muted} />{e.muted ? `Sundávání · ${e.wall.replace('Sundávání ', '')}` : e.wall}
+                          <VMark theme={e.theme} size={9} outline={e.muted} />
+                          {e.kind && <span className="text-[10px] font-bold uppercase tracking-[0.06em] px-1.5 py-0.5 rounded-[3px] bg-brand-accent/25 text-brand-accent-lite">{e.kind}</span>}
+                          {e.muted ? `Sundávání · ${e.wall.replace('Sundávání ', '')}` : e.kind ? e.wall.replace(/^(Závod|Extra)( · )?/, '') : e.wall}
                           {total != null && <span className={`ml-auto tnum ${gap ? 'text-brand-accent-lite font-semibold' : ''}`}>{fill}/{total}</span>}
                         </span>
                         <span className="text-[15px] font-semibold text-brand-text">{e.sector}</span>
@@ -6183,9 +6209,13 @@
               <div className="space-y-6">
                 {Array.from({ length: kalCount }, (_, i) => (
                   <MonthCalendar key={i} data={data} role={role} stickyTop={hdrH} me={me} picked={pick} dayTags={dayTags} compact={!isDesk}
-                    onPick={pk => { if (pk.kind === 'extra') { setView('zavody'); return; } setPanelDay(false); setPick(pk); }}
+                    onPick={pk => {
+                      if (pk.kind === 'extra') { openInPlan(pk.date, pk.venue, () => false); return; }
+                      if (pk.kind === 'race') { if (pk.dost) openInPlan(pk.dost, 'dost-' + pk.date + '-' + pk.dost, x => x.kind === 'dostavba' && x.day.date === pk.dost && x.race.date === pk.date);
+                        else openInPlan(pk.date, 'race-' + pk.date, x => x.kind === 'race' && x.race.date === pk.date); return; }
+                      setPanelDay(false); setPick(pk); }}
                     viewMonday={new Date(kalBase.getFullYear(), kalBase.getMonth() + i, 15)}
-                    rotationShifts={rotationShifts} extras={extras} />
+                    rotationShifts={rotationShifts} extras={extras} races={races} />
                 ))}
                 <div ref={kalEndRef} className="py-6 text-center text-sm text-brand-muted">Načítám další měsíce…</div>
               </div>
