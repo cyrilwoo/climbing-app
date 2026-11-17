@@ -2840,6 +2840,8 @@
       const [view, setView] = useState(() => { try { return localStorage.getItem('climbing-view') || 'zapsat'; } catch { return 'zapsat'; } });
       const [me, setMe] = useState(() => { try { return localStorage.getItem('climbing-me'); } catch { return null; } });
       const [admin, setAdmin] = useState(() => { try { return localStorage.getItem('climbing-admin') === '1'; } catch { return false; } });
+      // kdo není Správa a má uloženou Rotaci (nebo z ní přepne), spadne na Kam se zapsat
+      React.useEffect(() => { if (view === 'rotace' && !admin) setView('zapsat'); }, [view, admin]);
       const [flashCol, setFlashCol] = useState(null);
       // Mac (≥ 1024 px) má vlastní rozložení: týden jako kalendář (vzor Rise) a detail
       // stavění v plovoucí kartě. Telefon zůstává u karet. Renderuje se jen jedna
@@ -5212,7 +5214,8 @@
       // Menu podle UX makety (navrh-v3/ux-navrh.html): hlavní je „Kam se zapsat", ostatní pohledy zůstávají se všemi funkcemi
       const NAV_ITEMS = [
         ['zapsat', 'Kam se zapsat'], ['moje', 'Moje'], ['tyden', 'Plán týdne'], ['mesic', 'Karty'], ['kalendar', 'Kalendář'],
-        ['rotace', 'Rotace a roční plán'], ['zavody', 'Závody a extra'], ['prehled', 'Přehled'],
+        // Rotace a roční plán (vč. Lanových profilů) jen pro Správu (Cyril 17. 11.: „rotace a roční plán uvidí jen správa")
+        ...(admin ? [['rotace', 'Rotace a roční plán']] : []), ['zavody', 'Závody a extra'], ['prehled', 'Přehled'],
       ];
       const slotView = view === 'tyden' || view === 'mesic';
       const freeLabel = n => `${n} ${n === 1 ? 'volné' : n < 5 ? 'volná' : 'volných'}`;
@@ -6562,7 +6565,7 @@
             {view === 'zavody' && renderZavody()}
 
             {/* ── Rotace (jen Správa) ── */}
-            {view === 'rotace' && (
+            {view === 'rotace' && admin && (
               <div>
                 {renderLano()}
                 <YearPlan data={data} rotationShifts={rotationShifts} />
