@@ -553,14 +553,13 @@
           margin: sh === 'diamond' ? `0 ${(size - d) / 2}px` : undefined,
           background: outline ? 'transparent' : h, boxShadow: outline ? `inset 0 0 0 1.5px ${h}` : undefined, ...style }} />;
     }
-    // Obsazenost jako značky: jedna na místo; lano = vlastní značka se štítkem L v barvě Lanovky (rovnocenná, ne přívěsek)
+    // Obsazenost jako značky: jedna na místo; lano = vlastní značka za mezerou (štítek LANO nese blok lana, Cyril 17. 11.)
     function SlotMarks({ theme, regular, lano, size = 10 }) {
       const many = regular.length + (lano !== undefined ? 1 : 0) > 4;
       return (
         <span className={`inline-flex items-center flex-nowrap ${many ? 'gap-[2px]' : 'gap-[3px]'}`}>
           {regular.map((n, k) => <VMark key={k} theme={theme} size={size} outline={!n} />)}
-          {lano !== undefined && <span className="inline-flex items-center gap-[2px]" style={{ marginLeft: regular.length ? (many ? 4 : 6) : 0 }} title={lano ? `lano: ${lano}` : 'lano volné'}>
-            <span className="font-bold leading-none text-venue-lanovka" style={{ fontSize: Math.max(8, Math.round(size * 0.85)) }}>L</span>
+          {lano !== undefined && <span className="inline-flex items-center" style={{ marginLeft: regular.length ? (many ? 4 : 6) : 0 }} title={lano ? `lano: ${lano}` : 'lano volné'}>
             <VMark theme={theme} size={size} outline={!lano} /></span>}
         </span>
       );
@@ -609,7 +608,7 @@
       return (
         <span className="inline-flex flex-wrap items-center justify-center gap-[6px]">
           {names.map((n, k) => <NameMark key={k} theme={theme} name={n} me={n && n === me} size={size} />)}
-          {lano !== undefined && <span className="ml-2 inline-flex items-center gap-1"><span className="text-[9px] font-bold text-venue-lanovka">L</span><NameMark theme={theme} name={lano} me={lano && lano === me} size={size} lano /></span>}
+          {lano !== undefined && <span className="ml-2 inline-flex items-center"><NameMark theme={theme} name={lano} me={lano && lano === me} size={size} lano /></span>}
         </span>
       );
     }
@@ -980,7 +979,7 @@
                 <div className="pb-1.5"><LanoHead sep={false} name={lanoP ? lanoP.p.name : (lanoProfile || '').split(' · ')[0]} lines={lanoP ? lanoP.p.lines : null} filled={!!lanoSlot} /></div>
                 {admin && onLanoShift && <p className="pb-1 text-right text-xs"><button onClick={onLanoShift} title="Lano se tento týden nestaví, profil přejde na další lano"
                     className="text-brand-muted hover:text-brand-text whitespace-nowrap">Posunout lano</button></p>}
-                <Slot num="L" name={lanoSlot} {...slotProps}
+                <Slot num="" name={lanoSlot} {...slotProps}
                   onClick={onLanoClick}
                   onDragStart={() => onDragStartLano && onDragStartLano(lanoSlot)}
                   onDrop={onDropLano}
@@ -1653,48 +1652,67 @@
                     className={`min-h-[64px] lg:min-h-[118px] rounded-ctl p-1 lg:p-1.5 flex flex-col gap-1 transition-[box-shadow,background-color] duration-300
                       ${show.length ? `border-2 ${one ? 'cursor-pointer hover:bg-white/[0.05]' : ''} ${selDay ? 'bg-white/[0.08]' : 'bg-brand-surface'}` : `border ${dayBg}`}
                       ${isToday ? (show.length ? 'outline outline-2 outline-brand-accent outline-offset-1' : 'ring-2 ring-brand-accent ring-inset') : flashMon === kmon ? 'ring-2 ring-brand-text/60 ring-inset' : ''}`}
-                    style={show.length ? { borderColor: allMuted ? `color-mix(in srgb, ${hex0} 60%, transparent)` : hex0, borderStyle: allMuted ? 'dashed' : 'solid' } : undefined}>
+                    style={show.length ? (new Set(show.map(e => e.theme)).size > 1 ? { borderColor: 'rgba(255,255,255,0.08)', borderStyle: 'solid' }
+                      : { borderColor: allMuted ? `color-mix(in srgb, ${hex0} 60%, transparent)` : hex0, borderStyle: allMuted ? 'dashed' : 'solid' }) : undefined}>
                     <div className="flex items-baseline gap-1.5 min-w-0 leading-none">
                       <span className={`text-[10px] lg:text-xs font-bold shrink-0 ${dayNumCls}`}>{d.getDate()}</span>
                       {inMonth && note && <span className={`hidden lg:block text-[10px] truncate ${sh ? 'text-bad/80' : 'text-brand-muted'}`}>{note}</span>}
                       {inMonth && dayTags[k] && <span data-change-tag={dayTags[k]} className="ml-auto shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ring-1 ring-inset ring-brand-accent/60 text-brand-accent-lite">{dayTags[k]}</span>}
                     </div>
-                    {show.map((e, j) => {
+                    {(() => {
+                      // Víc stěn v jednom dni (Cyril 17. 11.: „dvě stavění v jeden den na každé stěně zvlášť rozděl napůl"):
+                      // každá stěna vlastní polovina s rámečkem v barvě stěny; lano patří k Lanovce, závod a dostavba k Limitu.
+                      const groups = [];
+                      show.forEach(e => { let g = groups.find(x => x.theme === e.theme); if (!g) groups.push(g = { theme: e.theme, items: [] }); g.items.push(e); });
+                      const split = groups.length > 1;
+                      const renderE = (e, j, gOne) => {
                       const hex = venueUi(e.theme).hex;
-                      // bouldry a lano mají každý vlastní obsazenost (lano = blok pod bouldry)
-                      const fill = e.muted ? e.names.length : (e.regular || []).filter(Boolean).length;
-                      const total = e.muted ? null : (e.regular || []).length || null;
-                      const gap = e.muted ? (!e.names.length || !e.myti) : fill < total;
-                      const sel = picked && e.pick && picked.kind === e.pick.kind && picked.i === e.pick.i && picked.target === e.pick.target;
-                      const mine = me && (e.muted ? (e.names.includes(me) || e.myti === me || e.lanoS === me) : ((e.regular || []).includes(me) || e.lano === me));
-                      const lanoV = e.muted ? e.lanoS : e.lano, hasL = lanoV !== undefined && (!e.muted || !!e.lanoP);
-                      return (
-                        <button key={j} type="button" onClick={ev => { ev.stopPropagation(); onPick && onPick(e.pick); }} title={`${e.wall}: ${e.sector}`}
-                          className={`flex-1 min-h-[34px] w-full text-left whitespace-normal px-0.5 lg:px-1 py-0.5 flex flex-col gap-0.5 lg:gap-1 cursor-pointer
-                            focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-text rounded-[4px]
-                            ${one ? '' : `transition-colors hover:bg-white/[0.06] ${sel ? 'bg-white/[0.09]' : ''}`} ${j > 0 ? 'border-t border-white/10 pt-1.5' : ''}`}>
-                          <span className="flex items-center gap-1 text-[9px] lg:text-[10px] text-brand-text/75 min-w-0">
-                            <VMark theme={e.theme} size={8} outline={e.muted} className="shrink-0" />
-                            {e.kind && <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.06em] px-1 rounded-[3px] bg-brand-accent/25 text-brand-accent-lite">{e.kind}</span>}
-                            <span className="hidden lg:inline truncate">{e.muted ? 'sundávání' : e.kind ? e.wall.replace(/^(Závod|Extra)( · )?/, '') : e.wall}</span>
-                            {total != null && <span className={`ml-auto tnum shrink-0 ${gap ? 'text-brand-accent-lite font-semibold' : ''}`}>{fill}/{total}</span>}
-                          </span>
-                          <span className="shrink-0 text-[9px] lg:text-[12px] leading-tight font-semibold text-brand-text line-clamp-2 lg:line-clamp-3 break-words">
-                            {e.sector}{mine && <span className="text-brand-accent-lite font-normal"> · ty</span>}</span>
-                          {(e.muted || (e.regular || []).length > 0) && <span className="hidden lg:flex pt-1 items-center justify-center gap-x-2 gap-y-1 flex-wrap">
-                            {e.muted
-                              ? <><NameMarks theme={e.theme} names={e.names.length ? e.names : [null]} me={me} /><span className="text-[9px] text-brand-text/60">mytí</span><NameMark theme={e.theme} name={e.myti} me={e.myti && e.myti === me} /></>
-                              : <NameMarks theme={e.theme} names={e.regular || []} me={me} />}
-                          </span>}
-                          {hasL && <span className="hidden lg:flex mt-auto flex-col gap-1">
-                            <LanoHead sm sund={e.muted} name={e.lanoP?.p.name} filled={!!lanoV} />
-                            <span className="flex justify-center"><NameMark theme={e.theme} name={lanoV} me={lanoV && lanoV === me} lano /></span>
-                          </span>}
-                          <span className="lg:hidden mt-auto flex flex-col gap-0.5"><SlotMarks theme={e.theme} regular={e.muted ? e.names : (e.regular || [])} size={6} />
-                            {hasL && <SlotMarks theme={e.theme} regular={[]} lano={lanoV} size={6} />}</span>
-                        </button>
-                      );
-                    })}
+                          // bouldry a lano mají každý vlastní obsazenost (lano = blok pod bouldry)
+                          const fill = e.muted ? e.names.length : (e.regular || []).filter(Boolean).length;
+                          const total = e.muted ? null : (e.regular || []).length || null;
+                          const gap = e.muted ? (!e.names.length || !e.myti) : fill < total;
+                          const sel = picked && e.pick && picked.kind === e.pick.kind && picked.i === e.pick.i && picked.target === e.pick.target;
+                          const mine = me && (e.muted ? (e.names.includes(me) || e.myti === me || e.lanoS === me) : ((e.regular || []).includes(me) || e.lano === me));
+                          const lanoV = e.muted ? e.lanoS : e.lano, hasL = lanoV !== undefined && (!e.muted || !!e.lanoP);
+                          return (
+                            <button key={j} type="button" onClick={ev => { ev.stopPropagation(); onPick && onPick(e.pick); }} title={`${e.wall}: ${e.sector}`}
+                              className={`flex-[1_0_auto] min-h-[34px] w-full text-left whitespace-normal px-0.5 lg:px-1 py-0.5 flex flex-col gap-0.5 lg:gap-1 cursor-pointer
+                                focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-text rounded-[4px]
+                                ${gOne ? '' : `transition-colors hover:bg-white/[0.06] ${sel ? 'bg-white/[0.09]' : ''}`} ${j > 0 ? 'border-t border-white/10 pt-1.5' : ''}`}>
+                              <span className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[9px] lg:text-[10px] text-brand-text/75 min-w-0">
+                                <VMark theme={e.theme} size={8} outline={e.muted} className="shrink-0" />
+                                {e.kind && <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.06em] px-1 rounded-[3px] bg-brand-accent/25 text-brand-accent-lite">{e.kind}</span>}
+                                <span className="hidden lg:inline min-w-0 break-words leading-tight">{e.muted ? 'sundávání' : e.kind ? e.wall.replace(/^(Závod|Extra)( · )?/, '') : e.wall}</span>
+                                {total != null && <span className={`ml-auto tnum shrink-0 ${gap ? 'text-brand-accent-lite font-semibold' : ''}`}>{fill}/{total}</span>}
+                              </span>
+                              <span className="shrink-0 text-[9px] lg:text-[12px] leading-tight font-semibold text-brand-text line-clamp-2 lg:line-clamp-3 break-words">
+                                {e.sector}{mine && <span className="text-brand-accent-lite font-normal"> · ty</span>}</span>
+                              {(e.muted || (e.regular || []).length > 0) && <span className="hidden lg:flex pt-1 items-center justify-center gap-x-2 gap-y-1 flex-wrap">
+                                {e.muted
+                                  ? <><NameMarks theme={e.theme} names={e.names.length ? e.names : [null]} me={me} /><span className="text-[9px] text-brand-text/60">mytí</span><NameMark theme={e.theme} name={e.myti} me={e.myti && e.myti === me} /></>
+                                  : <NameMarks theme={e.theme} names={e.regular || []} me={me} />}
+                              </span>}
+                              {hasL && <span className="hidden lg:flex mt-auto flex-col gap-1">
+                                <LanoHead sm sund={e.muted} name={e.lanoP?.p.name} filled={!!lanoV} />
+                                <span className="flex justify-center"><NameMark theme={e.theme} name={lanoV} me={lanoV && lanoV === me} lano /></span>
+                              </span>}
+                              <span className="lg:hidden mt-auto flex flex-col gap-0.5"><SlotMarks theme={e.theme} regular={e.muted ? e.names : (e.regular || [])} size={6} />
+                                {hasL && <SlotMarks theme={e.theme} regular={[]} lano={lanoV} size={6} />}</span>
+                            </button>
+                          );
+                      };
+                      if (!split) return show.map((e, j) => renderE(e, j, one));
+                      return groups.map((g, gi) => {
+                        const gh = venueUi(g.theme).hex, gMuted = g.items.every(e => e.muted), gOneItem = g.items.length === 1;
+                        return (
+                          <div key={gi} data-wall-half={g.theme} onClick={gOneItem && onPick ? ev => { ev.stopPropagation(); onPick(g.items[0].pick); } : undefined}
+                            className={`flex-[1_0_auto] flex flex-col gap-1 rounded-[6px] border-2 p-1 ${gOneItem ? 'cursor-pointer hover:bg-white/[0.05]' : ''}`}
+                            style={{ borderColor: gMuted ? `color-mix(in srgb, ${gh} 60%, transparent)` : gh, borderStyle: gMuted ? 'dashed' : 'solid' }}>
+                            {g.items.map((e, j) => renderE(e, j, gOneItem))}
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 );
               })}
@@ -1704,15 +1722,23 @@
               return (
                 <div className="mt-3 px-1 pb-1 flex flex-col gap-2 animate-fade">
                   <p className="text-[13px] text-brand-muted capitalize">{sd.toLocaleString('cs-CZ', { weekday: 'long' })} {sd.getDate()}. {sd.getMonth() + 1}.{note ? ` · ${note}` : ''}{dayTags[openDay] ? ` · ${dayTags[openDay]}` : ''}</p>
-                  {sessions[openDay].map((e, j) => {
+                  {(() => {
+                    // jedna stěna = jeden rámeček (stejně jako na Macu); lano patří k Lanovce, závod a extra k Limitu
+                    const groups = [];
+                    sessions[openDay].forEach(e => { let g = groups.find(x => x.theme === e.theme); if (!g) groups.push(g = { theme: e.theme, items: [] }); g.items.push(e); });
+                    return groups.map((g, gi) => {
+                      const gMuted = g.items.every(e => e.muted), gh = venueUi(g.theme).hex;
+                      return (
+                        <div key={gi} data-wall-half={g.theme} className="rounded-ctl border-2 flex flex-col divide-y divide-white/10"
+                          style={{ borderColor: gMuted ? `color-mix(in srgb, ${gh} 60%, transparent)` : gh, borderStyle: gMuted ? 'dashed' : 'solid' }}>
+                  {g.items.map((e, j) => {
                     const fill = e.muted ? e.names.length : (e.regular || []).filter(Boolean).length;
                     const total = e.muted ? null : (e.regular || []).length || null;
                     const gap = e.muted ? (!e.names.length || !e.myti) : fill < total;
                     const lanoV = e.muted ? e.lanoS : e.lano, hasL = lanoV !== undefined && (!e.muted || !!e.lanoP);
                     return (
                       <button key={j} type="button" onClick={() => onPick && onPick(e.pick)}
-                        className="w-full text-left rounded-ctl border-2 px-3 py-2.5 flex flex-col gap-1.5 active:bg-white/5"
-                        style={{ borderColor: e.muted ? `color-mix(in srgb, ${venueUi(e.theme).hex} 60%, transparent)` : venueUi(e.theme).hex, borderStyle: e.muted ? 'dashed' : 'solid' }}>
+                        className="w-full text-left px-3 py-2.5 flex flex-col gap-1.5 active:bg-white/5">
                         <span className="flex items-center gap-2 text-[13px] text-brand-text/80">
                           <VMark theme={e.theme} size={9} outline={e.muted} />
                           {e.kind && <span className="text-[10px] font-bold uppercase tracking-[0.06em] px-1.5 py-0.5 rounded-[3px] bg-brand-accent/25 text-brand-accent-lite">{e.kind}</span>}
@@ -1733,6 +1759,10 @@
                       </button>
                     );
                   })}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               );
             })()}
@@ -2059,7 +2089,7 @@
               <span className="text-xs text-brand-muted font-semibold uppercase tracking-wide pb-1">Stavěč</span>
               <span className="text-xs text-brand-muted font-semibold uppercase tracking-wide text-right pb-1 capitalize">{monthName.slice(0,3)}</span>
               <span className="text-xs text-brand-muted font-semibold uppercase tracking-wide text-right pb-1">{now.getFullYear()}</span>
-              <span className="text-xs text-venue-lanovka font-semibold uppercase tracking-wide text-right pb-1 pl-3" title="lano – rok">L</span>
+              <span className="text-xs text-venue-lanovka font-semibold uppercase tracking-wide text-right pb-1 pl-3" title="lano – rok">Lano</span>
               {sorted.map((name, i) => {
                 const s = stats[name] ?? { month: 0, year: 0, lanoMonth: 0, lanoYear: 0 };
                 const b = i < sorted.length - 1 ? 'border-b border-brand-border' : '';
@@ -2627,7 +2657,7 @@
                       className="text-xs text-brand-muted hover:text-bad transition-colors">Bez slotu</button>
                   )}
                 </div>
-                <Slot num="L" name={extra.lanoSetter ?? null} {...slotProps} compact roomy mark={vu.hex}
+                <Slot num="" name={extra.lanoSetter ?? null} {...slotProps} compact roomy mark={vu.hex}
                   onClick={onLanoClick}
                   onDragStart={() => {}}
                   onDrop={() => {}} />
