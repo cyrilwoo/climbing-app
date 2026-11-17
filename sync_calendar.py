@@ -216,22 +216,48 @@ def firestore_value(val):
     return val
 
 
-def has_lano_build(week_id):
-    """Lano po 14 dnech. Červen: ref 2026-06-08 (8.6., 22.6.). Od července: ref
-    2026-07-13, aby lano padlo na letní Lanovka stavění (14.7., 28.7., 11.8.,
-    25.8., 7.9. …). Před červnem 2026: každý Lanovka týden.
+# Rytmus lanových profilů — výchozí hodnoty = LANO_DEFAULT v index.html (start, rhythm).
+# Appka je může změnit v panelu Lanové profily → doc settings/lano; sync ho načte na začátku běhu.
+LANO_DEFAULT = {'start': '2026-11-23', 'rhythm': '2-1', 'shifts': []}
+
+
+def load_lano_cfg():
+    try:
+        d = db.collection('settings').document('lano').get()
+        v = d.to_dict() if d.exists else None
+    except Exception:
+        v = None
+    cfg = dict(LANO_DEFAULT)
+    if v and isinstance(v.get('profiles'), list):
+        cfg.update({k: v[k] for k in ('start', 'rhythm') if v.get(k)})
+        if isinstance(v.get('shifts'), list):
+            cfg['shifts'] = v['shifts']
+    return cfg
+
+
+def has_lano_build(week_id, cfg=LANO_DEFAULT):
+    """Od startu lanových profilů rytmus „2 týdny ano, 1 ne" (rhythm '2-1');
+    jinak (a před startem) lano po 14 dnech. Červen: ref 2026-06-08 (8.6., 22.6.).
+    Od července: ref 2026-07-13, aby lano padlo na letní Lanovka stavění
+    (14.7., 28.7., 11.8., 25.8., 7.9. …). Před červnem 2026: každý Lanovka týden.
     (parita s hasLanoBuild v index.html)"""
     week_dt = datetime.strptime(week_id, '%Y-%m-%d')
+    if cfg.get('rhythm') == '2-1':
+        start = datetime.strptime(cfg['start'], '%Y-%m-%d')
+        if week_dt >= start:
+            return ((week_dt - start).days // 7) % 3 < 2
     if week_dt < datetime(2026, 6, 1):
         return True
     ref = datetime(2026, 6, 8) if week_dt < datetime(2026, 7, 1) else datetime(2026, 7, 13)
     return (week_dt - ref).days % 14 == 0
 
 
-def lano_on(week_id, fw):
+def lano_on(week_id, fw, cfg=LANO_DEFAULT):
     """Staví se ten týden lano? Pole monLanoSlotCount z nové appky přebíjí rozpis:
     1 = lano navíc i mimo rozpis, 0 = lano ten týden ubrané, chybí = podle has_lano_build.
     (parita s lanoOn v index.html; stará appka pole nezapisuje → chování beze změny)"""
+    if week_id in (cfg.get('shifts') or []):   # Správa posunula jen lano → ten týden se nestaví
+        return False
     c = firestore_value(fw.get('monLanoSlotCount'))
     if isinstance(c, dict) and 'integerValue' in c:   # REST tvar
         c = int(c['integerValue'])
@@ -239,7 +265,7 @@ def lano_on(week_id, fw):
         return True
     if c == 0:
         return False
-    return has_lano_build(week_id)
+    return has_lano_build(week_id, cfg)
 
 
 def format_setters(setters, lano=None):
@@ -273,6 +299,7 @@ def sync_calendar(request):
             rstate = {}
         shifts_lanovka = rstate.get('lanovka') or []
         shifts_limit   = rstate.get('limit') or []
+        lano_cfg = load_lano_cfg()
 
         service = get_calendar_service()
         # Porovnávej KALENDÁŘNÍ dny (ne datetime s časem) — jinak (midnight − now)
@@ -302,6 +329,7 @@ def sync_calendar(request):
             mon_sun      = firestore_value(fw.get('mondaySundavaci'))  or []
             wed_sun      = firestore_value(fw.get('wednesdaySundavaci')) or []
             mon_myti     = firestore_value(fw.get('mondayMyti'))
+            mon_lano_sun = firestore_value(fw.get('mondayLanoSundavac'))   # sundávání lana — jeden člověk
             wed_myti     = firestore_value(fw.get('wednesdayMyti'))
             mon_cancelled = firestore_value(fw.get('_monCancelled'))
             wed_cancelled = firestore_value(fw.get('_wedCancelled'))
@@ -368,14 +396,23 @@ def sync_calendar(request):
 
             # ── LANOVKA ─────────────────────────────────────────────────────
             lanovka_active = mon_sector and not mon_is_off and not (mon_cancelled or mon_shifted)
+            # Lano má vlastní rytmus: když se bouldry posunou nebo zruší, lano se staví i tak
+            # (Cyril 17. 11.). Jen v týdnu, kdy Lanovka v kalendáři vůbec staví (ne V/M).
+            # (parita s lanoWeek v index.html)
+            lano_alone = (not lanovka_active and cal_entry.get('mon') not in (None, 'V', 'M')
+                          and lano_on(week_id, fw, lano_cfg))
 
-            if lanovka_active:
-                # Lano se staví jen v určené týdny (od června 2026 každých 14 dní),
-                # pokud Správa lano pro týden nepřidala / neubrala (monLanoSlotCount).
+            if lanovka_active or lano_alone:
+                # Lano se staví jen v určené týdny (rytmus z settings/lano),
+                # pokud Správa lano pro týden nepřidala / neubrala (monLanoSlotCount) nebo neposunula.
                 # V „no-lano" týdnech ignorujeme případný mondayLano ze starých dat.
-                lano_for_title = mon_lano if lano_on(week_id, fw) else None
-                setters_str = format_setters(mon_setters, lano_for_title)
-                title = f"Lanovka — {mon_sector}"
+                lano_for_title = mon_lano if lano_on(week_id, fw, lano_cfg) else None
+                if lano_alone:
+                    setters_str = format_setters([], lano_for_title)
+                    title = "Lanovka — jen lano"
+                else:
+                    setters_str = format_setters(mon_setters, lano_for_title)
+                    title = f"Lanovka — {mon_sector}"
                 if setters_str:
                     title += f" | {setters_str}"
 
@@ -395,9 +432,12 @@ def sync_calendar(request):
                     if old != sun:
                         clear_on_dates(service, 'Sundavání Lanovka', old, stats=stats)
 
-                if mon_sun:
+                lano_sun = mon_lano_sun if lano_on(week_id, fw, lano_cfg) and mon_lano_sun not in (None, '__NULL__') else None
+                if mon_sun or lano_sun:
                     s = format_setters(mon_sun)
-                    sun_title = f"Sundavání Lanovka | {s}"
+                    sun_title = "Sundavání Lanovka" + (f" | {s}" if s else "")
+                    if lano_sun:
+                        sun_title += f" | lano: {lano_sun}"
                     if mon_myti:
                         sun_title += f" | mytí: {mon_myti}"
                     sync_event(service, 'Sundavání Lanovka', sun, sun_title, '20:00:00', '22:00:00', stats)
