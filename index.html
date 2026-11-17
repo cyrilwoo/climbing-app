@@ -553,13 +553,38 @@
           margin: sh === 'diamond' ? `0 ${(size - d) / 2}px` : undefined,
           background: outline ? 'transparent' : h, boxShadow: outline ? `inset 0 0 0 1.5px ${h}` : undefined, ...style }} />;
     }
-    // Obsazenost jako značky: jedna na místo, lano = značka navíc za mezerou; při víc než 4 místech menší mezery (nezalamovat)
+    // Obsazenost jako značky: jedna na místo; lano = vlastní značka se štítkem L v barvě Lanovky (rovnocenná, ne přívěsek)
     function SlotMarks({ theme, regular, lano, size = 10 }) {
       const many = regular.length + (lano !== undefined ? 1 : 0) > 4;
       return (
         <span className={`inline-flex items-center flex-nowrap ${many ? 'gap-[2px]' : 'gap-[3px]'}`}>
           {regular.map((n, k) => <VMark key={k} theme={theme} size={size} outline={!n} />)}
-          {lano !== undefined && <VMark theme={theme} size={size} outline={!lano} style={{ marginLeft: many ? 3 : 5 }} />}
+          {lano !== undefined && <span className="inline-flex items-center gap-[2px]" style={{ marginLeft: regular.length ? (many ? 4 : 6) : 0 }} title={lano ? `lano: ${lano}` : 'lano volné'}>
+            <span className="font-bold leading-none text-venue-lanovka" style={{ fontSize: Math.max(8, Math.round(size * 0.85)) }}>L</span>
+            <VMark theme={theme} size={size} outline={!lano} /></span>}
+        </span>
+      );
+    }
+    // Lano jako rovnocenný blok pod bouldry (Cyril 17. 11.: „lano je takové méně cenné, přitom je stejně důležité"):
+    // štítek LANO v barvě Lanovky, profil bíle tučně, linie, vlastní obsazenost x/1. Odděluje tenká linka (sep), žádný rámeček.
+    function LanoHead({ name, lines, filled, sund, sm, sep = true, right }) {
+      // úzká buňka (sm): štítek + obsazenost na řádku, název profilu pod tím celý (zalomí se)
+      if (sm) return (
+        <span className={`flex flex-col min-w-0 ${sep ? 'border-t border-white/10 pt-1.5' : ''}`}>
+          <span className="flex items-baseline gap-1.5">
+            <span className="shrink-0 font-bold uppercase tracking-[0.1em] text-venue-lanovka text-[8px] lg:text-[9px]">{sund ? 'Sundat lano' : 'Lano'}</span>
+            <span className={`ml-auto shrink-0 tnum text-[9px] lg:text-[10px] ${filled ? 'text-brand-text/75' : 'text-brand-accent-lite font-semibold'}`}>{filled ? 1 : 0}/1</span>
+          </span>
+          {name && <span className="font-semibold text-brand-text text-[9px] lg:text-[12px] leading-tight line-clamp-2 break-words">{name}</span>}
+        </span>
+      );
+      return (
+        <span className={`flex items-baseline gap-1.5 min-w-0 ${sep ? 'border-t border-white/10 pt-1.5' : ''}`}>
+          <span className={`shrink-0 font-bold uppercase tracking-[0.1em] text-venue-lanovka ${sm ? 'text-[8px] lg:text-[9px]' : 'text-[11px]'}`}>{sund ? 'Sundat lano' : 'Lano'}</span>
+          {name && <span className={`min-w-0 truncate font-semibold text-brand-text ${sm ? 'text-[9px] lg:text-[12px]' : 'text-[15px]'}`}>{name}</span>}
+          {lines != null && !sm && <span className="shrink-0 text-[12px] text-brand-muted">{linesTxt(lines)}</span>}
+          {right}
+          <span className={`ml-auto shrink-0 tnum ${sm ? 'text-[9px] lg:text-[10px]' : 'text-[13px]'} ${filled ? 'text-brand-text/75' : 'text-brand-accent-lite font-semibold'}`}>{filled ? 1 : 0}/1</span>
         </span>
       );
     }
@@ -584,7 +609,7 @@
       return (
         <span className="inline-flex flex-wrap items-center justify-center gap-[6px]">
           {names.map((n, k) => <NameMark key={k} theme={theme} name={n} me={n && n === me} size={size} />)}
-          {lano !== undefined && <span className="ml-2 inline-flex"><NameMark theme={theme} name={lano} me={lano && lano === me} size={size} lano /></span>}
+          {lano !== undefined && <span className="ml-2 inline-flex items-center gap-1"><span className="text-[9px] font-bold text-venue-lanovka">L</span><NameMark theme={theme} name={lano} me={lano && lano === me} size={size} lano /></span>}
         </span>
       );
     }
@@ -656,7 +681,7 @@
                   <span className="flex-1 min-w-0">
                     <span className="block text-[15px] font-bold text-brand-text break-words">{build.title}</span>
                     <span className="block text-xs text-brand-muted tnum">{build.kind} · {sameNext ? 'zítra, ' : ''}{dayName(build.date)} {fmt(build.date)}</span>
-                    {build.lano && <span className="block text-[13px] text-brand-text mt-0.5">+ lano: {build.lano}</span>}
+                    {build.lano && <span className="block text-[13px] text-brand-text mt-0.5"><span className="text-[10px] font-bold uppercase tracking-[0.1em] text-venue-lanovka mr-1.5">+ Lano</span>{build.lano}</span>}
                   </span>
                   <span className="text-brand-muted shrink-0">→</span>
                 </button>
@@ -670,9 +695,9 @@
                 ))}
               </div>
             </div>
-            {lanoSund !== undefined && build?.lano && (
-              <div>
-                <p className="text-xs text-brand-muted mb-1.5">Sundat lano: <span className="text-brand-text">{build.lano}</span> · 1 místo</p>
+            {lanoSund !== undefined && build && (
+              <div className="pt-3 border-t border-white/10">
+                <p className="text-xs text-brand-muted mb-2"><LanoHead sep={false} sund name={build.lanoP ? build.lanoP.p.name : (build.lano || '').split(' · ')[0]} lines={build.lanoP ? build.lanoP.p.lines : null} filled={!!lanoSund} /></p>
                 <div className={NAME_GROUP}>
                   {LANO_SUND_TEAM.map(name => (
                     <button key={name} onClick={() => onToggleLanoSund(name)} className={chip(lanoSund === name)}>{lanoSund === name ? '✓ ' : ''}{name}</button>
@@ -807,7 +832,7 @@
     function SessionCard({ session, day, date, theme, slots, lanoSlot, calInfo,
       sel, onSlotClick, onDragStartSlot, onDragOverSlot, onDropSlot,
       onLanoClick, onDragStartLano, onDropLano, onClear, onDateChange,
-      onShift, nextSector, weekMin, weekMax, baseDates, compact, slotCount, onCapacity, lanoRemoved, lanoDefault, onLanoCapacity, changeTag, lanoProfile, lanoAlone, onLanoShift, lanoShiftedNow, onLanoUnshift }) {
+      onShift, nextSector, weekMin, weekMax, baseDates, compact, slotCount, onCapacity, lanoRemoved, lanoDefault, onLanoCapacity, changeTag, lanoProfile, lanoP, lanoAlone, onLanoShift, lanoShiftedNow, onLanoUnshift }) {
 
       const [editingDate, setEditingDate] = React.useState(false);
       const admin = React.useContext(AdminCtx);
@@ -844,9 +869,11 @@
       // zahodí (viz doReplace), takže tu žádný přebytek nezůstává.
       const maxSlots = capOk(slotCount) && calInfo?.sector && !calInfo.isOff ? slotCount : sectorSlots;
       const visibleSlots = safeSlots.slice(0, maxSlots);
-      const filled = visibleSlots.filter(Boolean).length + (lanoSlot && calInfo != null ? 1 : 0);
-      const total  = maxSlots + (lanoSlot !== undefined && calInfo != null ? 1 : 0);
-      const allFilled = filled === total;
+      // bouldry a lano počítané zvlášť: hlavička karty = bouldry, lano má vlastní x/1 ve svém bloku
+      const lanoShown = lanoSlot !== undefined && calInfo != null && (!calInfo?.isOff || lanoAlone);
+      const filled = visibleSlots.filter(Boolean).length;
+      const total  = maxSlots;
+      const allFilled = filled === total && (!lanoShown || !!lanoSlot);
       const flash = false; // conflict prevention removed
       const isJulyAugust = date.getMonth() === 6 || date.getMonth() === 7;
 
@@ -903,7 +930,7 @@
           <CardHead hex={vu.hex} date={date} tag={changeTag}
             title={calInfo?.sector || wallName} titleMuted={!!calInfo?.isOff}
             kicker={calInfo?.note ? `${wallName} · ${calInfo.note}` : wallName}
-            count={calInfo && !calInfo.isOff ? `${allFilled ? '✓ ' : ''}${filled}/${total}` : lanoAlone ? `${lanoSlot ? '✓ 1' : '0'}/1` : null} gap={calInfo?.isOff ? (lanoAlone && !lanoSlot) : !allFilled}
+            count={calInfo && !calInfo.isOff ? `${filled === total ? '✓ ' : ''}${filled}/${total}` : null} gap={calInfo?.isOff ? (lanoAlone && !lanoSlot) : !allFilled}
             right={admin && <button onClick={onClear} title="Vymazat přiřazení"
               className={`p-1.5 -m-0.5 rounded-ctl text-brand-muted transition-colors hover:text-brand-text hover:bg-brand-surface-2 shrink-0`}>
               <RotateCcw c="w-3.5 h-3.5" />
@@ -948,13 +975,11 @@
             )}
 
             {/* Lano section (Lanovka only) */}
-            {lanoSlot !== undefined && calInfo != null && (!calInfo?.isOff || lanoAlone) && (
-              <div className="mt-2">
-                <p className="text-xs text-brand-muted pt-2 pb-1 flex items-baseline gap-3">
-                  <span>Lano{lanoProfile && <span className="text-brand-text"> · {lanoProfile}</span>}</span>
-                  {admin && onLanoShift && <button onClick={onLanoShift} title="Lano se tento týden nestaví, profil přejde na další lano"
-                    className="ml-auto text-brand-muted hover:text-brand-text whitespace-nowrap">Posunout lano</button>}
-                </p>
+            {lanoShown && (
+              <div className="mt-3 pt-3 border-t border-white/10">
+                <div className="pb-1.5"><LanoHead sep={false} name={lanoP ? lanoP.p.name : (lanoProfile || '').split(' · ')[0]} lines={lanoP ? lanoP.p.lines : null} filled={!!lanoSlot} /></div>
+                {admin && onLanoShift && <p className="pb-1 text-right text-xs"><button onClick={onLanoShift} title="Lano se tento týden nestaví, profil přejde na další lano"
+                    className="text-brand-muted hover:text-brand-text whitespace-nowrap">Posunout lano</button></p>}
                 <Slot num="L" name={lanoSlot} {...slotProps}
                   onClick={onLanoClick}
                   onDragStart={() => onDragStartLano && onDragStartLano(lanoSlot)}
@@ -1493,7 +1518,8 @@
         if (eMon && !eMon.isOff && eMon.sector) {
           const d = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : addDays(mondayD, lanovkaOffset(mondayD));
           if (role === 'sund' || role === 'oboje') add(iso(addDays(d, -1)), { wall: 'Sundávání Lanovka', sector: eMon.sector, theme: 'yellow', muted: true,
-            pick: { kind: 'sund', i: wi, target: 'lanovka' }, names: [...(wd.mondaySundavaci || []), ...(lanoOn(getMonday(mondayD), wd) && wd.mondayLanoSundavac ? [wd.mondayLanoSundavac + ' (lano)'] : [])], myti: wd.mondayMyti || null,
+            pick: { kind: 'sund', i: wi, target: 'lanovka' }, names: wd.mondaySundavaci || [], myti: wd.mondayMyti || null,
+            lanoS: lanoOn(getMonday(mondayD), wd) ? (wd.mondayLanoSundavac ?? null) : undefined,
             lanoP: lanoOn(getMonday(mondayD), wd) ? lanoMap[wk] : null });
           if (role !== 'sund') { const n = capMon(wd, eMon.sector), lano = lanoOn(getMonday(mondayD), wd);  // půlnoc, jinak lichý týden lana zaokrouhlí špatně
             add(iso(d), { wall: 'Lanovka', sector: eMon.sector, theme: 'yellow', pick: { kind: 'build', i: wi, target: 'lanovka' },
@@ -1502,7 +1528,7 @@
           // bouldry posunuté / zrušené, lano se staví samo
           const d = wd.monDateOverride ? new Date(wd.monDateOverride + 'T12:00:00') : addDays(mondayD, lanovkaOffset(mondayD));
           if (role === 'sund' || role === 'oboje') add(iso(addDays(d, -1)), { wall: 'Sundávání Lanovka', sector: 'jen lano', theme: 'yellow', muted: true,
-            pick: { kind: 'sund', i: wi, target: 'lanovka' }, names: [...(wd.mondaySundavaci || []), ...(wd.mondayLanoSundavac ? [wd.mondayLanoSundavac + ' (lano)'] : [])], myti: wd.mondayMyti || null, lanoP: lanoMap[wk] || null });
+            pick: { kind: 'sund', i: wi, target: 'lanovka' }, names: wd.mondaySundavaci || [], myti: wd.mondayMyti || null, lanoS: wd.mondayLanoSundavac ?? null, lanoP: lanoMap[wk] || null });
           if (role !== 'sund') add(iso(d), { wall: 'Lanovka', sector: 'Jen lano', theme: 'yellow', pick: { kind: 'build', i: wi, target: 'lanovka' },
             regular: [], lano: wd.mondayLano ?? null, lanoP: lanoMap[wk] || null });
         }
@@ -1635,11 +1661,13 @@
                     </div>
                     {show.map((e, j) => {
                       const hex = venueUi(e.theme).hex;
-                      const fill = e.muted ? e.names.length : (e.regular || []).filter(Boolean).length + (e.lano ? 1 : 0);
-                      const total = e.muted ? null : (e.regular || []).length + (e.lano !== undefined ? 1 : 0);
+                      // bouldry a lano mají každý vlastní obsazenost (lano = blok pod bouldry)
+                      const fill = e.muted ? e.names.length : (e.regular || []).filter(Boolean).length;
+                      const total = e.muted ? null : (e.regular || []).length || null;
                       const gap = e.muted ? (!e.names.length || !e.myti) : fill < total;
                       const sel = picked && e.pick && picked.kind === e.pick.kind && picked.i === e.pick.i && picked.target === e.pick.target;
-                      const mine = me && (e.muted ? (e.names.includes(me) || e.myti === me) : ((e.regular || []).includes(me) || e.lano === me));
+                      const mine = me && (e.muted ? (e.names.includes(me) || e.myti === me || e.lanoS === me) : ((e.regular || []).includes(me) || e.lano === me));
+                      const lanoV = e.muted ? e.lanoS : e.lano, hasL = lanoV !== undefined && (!e.muted || !!e.lanoP);
                       return (
                         <button key={j} type="button" onClick={ev => { ev.stopPropagation(); onPick && onPick(e.pick); }} title={`${e.wall}: ${e.sector}`}
                           className={`flex-1 min-h-[34px] w-full text-left whitespace-normal px-0.5 lg:px-1 py-0.5 flex flex-col gap-0.5 lg:gap-1 cursor-pointer
@@ -1653,13 +1681,17 @@
                           </span>
                           <span className="shrink-0 text-[9px] lg:text-[12px] leading-tight font-semibold text-brand-text line-clamp-2 lg:line-clamp-3 break-words">
                             {e.sector}{mine && <span className="text-brand-accent-lite font-normal"> · ty</span>}</span>
-                          {e.lanoP && <span className="hidden lg:block shrink-0 text-[10px] leading-tight text-brand-text/70 truncate">lano: {e.lanoP.p.name}</span>}
-                          <span className="hidden lg:flex mt-auto pt-1 items-center justify-center gap-x-2 gap-y-1 flex-wrap">
+                          {(e.muted || (e.regular || []).length > 0) && <span className="hidden lg:flex pt-1 items-center justify-center gap-x-2 gap-y-1 flex-wrap">
                             {e.muted
                               ? <><NameMarks theme={e.theme} names={e.names.length ? e.names : [null]} me={me} /><span className="text-[9px] text-brand-text/60">mytí</span><NameMark theme={e.theme} name={e.myti} me={e.myti && e.myti === me} /></>
-                              : <NameMarks theme={e.theme} names={e.regular || []} lano={e.lano} me={me} />}
-                          </span>
-                          <span className="lg:hidden mt-auto"><SlotMarks theme={e.theme} regular={e.muted ? e.names : (e.regular || [])} lano={e.muted ? undefined : e.lano} size={6} /></span>
+                              : <NameMarks theme={e.theme} names={e.regular || []} me={me} />}
+                          </span>}
+                          {hasL && <span className="hidden lg:flex mt-auto flex-col gap-1">
+                            <LanoHead sm sund={e.muted} name={e.lanoP?.p.name} filled={!!lanoV} />
+                            <span className="flex justify-center"><NameMark theme={e.theme} name={lanoV} me={lanoV && lanoV === me} lano /></span>
+                          </span>}
+                          <span className="lg:hidden mt-auto flex flex-col gap-0.5"><SlotMarks theme={e.theme} regular={e.muted ? e.names : (e.regular || [])} size={6} />
+                            {hasL && <SlotMarks theme={e.theme} regular={[]} lano={lanoV} size={6} />}</span>
                         </button>
                       );
                     })}
@@ -1673,9 +1705,10 @@
                 <div className="mt-3 px-1 pb-1 flex flex-col gap-2 animate-fade">
                   <p className="text-[13px] text-brand-muted capitalize">{sd.toLocaleString('cs-CZ', { weekday: 'long' })} {sd.getDate()}. {sd.getMonth() + 1}.{note ? ` · ${note}` : ''}{dayTags[openDay] ? ` · ${dayTags[openDay]}` : ''}</p>
                   {sessions[openDay].map((e, j) => {
-                    const fill = e.muted ? e.names.length : (e.regular || []).filter(Boolean).length + (e.lano ? 1 : 0);
-                    const total = e.muted ? null : (e.regular || []).length + (e.lano !== undefined ? 1 : 0);
+                    const fill = e.muted ? e.names.length : (e.regular || []).filter(Boolean).length;
+                    const total = e.muted ? null : (e.regular || []).length || null;
                     const gap = e.muted ? (!e.names.length || !e.myti) : fill < total;
+                    const lanoV = e.muted ? e.lanoS : e.lano, hasL = lanoV !== undefined && (!e.muted || !!e.lanoP);
                     return (
                       <button key={j} type="button" onClick={() => onPick && onPick(e.pick)}
                         className="w-full text-left rounded-ctl border-2 px-3 py-2.5 flex flex-col gap-1.5 active:bg-white/5"
@@ -1687,12 +1720,16 @@
                           {total != null && <span className={`ml-auto tnum ${gap ? 'text-brand-accent-lite font-semibold' : ''}`}>{fill}/{total}</span>}
                         </span>
                         <span className="text-[15px] font-semibold text-brand-text">{e.sector}</span>
-                        {e.lanoP && <span className="text-[13px] text-brand-text/70">lano: {e.lanoP.p.name} · {linesTxt(e.lanoP.p.lines)}</span>}
-                        <span className="flex items-center gap-2 flex-wrap">
+                        {(e.muted || (e.regular || []).length > 0) && <span className="flex items-center gap-2 flex-wrap">
                           {e.muted
                             ? <><NameMarks theme={e.theme} names={e.names.length ? e.names : [null]} me={me} size={20} /><span className="text-[11px] text-brand-text/60">mytí</span><NameMark theme={e.theme} name={e.myti} me={e.myti && e.myti === me} size={20} /></>
-                            : <NameMarks theme={e.theme} names={e.regular || []} lano={e.lano} me={me} size={20} />}
-                        </span>
+                            : <NameMarks theme={e.theme} names={e.regular || []} me={me} size={20} />}
+                        </span>}
+                        {hasL && <>
+                          <LanoHead sund={e.muted} name={e.lanoP?.p.name} lines={e.lanoP?.p.lines} filled={!!lanoV} />
+                          <span className="flex items-center gap-2"><NameMark theme={e.theme} name={lanoV} me={lanoV && lanoV === me} size={20} lano />
+                            <span className="text-[13px] text-brand-text">{lanoV || <span className="text-brand-accent-lite">volné místo</span>}</span></span>
+                        </>}
                       </button>
                     );
                   })}
@@ -4027,7 +4064,7 @@
             slots.push({
               venue: 'lanovka',
               stavba: <SessionCard
-                session="monday" day="Pondělí" date={monDate} baseDates={monBaseDates} theme="yellow" changeTag={changeTag(key, 'lanovka')} lanoProfile={lanoLabel(lanoMap[key])}
+                session="monday" day="Pondělí" date={monDate} baseDates={monBaseDates} theme="yellow" changeTag={changeTag(key, 'lanovka')} lanoProfile={lanoLabel(lanoMap[key])} lanoP={lanoMap[key]}
                 slots={week.monday} lanoSlot={lanoOn(monday, week) ? week.mondayLano : undefined} calInfo={calMon}
                 slotCount={week.monSlotCount} onCapacity={(op, i) => setCapacity('monday', op, i)}
                 lanoRemoved={!lanoOn(monday, week)} lanoDefault={hasLanoBuild(monday)} onLanoCapacity={setLanoCapacity}
@@ -4048,7 +4085,7 @@
                 nextSector={getNextSector(key, 'mon')} />,
               sundavani: (calMon != null && (!calMon.isOff || lanoAlone))
                 ? <SundavaniCard session="monday" theme="yellow" date={addDays(monDate, -1)}
-                    build={{ title: lanoAlone ? 'jen lano' : calMon.sector, date: monDate, hex: '#FFC83D', kind: 'stavění Lanovka', lano: lanoHere ? lanoLabel(lanoMap[key]) : '' }}
+                    build={{ title: lanoAlone ? 'jen lano' : calMon.sector, date: monDate, hex: '#FFC83D', kind: 'stavění Lanovka', lano: lanoHere ? lanoLabel(lanoMap[key]) : '', lanoP: lanoHere ? lanoMap[key] : null }}
                     onOpenBuild={() => openBuild(off, 'lanovka')}
                     sundavaci={week.mondaySundavaci || []} myti={week.mondayMyti || null}
                     onToggleSundavac={name => toggleSundavac('monday', name)}
@@ -4872,7 +4909,7 @@
           // rows = očíslované sloty do bloku (L = lano), prázdné se nevypisují — ukáže je „x volné"
           const rows = [...(week.monday || []).slice(0, n).map((nm, i) => [i + 1, nm]).filter(r => r[1]), ...lano.map(nm => ['L', nm ?? null])];
           gridItems.push({ row: 'lanovka', theme: 'yellow', day: dayIdx(monDate), title: lanoAlone ? 'Jen lano' : calMon.sector, off: !!calMon.isOff && !lanoAlone, rows,
-            filled: names.filter(Boolean).length, total: n + lano.length, names: names.filter(Boolean), target: 'lanovka' });
+            filled: (week.monday || []).slice(0, n).filter(Boolean).length, total: n, names: names.filter(Boolean), target: 'lanovka' });
         }
         if (wedReplacement) replItem('limit', 'dark', wedReplacement, 'limit');
         else if (calWed?.sector) {
@@ -4893,11 +4930,11 @@
          [calWed, wedReplacement, wedDate, week.wednesdaySundavaci, week.wednesdayMyti, 'dark', 'limit']].forEach(([c, r, d, sund, myti, theme, target]) => {
           const alone = target === 'lanovka' && lanoAlone;
           if (r || !c || ((c.isOff || !c.sector) && !alone)) return;
-          const lsu = target === 'lanovka' && lanoHere ? week.mondayLanoSundavac : null;
-          const names = [...(sund || []), ...(lsu ? [lsu + ' (lano)'] : []), ...(myti ? [myti + ' (mytí)'] : [])];
+          const names = [...(sund || []), ...(myti ? [myti + ' (mytí)'] : [])];
           const session = target === 'lanovka' ? 'monday' : 'wednesday';
           gridItems.push({ row: 'sund', theme, day: dayIdx(addDays(d, -1)), title: 'Sundávání', hatch: true, next: alone ? 'jen lano' : c.sector,
             nextLano: target === 'lanovka' && lanoHere && lanoMap[weekKey(monday)] ? lanoMap[weekKey(monday)].p : null,
+            lanoS: target === 'lanovka' && lanoHere ? (week.mondayLanoSundavac ?? null) : undefined,
             filled: (sund || []).length, total: null, names, target,
             drop: n => (n === 'Terezka' ? toggleMyti(session, n) : toggleSundavac(session, n)) });
         });
@@ -4969,8 +5006,10 @@
         <div id="tyden-dayhead" className="sticky z-20 grid h-14 bg-brand-bg border-b border-brand-border" style={{ top: hdrH + occH, gridTemplateColumns: GRID_COLS }}>
           <div key={'r' + offset} className="px-3.5 flex items-center text-[13px] font-semibold text-brand-text tnum border-r border-brand-border animate-fade">{weekRange(gridDays[0])}</div>
           {gridDays.map((d, di) => {
-            const its = role === 'sund' ? [] : gridItems.filter(it => it.day === di && it.total);
-            const f = its.reduce((a, it) => a + it.filled, 0), t = its.reduce((a, it) => a + it.total, 0);
+            // denní souhrn = bouldry + lano (lano má v bloku vlastní x/1)
+            const lan = it => (it.rows || []).find(r => r[0] === 'L');
+            const its = role === 'sund' ? [] : gridItems.filter(it => it.day === di && (it.total || lan(it)));
+            const f = its.reduce((a, it) => a + it.filled + (lan(it)?.[1] ? 1 : 0), 0), t = its.reduce((a, it) => a + (it.total || 0) + (lan(it) ? 1 : 0), 0);
             const isToday = toIso(d) === todayIso;
             const soon = toIso(d) >= todayIso && (d - new Date()) < 8 * 86400000;
             const hn = holidayNote(d);
@@ -5009,7 +5048,7 @@
                 {theme
                   ? <span className="flex items-center gap-2 text-xs font-bold text-brand-text"><VMark theme={theme} size={10} />{label}</span>
                   : <span className="block text-[11px] leading-tight text-brand-muted">{label}</span>}
-                {row === 'lanovka' && lanoOn(g.monday, g.week) && <span className="block mt-1 text-[11px] leading-snug text-brand-muted">+ lano{lanoMap[weekKey(g.monday)] ? <><br /><span className="text-brand-text">{lanoMap[weekKey(g.monday)].p.name}</span> · {linesTxt(lanoMap[weekKey(g.monday)].p.lines)}</> : ''}</span>}
+                {row === 'lanovka' && lanoOn(g.monday, g.week) && <span className="block mt-1.5 text-[11px] leading-snug"><span className="font-bold uppercase tracking-[0.1em] text-venue-lanovka text-[10px]">+ Lano</span>{lanoMap[weekKey(g.monday)] ? <><br /><span className="font-semibold text-brand-text">{lanoMap[weekKey(g.monday)].p.name}</span><span className="text-brand-muted"> · {linesTxt(lanoMap[weekKey(g.monday)].p.lines)}</span></> : ''}</span>}
               </div>
               {gridDays.map((d, di) => {
                 const its = gridItems.filter(it => it.row === row && it.day === di);
@@ -5026,7 +5065,8 @@
                       const bg = it.off || sund
                         ? 'repeating-linear-gradient(135deg,rgba(255,255,255,0.03) 0 6px,transparent 6px 12px), #25262C'
                         : '#25262C';
-                      const people = it.rows ? it.rows.map(([num, n]) => ({ n, num })) : it.names.map(n => {
+                      const lanoRow = it.rows ? it.rows.find(r => r[0] === 'L') : null, lpG = lanoRow ? lanoMap[weekKey(g.monday)] : null;
+                      const people = it.rows ? it.rows.filter(r => r[0] !== 'L').map(([num, n]) => ({ n, num })) : it.names.map(n => {
                         const myti = / \(mytí\)$/.test(n);
                         return { n: myti ? n.replace(/ \(mytí\)$/, '') : n, myti };
                       });
@@ -5053,7 +5093,6 @@
                               <VMark theme={it.theme} size={10} className="mt-[4px]" /><span className="break-words">{it.next}</span>
                             </span>
                           )}
-                          {sund && it.nextLano && <span className="mt-0.5 pl-[16px] block text-[12px] text-brand-text/80" title="Lano se sundává taky">+ lano: {it.nextLano.name} · {linesTxt(it.nextLano.lines)}</span>}
                           {!strip && !sund && (
                             <span className="flex justify-between gap-2 text-[11px] text-[#C9CBD0] mt-0.5">
                               <span className="truncate">{it.sub || (it.theme === 'yellow' ? 'Lanovka' : it.theme === 'green' ? 'Tělocvična' : 'Limit')}</span>
@@ -5066,9 +5105,17 @@
                               {people.map((p, j) => (
                                 <span key={j} className={`truncate ${p.myti || !p.n ? 'text-brand-muted' : p.n === me ? 'font-bold text-brand-text' : p.n === 'NEOBSADITELNÉ' ? 'text-[#FDBA74]' : 'text-brand-text'}`}>
                                   {p.num != null && <span className="inline-block w-3.5 mr-1.5 text-[10px] font-normal text-[#B9BCC2] tnum">{p.num}</span>}
-                                  {p.myti ? `mytí · ${p.n}` : !p.n ? 'lano —' : p.n === 'NEOBSADITELNÉ' ? 'neobsaditelné' : p.n}
+                                  {p.myti ? `mytí · ${p.n}` : p.n === 'NEOBSADITELNÉ' ? 'neobsaditelné' : p.n}
                                 </span>
                               ))}
+                            </span>
+                          )}
+                          {sund && it.lanoS !== undefined && <span className="mt-2 block" title="Lano se sundává taky"><LanoHead sm sund name={it.nextLano?.name} filled={!!it.lanoS} />
+                            <span className={`block mt-0.5 text-xs ${it.lanoS ? (it.lanoS === me ? 'font-bold text-brand-text' : 'text-brand-text') : 'text-brand-accent-lite'}`}>{it.lanoS || 'volné místo'}</span></span>}
+                          {lanoRow && (
+                            <span className="mt-2 block">
+                              <LanoHead sm name={lpG ? lpG.p.name : ''} filled={!!lanoRow[1]} />
+                              <span className={`block mt-0.5 text-xs ${lanoRow[1] ? (lanoRow[1] === me ? 'font-bold text-brand-text' : 'text-brand-text') : 'text-brand-accent-lite'}`}>{lanoRow[1] || 'volné místo'}</span>
                             </span>
                           )}
                           {gap && !strip ? (
@@ -5286,7 +5333,9 @@
         sayThanks(`b${b.i}${b.target}`, `${dShort(b.date)} ${dm(b.date)} · ${b.sector} je teď v Moje.`); if (pick) setPick(null); };
       const canSund = me && REMOVAL_TEAM.includes(me) && me !== 'Terezka';
       const canMyt = me && ['Terezka', 'Kuba D.'].includes(me);
-      const claimS = x => { if (!canSund && !canMyt) { setPickMe(true); return; }
+      const claimS = x => { if (x.isLano) { if (!LANO_SUND_TEAM.includes(me)) { setPickMe(true); return; } x.v.toggleLanoSund(me);
+          sayThanks(`sl${x.i}`, `${dShort(x.date)} ${dm(x.date)} · ${x.sector} je teď v Moje.`); if (pick) setPick(null); return; }
+        if (!canSund && !canMyt) { setPickMe(true); return; }
         if (canSund && !x.names.includes(me)) x.v.toggleSundavac(x.session, me); else if (canMyt && x.myti !== me) x.v.toggleMyti(x.session, me);
         sayThanks(`s${x.i}${x.target}`, `${dShort(x.date)} ${dm(x.date)} · ${x.sector} je teď v Moje.`); if (pick) setPick(null); };
       const btn = 'px-3.5 py-2 rounded-ctl text-sm font-medium bg-brand-surface-2 hover:bg-brand-border text-brand-text transition-colors';
@@ -5294,16 +5343,27 @@
 
       const BuildCard = ({ b }) => {
         const mine = b.setters.includes(me), full = b.free === 0;
+        const reg = b.regular || [], regFree = reg.filter(x => !x).length, hasL = b.lanoName !== undefined && !b.isLano;
+        const lp = lanoMap[weekKey(b.v.monday)];
         return (
           <div onClick={() => openB(b)} className={cardCls(b)}>
             <Vis hex={venueUi(b.theme).hex} full={full} left={b.wall} right={<span className="text-brand-text">{dShort(b.date)} {dm(b.date)}</span>} title={b.sector} />
             <div className="px-4 pt-3.5 pb-4 flex flex-col gap-3 flex-1">
               <div className="flex justify-between text-sm"><span>{dShort(b.date)} {dm(b.date)}</span></div>
               {b.movedFrom && <p className="text-xs text-brand-muted border-l-2 border-brand-accent pl-2">Jiný den, místo {dShort(b.movedFrom)} {dm(b.movedFrom)}</p>}
-              <div className="flex items-center gap-x-1 flex-wrap [&>*:not(:last-child)]:after:content-[','] [&>*:not(:last-child)]:after:text-brand-muted">{(b.regular || []).filter(Boolean).map((n, k) => <NameTag key={k} n={n} />)}
-                {b.lanoName !== undefined && (b.lanoName ? <span className="inline-flex items-center gap-1"><span className="text-[11px] text-brand-muted">lano</span><NameTag n={b.lanoName} /></span> : <FreeTag t={b.lanoProfile ? `lano volné (${b.lanoProfile})` : 'lano volné'} />)}</div>
+              {b.isLano
+                ? <div className="flex items-center gap-2">{b.lanoName ? <NameTag n={b.lanoName} /> : <FreeTag t="1 místo na lano" />}</div>
+                : reg.length > 0 && <div className="flex items-center gap-x-1 flex-wrap [&>*:not(:last-child)]:after:content-[','] [&>*:not(:last-child)]:after:text-brand-muted">{reg.filter(Boolean).map((n, k) => <NameTag key={k} n={n} />)}</div>}
+              {hasL && (
+                <div className="flex flex-col gap-2">
+                  <LanoHead name={lp ? lp.p.name : (b.lanoProfile || '').split(' · ')[0]} lines={lp ? lp.p.lines : null} filled={!!b.lanoName} />
+                  <div className="flex items-center gap-2"><SlotMarks theme={b.theme} regular={[]} lano={b.lanoName} size={12} />{b.lanoName ? <NameTag n={b.lanoName} /> : <FreeTag t="volné místo" />}</div>
+                </div>
+              )}
               <div className="mt-auto flex items-center justify-between">
-                <span className={`text-[13px] inline-flex items-center gap-2 flex-nowrap ${b.free ? 'text-brand-accent-lite' : 'text-brand-muted'}`}><SlotMarks theme={b.theme} regular={b.regular || []} lano={b.lanoName} size={12} />{b.free ? freeTxt(b.free) : 'Plno'}</span>
+                <span className={`text-[13px] inline-flex items-center gap-2 flex-nowrap ${b.free ? 'text-brand-accent-lite' : 'text-brand-muted'}`}>
+                  {b.isLano ? <SlotMarks theme={b.theme} regular={[]} lano={b.lanoName} size={12} /> : reg.length > 0 && <SlotMarks theme={b.theme} regular={reg} size={12} />}
+                  {b.isLano ? (b.lanoName ? 'Plno' : freeTxt(1)) : reg.length ? (regFree ? freeTxt(regFree) : 'Plno') : ''}</span>
                 {mine ? <button onClick={e => { e.stopPropagation(); const k = (b.regular || []).indexOf(me); if (k >= 0) b.v.remove(b.session, k); else if (b.lanoName === me) b.v.remove('mondayLano', 0); }}
                     className="px-3.5 py-2 rounded-ctl text-sm text-brand-muted ring-1 ring-inset ring-brand-border hover:text-bad">Odhlásit se</button>
                   : b.free ? <button onClick={e => { e.stopPropagation(); claimB(b); }} className={claimBtn}>Zapsat se</button> : null}
@@ -5327,10 +5387,10 @@
           <div onClick={() => openS(x)} className={cardCls(x)}>
             <Vis hex={venueUi(x.theme).hex} full={!!x.myti && x.names.length > 0} left={`Sundává se · ${x.wall}`} right={<span>{dShort(x.date)} {dm(x.date)}</span>} title={x.sector} />
             <div className="px-4 pt-3.5 pb-4 flex flex-col gap-3 flex-1">
-              <div className="text-sm text-brand-muted">staví se {dShort(x.buildDate)} {dm(x.buildDate)}{x.lanoProfile && <span className="block text-brand-text/80">+ lano: {x.lanoProfile}</span>}</div>
+              <div className="text-sm text-brand-muted">staví se {dShort(x.buildDate)} {dm(x.buildDate)}</div>
               <div><p className="text-[13px] text-brand-muted mb-1.5">Sundavači</p>
                 <div className="flex items-center gap-x-1 flex-wrap [&>*:not(:last-child)]:after:content-[','] [&>*:not(:last-child)]:after:text-brand-muted">{x.names.length ? x.names.map(n => <NameTag key={n} n={n} />) : <FreeTag t="zatím nikdo" />}</div></div>
-              {x.lanoSund !== undefined && <div><p className="text-[13px] text-brand-muted mb-1.5">Sundat lano{x.lanoProfile && <>: <span className="text-brand-text">{x.lanoProfile}</span></>}</p>
+              {x.lanoSund !== undefined && <div className="pt-3 border-t border-white/10"><p className="mb-2"><LanoHead sep={false} sund name={lanoMap[weekKey(x.v.monday)]?.p.name || (x.lanoProfile || '').split(' · ')[0]} lines={lanoMap[weekKey(x.v.monday)]?.p.lines} filled={!!x.lanoSund} /></p>
                 <div className="flex items-center gap-1.5">{x.lanoSund ? <NameTag n={x.lanoSund} /> : LANO_SUND_TEAM.includes(me) ? <button onClick={e => { e.stopPropagation(); x.v.toggleLanoSund(me); }} className="text-[13px] text-brand-accent-lite underline underline-offset-2">1 místo · vzít si lano</button> : <FreeTag t="1 místo" />}</div></div>}
               <div><p className="text-[13px] text-brand-muted mb-1.5">Mytí chytů</p>
                 <div className="flex items-center gap-1.5">{x.myti ? <NameTag n={x.myti} /> : <FreeTag t="nikdo" />}</div></div>
@@ -5462,9 +5522,26 @@
         </section>
       );
       // Tady chybí lidi: jen to, kam se můžeš zapsat (ne plné, ne volné týdny, ne kde už jsi)
-      const needB = zBuilds.filter(b => b.free > 0 && !b.setters.includes(me));
+      // Lano jako samostatná položka (Cyril 17. 11.): Lanovka s lanem se v nabídce rozpadne na bouldry a lano
+      const splitLano = b => {
+        if (b.lanoName === undefined || b.isLano) return [b];
+        const reg = b.regular || [], lp = lanoMap[weekKey(b.v.monday)];
+        const bould = { ...b, setters: reg, total: reg.length, free: reg.filter(x => !x).length, lanoName: undefined };
+        const nm = lp ? lp.p.name : (b.lanoProfile || '').split(' · ')[0];
+        const lano = { ...b, isLano: true, sector: nm ? `Lano · ${nm}` : 'Lano', setters: [b.lanoName], total: 1,
+          free: b.lanoName ? 0 : 1, regular: [] };
+        return [...(reg.length ? [bould] : []), lano];
+      };
+      const needB = zBuilds.flatMap(splitLano).filter(b => b.free > 0 && !b.setters.includes(me));
       const mineFree = showB ? zBuilds.filter(b => b.free > 0 && me && b.setters.includes(me)) : [];
-      const needS = zSunds.filter(x => (!x.myti || x.names.length === 0 || (x.lanoSund === null && (!REMOVAL_TEAM.includes(me) || LANO_SUND_TEAM.includes(me)))) && !x.names.includes(me) && x.myti !== me && x.lanoSund !== me);
+      const needS = [
+        ...zSunds.filter(x => (!x.myti || x.names.length === 0) && !x.names.includes(me) && x.myti !== me),
+        ...zSunds.filter(x => x.lanoSund === null && (!REMOVAL_TEAM.includes(me) || LANO_SUND_TEAM.includes(me))).map(x => {
+          const lp = lanoMap[weekKey(x.v.monday)];
+          const nm = lp ? lp.p.name : (x.lanoProfile || '').split(' · ')[0];
+          return { ...x, isLano: true, sector: nm ? `Sundat lano · ${nm}` : 'Sundat lano', lanoLines: lp ? lp.p.lines : null };
+        }),
+      ];
       const zFree = (showB ? needB.length : 0) + (showS ? needS.length : 0);
       const zCards = role === 'sund' ? zSunds.filter(passF) :
         [...zBuilds.map(b => ({ b, d: b.date })), ...zOff.map(o => ({ o, d: o.date }))].sort((a, b) => a.d - b.d).filter(x => passF(x.b || { ...x.o, target: x.o.wall.toLowerCase() }));
@@ -5481,14 +5558,19 @@
             </div>
             <div className="min-w-0">
               <p className="text-[13px] text-brand-muted flex items-center gap-2"><VMark theme={o.theme} size={12} />
-                {sund ? `Sundává se · ${o.wall} · staví se ${dShort(o.buildDate)} ${dm(o.buildDate)}` : o.wall}</p>
-              <p className="text-lg lg:text-xl font-bold leading-snug mt-0.5 break-words">{o.sector}</p>
-              {sund && o.lanoProfile && <p className="text-sm text-brand-text/80">+ lano: {o.lanoProfile}</p>}
+                {sund ? `Sundává se · ${o.wall} · staví se ${dShort(o.buildDate)} ${dm(o.buildDate)}` : o.wall}
+                {o.isLano && <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-venue-lanovka">Lano</span>}</p>
+              <p className="text-lg lg:text-xl font-bold leading-snug mt-0.5 break-words">{o.sector}{o.isLano && (o.lanoLines ?? lanoMap[weekKey(o.v.monday)]?.p.lines) != null && <span className="text-sm font-normal text-brand-muted"> · {linesTxt(o.lanoLines ?? lanoMap[weekKey(o.v.monday)].p.lines)}</span>}</p>
+              {sund && !o.isLano && o.lanoProfile && <p className="text-sm text-brand-text/80"><span className="text-[10px] font-bold uppercase tracking-[0.1em] text-venue-lanovka mr-1.5">+ Lano</span>{o.lanoProfile}</p>}
               <p className="text-sm mt-1 text-brand-accent-lite">{sund
-                ? [o.names.length === 0 && 'chybí sundavači', !o.myti && 'chybí mytí'].filter(Boolean).join(' · ')
-                : <span className="inline-flex items-center gap-2.5 flex-nowrap"><SlotMarks theme={o.theme} regular={o.regular || []} lano={o.lanoName} size={12} />chybí {o.free} z {o.total}</span>}</p>
+                ? (o.isLano ? <span className="inline-flex items-center gap-2.5"><SlotMarks theme={o.theme} regular={[]} lano={null} size={12} />chybí sundavač lana</span>
+                  : [o.names.length === 0 && 'chybí sundavači', !o.myti && 'chybí mytí'].filter(Boolean).join(' · '))
+                : o.isLano ? <span className="inline-flex items-center gap-2.5 flex-nowrap"><SlotMarks theme={o.theme} regular={[]} lano={o.lanoName} size={12} />chybí 1 z 1</span>
+                : <span className="inline-flex items-center gap-2.5 flex-nowrap"><SlotMarks theme={o.theme} regular={o.regular || []} size={12} />chybí {o.free} z {o.total}</span>}</p>
               <div className="flex flex-wrap gap-x-1 gap-y-0.5 mt-2.5 [&>*:not(:last-child)]:after:content-[','] [&>*:not(:last-child)]:after:text-brand-muted">
-                {sund ? <>{o.names.map(n => <NameTag key={n} n={n} />)}{o.myti && <span className="inline-flex items-center gap-1"><span className="text-[11px] text-brand-muted">mytí</span><NameTag n={o.myti} /></span>}</>
+                {sund && o.isLano ? <span className="text-[13px] text-brand-muted">zatím nikdo · jen {LANO_SUND_TEAM.join(', ')}</span>
+                  : sund ? <>{o.names.map(n => <NameTag key={n} n={n} />)}{o.myti && <span className="inline-flex items-center gap-1"><span className="text-[11px] text-brand-muted">mytí</span><NameTag n={o.myti} /></span>}</>
+                  : o.isLano ? <span className="text-[13px] text-brand-muted">zatím nikdo</span>
                   : <>{(o.regular || []).filter(Boolean).map((n, k) => <NameTag key={k} n={n} />)}{o.lanoName && <span className="inline-flex items-center gap-1"><span className="text-[11px] text-brand-muted">lano</span><NameTag n={o.lanoName} /></span>}
                     {o.lanoName === null && <FreeTag t={o.lanoProfile ? `lano volné (${o.lanoProfile})` : 'lano volné'} />}
                     {filled === 0 && <span className="text-[13px] text-brand-muted">zatím nikdo</span>}</>}
@@ -5649,7 +5731,7 @@
                     {/* dlouhý seznam (do konce roku / sezóny) po měsících */}
                     {list.map(({ o, s: sd }, k) => { const mk = o.date.getMonth(), head = k === 0 || list[k - 1].o.date.getMonth() !== mk;
                       return (
-                        <React.Fragment key={`${sd ? 's' : 'b'}${o.i}${o.target}`}>
+                        <React.Fragment key={`${sd ? 's' : 'b'}${o.isLano ? 'l' : ''}${o.i}${o.target}`}>
                           {head && <h3 className={`text-xs font-medium uppercase tracking-[0.08em] text-brand-muted capitalize ${k ? 'mt-5' : ''}`}>{o.date.toLocaleString('cs-CZ', { month: 'long' })}{o.date.getFullYear() !== new Date().getFullYear() ? ` ${o.date.getFullYear()}` : ''}</h3>}
                           {both && sd ? <div className="opacity-[0.82]"><NeedRow o={o} sund /></div> : <NeedRow o={o} sund={sd} />}
                         </React.Fragment>
@@ -5744,7 +5826,7 @@
               )}
             </div></Grp>
             {b.lanoName !== undefined && (
-              <Grp t={b.lanoProfile ? `Lano · ${b.lanoProfile}` : 'Lano'}>{admin && b.v.lanoHere && <Li><span className="flex-1 text-brand-muted">Nepodaří se obsadit?</span><button onClick={() => b.v.shiftLano()} className="ml-auto text-[13px] text-brand-muted hover:text-brand-text">Posunout lano</button></Li>}{b.lanoName ? <Li><Av n={b.lanoName} />{b.lanoName}{(admin || b.lanoName === me) && <button onClick={() => b.v.remove('mondayLano', 0)} className="ml-auto text-[13px] text-brand-muted hover:text-bad">{admin ? 'Odebrat' : 'Odhlásit se'}</button>}</Li>
+              <Grp t={`${b.lanoProfile ? `Lano · ${b.lanoProfile}` : 'Lano'} · ${b.lanoName ? 1 : 0}/1`}>{admin && b.v.lanoHere && <Li><span className="flex-1 text-brand-muted">Nepodaří se obsadit?</span><button onClick={() => b.v.shiftLano()} className="ml-auto text-[13px] text-brand-muted hover:text-brand-text">Posunout lano</button></Li>}{b.lanoName ? <Li><Av n={b.lanoName} />{b.lanoName}{(admin || b.lanoName === me) && <button onClick={() => b.v.remove('mondayLano', 0)} className="ml-auto text-[13px] text-brand-muted hover:text-bad">{admin ? 'Odebrat' : 'Odhlásit se'}</button>}</Li>
                 : <Li empty>Volné místo na lano{admin && <button onClick={() => b.v.setLanoCapacity(0)} title="Ubrat místo" className="ml-auto text-[13px] text-brand-muted hover:text-brand-text">✕ ubrat místo</button>}</Li>}</Grp>
             )}
             {admin && b.session === 'monday' && b.lanoName === undefined && (
