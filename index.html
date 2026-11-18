@@ -235,7 +235,8 @@
     // notWithPrevis: profil nesmí padnout na týden, kdy se na bouldrech staví převis → prohodí se s dalším ve frontě.
     // výchozí rytmus „2 týdny ano, 1 ne" (Cyril 9. 11.: „líbí se mi 2 ano 1 ne"); „každých 14 dní" je druhá volba
     // next = profil, kterým rotace pokračuje (Cyril 17. 11.: „žlutá je dostavěná, pokračuje se kout + slab"); shifts = týdny, kdy se posunulo jen lano
-    const LANO_DEFAULT = { start: '2026-11-23', rhythm: '2-1', next: 'Kout + slab', shifts: [], profiles: [
+    // profilesFrom = od kterého týdne se přiřazují profily; kotva rytmu zůstává start (Cyril 18. 11.: „kout slab se bude stavět zítra 19. 11. … změní se jen posun profilů")
+    const LANO_DEFAULT = { start: '2026-11-23', profilesFrom: '2026-11-16', rhythm: '2-1', next: 'Kout + slab', shifts: [], profiles: [
       { name: 'Žlutá první', lines: 3 }, { name: 'Žlutá pravé', lines: 2 }, { name: 'Převis', lines: 4.5, notWithPrevis: true },
       { name: 'Kout + slab', lines: 3 }, { name: 'Žlutá u hrazdy', lines: 2 }, { name: 'Nad hrazdou', lines: 2 },
       { name: 'Schody levé', lines: 2 }, { name: 'Schody uprostřed', lines: 2 }, { name: 'Schody pravé', lines: 3 },
@@ -464,7 +465,7 @@
       const s0 = Math.max(0, prof.findIndex(p => p.name === cfg.next));
       const order = prof.map((_, i) => (i + s0) % prof.length);
       let pending = [];
-      Object.keys(CAL).sort().filter(wk => wk >= cfg.start).forEach(wk => {
+      Object.keys(CAL).sort().filter(wk => wk >= (cfg.profilesFrom || cfg.start)).forEach(wk => {
         const monday = new Date(wk + 'T00:00:00'), wd = data[wk] || {};
         if (!lanoWeek(monday, wd)) return;   // lano má vlastní rytmus: posun/zrušení bouldrů ho neruší (Cyril 17. 11.)
         const em = effSector('mon', wk, data, shifts);
@@ -5619,7 +5620,7 @@
       // Lanové profily: rozpis nejbližších stavění lana; Správa mění pořadí, linie, příznak „ne s bouldry v převisu" a rytmus
       const renderLano = () => {
         const cfg = LANO_CFG, prof = cfg.profiles || [];
-        const upd = patch => saveLano({ start: cfg.start, rhythm: cfg.rhythm, next: cfg.next, shifts: cfg.shifts || [], profiles: prof, ...patch });
+        const upd = patch => saveLano({ start: cfg.start, ...(cfg.profilesFrom ? { profilesFrom: cfg.profilesFrom } : {}), rhythm: cfg.rhythm, next: cfg.next, shifts: cfg.shifts || [], profiles: prof, ...patch });
         // přejmenování profilu, kterým se pokračuje, přenese i „pokračuje se od"
         const setP = (i, patch) => upd({ profiles: prof.map((p, k) => (k === i ? { ...p, ...patch } : p)),
           ...(patch.name !== undefined && prof[i]?.name === cfg.next ? { next: patch.name } : {}) });
@@ -5644,7 +5645,7 @@
               )}
             </div>
             <div className="mb-5">
-              <h3 className="text-xs font-medium text-brand-muted uppercase tracking-[0.08em] mb-2">Pokračuje se od · od {dShort(new Date(cfg.start + 'T12:00:00'))} {dm(new Date(cfg.start + 'T12:00:00'))}</h3>
+              <h3 className="text-xs font-medium text-brand-muted uppercase tracking-[0.08em] mb-2">Pokračuje se od · od {dShort(new Date((cfg.profilesFrom || cfg.start) + 'T12:00:00'))} {dm(new Date((cfg.profilesFrom || cfg.start) + 'T12:00:00'))}</h3>
               <div className="flex flex-wrap gap-1.5" role="group" aria-label="Pokračuje se od">
                 {prof.map((p, i) => admin
                   ? <button key={i} aria-pressed={p.name === nextName} onClick={() => upd({ next: p.name })} className={chip(p.name === nextName)}>{p.name}</button>
