@@ -280,14 +280,9 @@
     "profile": "Tělocvična"
   },
   {
-    "date": "2026-11-19",
-    "wall": "Lanovka",
-    "profile": "Převis + Bizár"
-  },
-  {
     "date": "2026-11-24",
     "wall": "Lanovka",
-    "profile": "Dole kout + Strop"
+    "profile": "Převis + Bizár"
   },
   {
     "date": "2026-11-26",
@@ -297,7 +292,7 @@
   {
     "date": "2026-12-01",
     "wall": "Lanovka",
-    "profile": "Nový profil + nahoře kolmice"
+    "profile": "Dole kout + Strop"
   },
   {
     "date": "2026-12-03",
@@ -307,7 +302,7 @@
   {
     "date": "2026-12-08",
     "wall": "Lanovka",
-    "profile": "Hříbek"
+    "profile": "Nový profil + nahoře kolmice"
   },
   {
     "date": "2026-12-11",
@@ -322,7 +317,7 @@
   {
     "date": "2026-12-15",
     "wall": "Lanovka",
-    "profile": "Dole kolmice + převis"
+    "profile": "Hříbek"
   },
   {
     "date": "2026-12-17",
@@ -332,12 +327,12 @@
   {
     "date": "2026-12-22",
     "wall": "Lanovka",
-    "profile": "Převis + Bizár"
+    "profile": "Dole kolmice + převis"
   },
   {
     "date": "2027-01-05",
     "wall": "Lanovka",
-    "profile": "Nový profil + nahoře kolmice"
+    "profile": "Dole kout + Strop"
   },
   {
     "date": "2027-01-07",
@@ -352,7 +347,7 @@
   {
     "date": "2027-01-12",
     "wall": "Lanovka",
-    "profile": "Hříbek"
+    "profile": "Nový profil + nahoře kolmice"
   },
   {
     "date": "2027-01-14",
@@ -362,12 +357,12 @@
   {
     "date": "2027-01-19",
     "wall": "Lanovka",
-    "profile": "Dole kolmice + převis"
+    "profile": "Hříbek"
   },
   {
     "date": "2027-01-26",
     "wall": "Lanovka",
-    "profile": "Převis + Bizár"
+    "profile": "Dole kolmice + převis"
   },
   {
     "date": "2027-01-28",
@@ -377,7 +372,7 @@
   {
     "date": "2027-02-02",
     "wall": "Lanovka",
-    "profile": "Dole kout + Strop"
+    "profile": "Převis + Bizár"
   },
   {
     "date": "2027-02-05",
@@ -387,7 +382,7 @@
   {
     "date": "2027-02-09",
     "wall": "Lanovka",
-    "profile": "Nový profil + nahoře kolmice"
+    "profile": "Dole kout + Strop"
   },
   {
     "date": "2027-02-11",
@@ -397,7 +392,7 @@
   {
     "date": "2027-02-16",
     "wall": "Lanovka",
-    "profile": "Hříbek"
+    "profile": "Nový profil + nahoře kolmice"
   },
   {
     "date": "2027-02-18",
@@ -407,7 +402,7 @@
   {
     "date": "2027-02-23",
     "wall": "Lanovka",
-    "profile": "Dole kolmice + převis"
+    "profile": "Hříbek"
   },
   {
     "date": "2027-02-25",
@@ -417,7 +412,7 @@
   {
     "date": "2027-03-02",
     "wall": "Lanovka",
-    "profile": "Převis + Bizár"
+    "profile": "Dole kolmice + převis"
   },
   {
     "date": "2027-03-04",
@@ -432,12 +427,12 @@
   {
     "date": "2027-03-09",
     "wall": "Lanovka",
-    "profile": "Dole kout + Strop"
+    "profile": "Převis + Bizár"
   },
   {
     "date": "2027-03-16",
     "wall": "Lanovka",
-    "profile": "Nový profil + nahoře kolmice"
+    "profile": "Dole kout + Strop"
   },
   {
     "date": "2027-03-18",
@@ -447,7 +442,7 @@
   {
     "date": "2027-03-23",
     "wall": "Lanovka",
-    "profile": "Hříbek"
+    "profile": "Nový profil + nahoře kolmice"
   },
   {
     "date": "2027-03-25",
@@ -457,7 +452,7 @@
   {
     "date": "2027-03-30",
     "wall": "Lanovka",
-    "profile": "Dole kolmice + převis"
+    "profile": "Hříbek"
   },
   {
     "date": "2027-04-01",
@@ -472,7 +467,7 @@
   {
     "date": "2027-04-06",
     "wall": "Lanovka",
-    "profile": "Převis + Bizár"
+    "profile": "Dole kolmice + převis"
   },
   {
     "date": "2027-04-08",
@@ -482,12 +477,12 @@
   {
     "date": "2027-04-13",
     "wall": "Lanovka",
-    "profile": "Dole kout + Strop"
+    "profile": "Převis + Bizár"
   },
   {
     "date": "2027-04-20",
     "wall": "Lanovka",
-    "profile": "Nový profil + nahoře kolmice"
+    "profile": "Dole kout + Strop"
   },
   {
     "date": "2027-04-22",
@@ -497,7 +492,7 @@
   {
     "date": "2027-04-27",
     "wall": "Lanovka",
-    "profile": "Hříbek"
+    "profile": "Nový profil + nahoře kolmice"
   },
   {
     "date": "2027-04-29",
@@ -512,7 +507,7 @@
   {
     "date": "2027-05-04",
     "wall": "Lanovka",
-    "profile": "Dole kolmice + převis"
+    "profile": "Hříbek"
   },
   {
     "date": "2027-05-06",
@@ -522,7 +517,7 @@
   {
     "date": "2027-05-11",
     "wall": "Lanovka",
-    "profile": "Převis + Bizár"
+    "profile": "Dole kolmice + převis"
   },
   {
     "date": "2027-05-13",
@@ -532,12 +527,12 @@
   {
     "date": "2027-05-18",
     "wall": "Lanovka",
-    "profile": "Dole kout + Strop"
+    "profile": "Převis + Bizár"
   },
   {
     "date": "2027-05-25",
     "wall": "Lanovka",
-    "profile": "Nový profil + nahoře kolmice"
+    "profile": "Dole kout + Strop"
   },
   {
     "date": "2027-05-27",
@@ -547,7 +542,7 @@
   {
     "date": "2027-06-01",
     "wall": "Lanovka",
-    "profile": "Hříbek"
+    "profile": "Nový profil + nahoře kolmice"
   },
   {
     "date": "2027-06-03",
@@ -557,7 +552,7 @@
   {
     "date": "2027-06-08",
     "wall": "Lanovka",
-    "profile": "Dole kolmice + převis"
+    "profile": "Hříbek"
   },
   {
     "date": "2027-06-10",
@@ -567,7 +562,7 @@
   {
     "date": "2027-06-15",
     "wall": "Lanovka",
-    "profile": "Převis + Bizár"
+    "profile": "Dole kolmice + převis"
   },
   {
     "date": "2027-06-17",
@@ -577,12 +572,12 @@
   {
     "date": "2027-06-22",
     "wall": "Lanovka",
-    "profile": "Dole kout + Strop"
+    "profile": "Převis + Bizár"
   },
   {
     "date": "2027-06-29",
     "wall": "Lanovka",
-    "profile": "Nový profil + nahoře kolmice"
+    "profile": "Dole kout + Strop"
   },
   {
     "date": "2027-07-01",
