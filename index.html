@@ -2895,6 +2895,8 @@
       const [detail, setDetail] = useState(null); // { target, part: 'build'|'sund', wk } — otevřený detail na Macu
       // Kam se zapsat (UX maketa): vybrané stavění/sundávání v panelu, filtr karet, menu Víc na telefonu, výběr dne v panelu
       const [pick, setPick] = useState(null);       // { kind: 'build'|'sund', i, target }
+      const [calCard, setCalCard] = useState(null); // Kalendář, Správa: závod / dostavba / extra → { i, target, part, extraId }
+      React.useEffect(() => { if (view !== 'kalendar') setCalCard(null); }, [view]);
       const [zFilter, setZFilter] = useState('vse');
       const [moreOpen, setMoreOpen] = useState(false);
       const [panelDay, setPanelDay] = useState(false);
@@ -4230,11 +4232,16 @@
           });
 
           if (only) {
+            if (only.extraId) {   // Kalendář: jen jedna karta extra stavění (stejná ExtraCard jako v Plánu týdne)
+              const ex = slots.flatMap(s => [s.stavba, ...(s.stacked || [])]).find(c => c?.props?.extra?.id === only.extraId);
+              return ex || null;
+            }
             const colId = (s, i) => s.venue || (s.stavba?.props?.theme === 'green' ? 'telocvicna' : 'x' + i);
             const col = slots.find((s, i) => colId(s, i) === only.target);
             if (!col) return null;
             if (only.part === 'sund') return col.sundavani;
             const st = col.stavba?.type === SessionCard ? React.cloneElement(col.stavba, { compact: true }) : col.stavba;
+            if (only.cardOnly) return st;
             return <>{st}{(col.stacked || []).map((c, j) => <React.Fragment key={`extra-${j}`}>{c}</React.Fragment>)}</>;
           }
           // Role: stavění ukazuje jen stavění (a extra), sundávání jen karty sundávání a mytí
@@ -4301,7 +4308,7 @@
           );
         }
 
-        return { lanoAlone, lanoHere, shiftLano, undoLanoShift, toggleLanoSund, monday, friday, key, week, calMon, calWed, calThu, monDate, wedDate, thuDate, monReplacement, wedReplacement, toIso, isMonday, isWednesday, shiftMonSector, shiftWedSector, undoMonShift, undoWedShift, doReplace, undoReplace, cancelMonSector, undoMonCancel, cancelWedSector, undoWedCancel, renderSlots, remove, toggleSundavac, toggleMyti, assign, setMonDate, setWedDate, setThuDate, setCapacity, setLanoCapacity, capDefault, monBaseDates, wedBaseDates, thuBaseDates, weekMin, weekMax };
+        return { lanoAlone, lanoHere, shiftLano, undoLanoShift, toggleLanoSund, monday, friday, key, week, calMon, calWed, calThu, monDate, wedDate, thuDate, monReplacement, wedReplacement, toIso, isMonday, isWednesday, shiftMonSector, shiftWedSector, undoMonShift, undoWedShift, doReplace, undoReplace, cancelMonSector, undoMonCancel, cancelWedSector, undoWedCancel, renderSlots, clearSession, remove, toggleSundavac, toggleMyti, assign, setMonDate, setWedDate, setThuDate, setCapacity, setLanoCapacity, capDefault, monBaseDates, wedBaseDates, thuBaseDates, weekMin, weekMax };
       }
 
       const curView = buildWeekView(offset);
@@ -5855,12 +5862,15 @@
                 <div className="flex items-center gap-4 pt-2.5 text-[13px]">
                   <button onClick={() => b.v.setCapacity(b.session, 'add')} className="text-brand-muted hover:text-brand-text">+ přidat místo</button>
                   {(b.regular || []).length !== b.v.capDefault(b.session) && <button onClick={() => b.v.setCapacity(b.session, 'reset')} className="text-brand-muted hover:text-brand-text">vrátit výchozí ({b.v.capDefault(b.session)})</button>}
+                  {/* totéž co ikona „Vymazat přiřazení" na kartě v Plánu týdne (clearSession) */}
+                  {(b.regular || []).some(Boolean) && <button onClick={() => b.v.clearSession(b.session)} className="ml-auto text-brand-muted hover:text-bad">Vymazat přiřazení</button>}
                 </div>
               )}
             </div></Grp>
             {b.lanoName !== undefined && (
               <Grp t={`${b.lanoProfile ? `Lano · ${b.lanoProfile}` : 'Lano'} · ${b.lanoName ? 1 : 0}/1`}>{admin && b.v.lanoHere && <Li><span className="flex-1 text-brand-muted">Nepodaří se obsadit?</span><button onClick={() => b.v.shiftLano()} className="ml-auto text-[13px] text-brand-muted hover:text-brand-text">Posunout lano</button></Li>}{b.lanoName ? <Li><Av n={b.lanoName} />{b.lanoName}{(admin || b.lanoName === me) && <button onClick={() => b.v.remove('mondayLano', 0)} className="ml-auto text-[13px] text-brand-muted hover:text-bad">{admin ? 'Odebrat' : 'Odhlásit se'}</button>}</Li>
-                : <Li empty>Volné místo na lano{admin && <button onClick={() => b.v.setLanoCapacity(0)} title="Ubrat místo" className="ml-auto text-[13px] text-brand-muted hover:text-brand-text">✕ ubrat místo</button>}</Li>}</Grp>
+                : <Li empty>Volné místo na lano{admin && <button onClick={() => b.v.setLanoCapacity(0)} title="Ubrat místo" className="ml-auto text-[13px] text-brand-muted hover:text-brand-text">✕ ubrat místo</button>}</Li>}
+                {admin && !b.lanoName && <div className="flex flex-wrap gap-1.5 mt-1" aria-label="Lanař">{team.filter(n => n !== 'NEOBSADITELNÉ' && !b.setters.includes(n)).map(n => <button key={n} onClick={() => b.v.assign(n, 'mondayLano', 0)} className={`${NAME_BTN} px-3 rounded-ctl bg-brand-surface text-brand-muted text-sm hover:text-brand-text hover:bg-brand-surface-2`}>{n}</button>)}</div>}</Grp>
             )}
             {admin && b.session === 'monday' && b.lanoName === undefined && (
               <Grp t="Lano">{lanoShifted(b.v.monday)
@@ -5875,6 +5885,39 @@
         );
       };
 
+
+      // ══ Kalendář, Správa: závod / dostavba / extra se otevře v detailu vedle kalendáře (Cyril 19. 11.:
+      // „chci mít možnost mazat a upravovat stavění i v kalendáři"). Je to tatáž karta jako v Plánu týdne
+      // (RaceCard / ExtraCard / SundavaniCard z renderSlots) se stejnými funkcemi — smazání, sloty, lano, sundávání.
+      const calCardOf = pk => {
+        const iso = pk.dost || pk.date, i = Math.round((getMonday(new Date(iso + 'T12:00:00')) - getMonday(new Date())) / (7 * 86400000));
+        if (pk.kind === 'extra') { const ex = Object.values(extras || {}).find(e => e && e.date === pk.date && e.venue === pk.venue);
+          return ex ? { i, target: pk.venue, part: 'build', extraId: ex.id } : null; }
+        const v = i === offset ? curView : buildWeekView(i);
+        const isRepl = pk.dost ? (x => x.kind === 'dostavba' && x.day.date === pk.dost && x.race.date === pk.date) : (x => x.kind === 'race' && x.race.date === pk.date);
+        const t = v.monReplacement && isRepl(v.monReplacement) ? 'lanovka' : v.wedReplacement && isRepl(v.wedReplacement) ? 'limit'
+          : pk.dost ? 'dost-' + pk.date + '-' + pk.dost : 'race-' + pk.date;
+        return { i, target: t, part: pk.part === 'sund' ? 'sund' : 'build' };
+      };
+      const calCardOn = admin && view === 'kalendar' && !!calCard;
+      const closeCalCard = () => { setCalCard(null); setSel(null); };
+      const renderCalCard = () => {
+        const c = calCard, v = c.i === offset ? curView : buildWeekView(c.i);
+        const card = v.renderSlots(null, { target: c.target, part: c.part, extraId: c.extraId, cardOnly: true });
+        return (
+          <>
+            <div data-cal-card={c.extraId ? 'extra' : c.target} className="-mx-1 [&>div]:w-full [&>div]:max-w-none">{card || <p className="text-sm text-brand-muted">Toto stavění už v rozpisu není.</p>}</div>
+            {card && c.part === 'build' && (
+              <Grp t="Kdo se zapíše">
+                <div className="flex flex-wrap gap-1.5">{team.filter(n => n !== 'NEOBSADITELNÉ').map(n => (
+                  <button key={n} onClick={() => setSel(s => s === n ? null : n)} aria-pressed={sel === n}
+                    className={`${NAME_BTN} px-3 rounded-ctl text-sm ${sel === n ? 'bg-brand-text text-brand-bg font-semibold' : 'bg-brand-surface text-brand-muted hover:text-brand-text hover:bg-brand-surface-2'}`}>{n}</button>))}</div>
+                <p className="mt-2 text-xs text-brand-muted">{sel ? <>Klikni na volné místo pro <b className="text-brand-text">{sel}</b>.</> : 'Vyber jméno a klikni na volné místo. Klik na obsazené místo ho uvolní.'}</p>
+              </Grp>
+            )}
+          </>
+        );
+      };
 
       // ══ Závody a extra: závod jako jedna akce (dny závodu jdoucí po sobě + dostavba + sundávání) ══
       // Jen zobrazení — v datech zůstává závod po dnech (races/<datum>) i s vlastní dostavbou.
@@ -6574,6 +6617,8 @@
                 {Array.from({ length: kalCount }, (_, i) => (
                   <MonthCalendar key={i} data={data} role={role} stickyTop={hdrH} me={me} picked={pick} dayTags={dayTags} compact={!isDesk}
                     onPick={pk => {
+                      if (admin && (pk.kind === 'extra' || pk.kind === 'race')) { setPick(null); setSel(null); setCalCard(calCardOf(pk)); return; }
+                      setCalCard(null);
                       if (pk.kind === 'extra') { openInPlan(pk.date, pk.venue, () => false); return; }
                       if (pk.kind === 'race') { if (pk.dost) openInPlan(pk.dost, 'dost-' + pk.date + '-' + pk.dost, x => x.kind === 'dostavba' && x.day.date === pk.dost && x.race.date === pk.date);
                         else openInPlan(pk.date, 'race-' + pk.date, x => x.kind === 'race' && x.race.date === pk.date); return; }
@@ -6604,19 +6649,19 @@
           </main>
 
           {/* ── Panel detailu (Kam se zapsat / Moje): Mac vpravo, telefon jako spodní panel ── */}
-          {panelView && isDesk && pickObj && (
+          {panelView && isDesk && (pickObj || calCardOn) && (
             <aside className="fixed top-0 right-0 bottom-[var(--strip-h,0px)] w-[24.5rem] z-30 overflow-y-auto bg-[#1F2025] border-l border-white/5 px-6 py-7 flex flex-col gap-[22px]" aria-label="Detail">
-              <button onClick={() => setPick(null)} title="Zavřít" className="absolute right-3 top-3 z-10 p-1.5 text-brand-muted hover:text-brand-text"><X c="w-4 h-4" /></button>
-              {renderPanel()}
+              <button onClick={() => { setPick(null); closeCalCard(); }} title="Zavřít" className="absolute right-3 top-3 z-10 p-1.5 text-brand-muted hover:text-brand-text"><X c="w-4 h-4" /></button>
+              {calCardOn ? renderCalCard() : renderPanel()}
             </aside>
           )}
-          {panelView && !isDesk && pickObj && (
-            <div className="fixed inset-0 z-[60] bg-black/60" onClick={() => setPick(null)}>
+          {panelView && !isDesk && (pickObj || calCardOn) && (
+            <div className="fixed inset-0 z-[60] bg-black/60" onClick={() => { setPick(null); closeCalCard(); }}>
               <div role="dialog" aria-label="Detail" onClick={e => e.stopPropagation()}
                 className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-y-auto bg-[#1F2025] rounded-t-[18px] px-4 pt-3 pb-[calc(var(--strip-h,0px)+1.5rem)] flex flex-col gap-5 animate-sheet">
                 <div className="flex justify-center"><span className="w-10 h-1 rounded-full bg-white/20" /></div>
-                <button onClick={() => setPick(null)} title="Zavřít" className="absolute right-3 top-2 p-2 text-brand-muted"><X c="w-4 h-4" /></button>
-                {renderPanel()}
+                <button onClick={() => { setPick(null); closeCalCard(); }} title="Zavřít" className="absolute right-3 top-2 p-2 text-brand-muted"><X c="w-4 h-4" /></button>
+                {calCardOn ? renderCalCard() : renderPanel()}
               </div>
             </div>
           )}
