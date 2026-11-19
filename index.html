@@ -478,6 +478,16 @@
       });
       return out;
     }
+    // Tělocvična (Cyril 19. 11.: „udělej to i pro tělocvičnu"): Smazat a Posun o týden dopředu / dozadu, staví se jen v pátek.
+    // Nové volitelné pole týdne thuSectorOverride: { isOff: true, sector: 'Volný týden' } = zrušeno (lidé v thuCancelledSetters);
+    // { isOff: true, kind: 'move', to, sector } = přesunuto do týdne `to`; { sector, kind: 'move', from } = sem přesunuto z týdne `from`
+    // (zapsaní jdou s ní do tohoto týdne). Bez pole platí CAL. Parita: sync_calendar.py (thu_effective).
+    function effThu(weekKey, data) {
+      const ov = data?.[weekKey]?.thuSectorOverride, c = CAL[weekKey]?.thu ?? null;
+      if (ov && ov.isOff) return { ...(c || {}), isOff: true, sector: ov.sector || 'Volný týden', movedTo: ov.kind === 'move' ? ov.to || null : null };
+      if (ov && ov.sector) return { ...(c || {}), isOff: false, sector: ov.sector, movedFrom: ov.from || null };
+      return c;
+    }
     function effSector(venue, weekKey, data, shifts) {
       const wd = data?.[weekKey];
       const ov = venue === 'mon' ? wd?.monSectorOverride : wd?.wedSectorOverride;
@@ -1314,7 +1324,8 @@
           const wedD = wd.wedDateOverride ? new Date(wd.wedDateOverride + 'T12:00:00') : addDays(mon, limitOffset(mon, eWed.sector));
           monthly[wedD.getMonth()].limit.push({ day: wedD.getDate(), dayName: dayName(wedD), sector: eWed.sector });
         }
-        if (entry.thu) {
+        const eThu = effThu(key, data);
+        if (eThu && !eThu.isOff && eThu.sector) {
           const thuD = addDays(mon, gymOffset(mon));
           monthly[thuD.getMonth()].gym += 1;
         }
@@ -1540,7 +1551,7 @@
           if (role !== 'sund') add(iso(d), { wall: 'Limit', sector: eWed.sector, theme: 'dark', pick: { kind: 'build', i: wi, target: 'limit' },
             regular: slots(wd.wednesday, capWed(wd, eWed.sector)) });
         }
-        const cThu = CAL[wk]?.thu;
+        const cThu = effThu(wk, data);
         if (role !== 'sund' && cThu && !cThu.isOff && cThu.sector) {
           const d = wd.thuDateOverride ? new Date(wd.thuDateOverride + 'T12:00:00') : addDays(mondayD, gymOffset(mondayD));
           add(iso(d), { wall: 'Tělocvična', sector: cThu.sector, theme: 'green', pick: { kind: 'build', i: wi, target: 'telocvicna' }, regular: slots(wd.thursday, capThu(wd)) });
@@ -1832,7 +1843,8 @@
                   }
                 }
                 // Tělocvična — Thursday (+3)
-                if (calEntry?.thu && !calEntry.thu.isOff) {
+                const eThu = effThu(k, data);
+                if (eThu && !eThu.isOff && eThu.sector) {
                   const sessionDate = addDays(monDate, gymOffset(monDate));
                   if (sessionDate.getFullYear() === year && sessionDate.getMonth() === month) {
                     thuTotal += capThu(wd);
@@ -3199,7 +3211,7 @@
         if (!weekData) return null;
         const calMon = effSector('mon', weekId, dataSnap, shifts);
         const calWed = effSector('wed', weekId, dataSnap, shifts);
-        const calThu = CAL[weekId]?.thu ?? null;
+        const calThu = effThu(weekId, dataSnap);
         const monBase = new Date(weekId + 'T12:00:00');
         const wOff = limitOffset(monBase, calWed?.sector);
         const lOff = lanovkaOffset(monBase);
@@ -3213,6 +3225,9 @@
           _thuDate:   weekData.thuDateOverride || toIso(addDays(monBase, gymOffset(monBase))),
           _monCancelled: weekData.monSectorOverride?.isOff === true ? true : null,
           _wedCancelled: weekData.wedSectorOverride?.isOff === true ? true : null,
+          // jen v týdnech, kde Správa Tělocvičnu kdy posunula / smazala (pole thuSectorOverride existuje) → jinak by první
+          // flush nové verze přepsal všechny týdny kvůli novému klíči
+          ...(weekData.thuSectorOverride !== undefined ? { _thuCancelled: weekData.thuSectorOverride?.isOff === true ? true : null } : {}),
           // Navázat na shift LIST (zdroj pravdy), ne na monSavedSetters — ty může
           // deleteClimber poškodit z null na [] a tím chybně označit VŠECHNY týdny
           // jako shifted → sync by smazal všechna stavění.
@@ -3520,7 +3535,7 @@
         const week   = data[key] ?? initWeek(key);
         const calMon = effSector('mon', key, data, rotationShifts);
         const calWed = effSector('wed', key, data, rotationShifts);
-        const calThu = CAL[key]?.thu ?? null;
+        const calThu = effThu(key, data);
 
         // Závod NEBO dostavba, které mohou nahradit standardní Stavění sloty (Mon Lanovka / Wed Limit) když jsou zrušené.
         // Algoritmus: shromáždíme všechny race-day a dostavba-day položky v týdnu, pro každý zrušený slot
@@ -3707,6 +3722,59 @@
           });
           setRotationShifts(rs => ({ ...rs, limit: [...(rs.limit || []), key].sort() }));
         }
+
+        // ── Tělocvična: Smazat / Posun o týden (jen pátek) / Vrátit (Cyril 19. 11.) — viz effThu ──
+        const thuOv = week.thuSectorOverride || null;
+        const thuActive = !!(calThu && !calThu.isOff && calThu.sector);
+        const thuTargetKey = dir => weekKey(addDays(monday, 7 * dir));
+        const thuTargetDate = dir => { const m = addDays(monday, 7 * dir); return addDays(m, gymOffset(m)); };
+        // posunout jde jen stavění podle rozpisu (ne už přesunuté) a jen do týdne, kde Tělocvična není ani nic přesunutého
+        const canMoveThu = dir => { const tk = thuTargetKey(dir);
+          return thuActive && !thuOv && !!CAL[tk] && !CAL[tk]?.thu && !data[tk]?.thuSectorOverride; };
+        function moveThu(dir) {
+          if (!canMoveThu(dir)) return;
+          const tk = thuTargetKey(dir), nd = thuTargetDate(dir);
+          if (!window.confirm(`Posunout Tělocvičnu z ${fmtFull(thuDate)} na ${fmtFull(nd)}?\n\nZapsaní stavěči se přesunou s ní. Další termíny zůstávají podle rozpisu.`)) return;
+          logChange({ kind: 'shift', wk: key, target: 'telocvicna', day: isoOf(thuDate), names: peopleOf('telocvicna'),
+            text: `Posunuto: Tělocvična ${dayTxt(thuDate)} se přesouvá na ${dayTxt(nd)}. Tvůj zápis jde s ní.` });
+          setData(d => {
+            const src = { ...(d[key] ?? initWeek(key)) }, dst = { ...(d[tk] ?? initWeek(tk)) };
+            dst.thursday = src.thursday || E4(); dst.thuSlotCount = src.thuSlotCount ?? null; dst.thuDateOverride = null;
+            dst.thuSectorOverride = { sector: calThu.sector, kind: 'move', from: key };
+            src.thursday = E4(); src.thuDateOverride = null;
+            src.thuSectorOverride = { isOff: true, kind: 'move', to: tk, sector: `Přesunuto na ${dayTxt(nd)}` };
+            return { ...d, [key]: src, [tk]: dst };
+          });
+        }
+        function undoThuMove() {
+          if (!thuOv || thuOv.kind !== 'move') return;
+          const srcK = thuOv.isOff ? key : thuOv.from, dstK = thuOv.isOff ? thuOv.to : key;
+          if (!srcK || !dstK) return;
+          dropChanges(c => c.kind === 'shift' && c.wk === srcK && c.target === 'telocvicna');
+          setData(d => {
+            const src = { ...(d[srcK] ?? initWeek(srcK)) }, dst = { ...(d[dstK] ?? initWeek(dstK)) };
+            src.thursday = dst.thursday || E4(); src.thuSlotCount = dst.thuSlotCount ?? null; src.thuSectorOverride = null;
+            dst.thursday = E4(); dst.thuSlotCount = null; dst.thuSectorOverride = null; dst.thuDateOverride = null;
+            return { ...d, [srcK]: src, [dstK]: dst };
+          });
+        }
+        function cancelThu() {
+          logChange({ kind: 'cancel', wk: key, target: 'telocvicna', day: isoOf(thuDate), names: peopleOf('telocvicna'), text: `Zrušeno: Tělocvična ${dayTxt(thuDate)}` });
+          setData(d => {
+            const curr = d[key] ?? initWeek(key);
+            return { ...d, [key]: { ...curr, thursday: E4(), thuSectorOverride: { isOff: true, sector: 'Volný týden' }, thuCancelledSetters: curr.thursday || E4() } };
+          });
+        }
+        function undoThuCancel() {
+          dropChanges(c => c.kind === 'cancel' && c.wk === key && c.target === 'telocvicna');
+          setData(d => {
+            const curr = d[key] ?? initWeek(key);
+            return { ...d, [key]: { ...curr, thursday: curr.thuCancelledSetters || E4(), thuSectorOverride: null, thuCancelledSetters: null } };
+          });
+        }
+        const thuActions = [[canMoveThu(-1), () => moveThu(-1), '←', 'Posun', `na ${fmt(thuTargetDate(-1))}`],
+          [canMoveThu(1), () => moveThu(1), '→', 'Posun', `na ${fmt(thuTargetDate(1))}`], [thuActive && !thuOv, cancelThu, '✕', 'Smazat'],
+          [thuOv?.kind === 'move', undoThuMove, '↩', 'Vrátit posun'], [!!(thuOv?.isOff && thuOv.kind !== 'move'), undoThuCancel, '↩', 'Obnovit']];
 
         // Posun jen lana: ten týden se lano nestaví, profil i celá fronta jdou na další lano. Bouldry se nemění.
         const lanoHere = lanoWeek(monday, week);
@@ -4308,7 +4376,7 @@
           );
         }
 
-        return { lanoAlone, lanoHere, shiftLano, undoLanoShift, toggleLanoSund, monday, friday, key, week, calMon, calWed, calThu, monDate, wedDate, thuDate, monReplacement, wedReplacement, toIso, isMonday, isWednesday, shiftMonSector, shiftWedSector, undoMonShift, undoWedShift, doReplace, undoReplace, cancelMonSector, undoMonCancel, cancelWedSector, undoWedCancel, renderSlots, clearSession, remove, toggleSundavac, toggleMyti, assign, setMonDate, setWedDate, setThuDate, setCapacity, setLanoCapacity, capDefault, monBaseDates, wedBaseDates, thuBaseDates, weekMin, weekMax };
+        return { thuActions, lanoAlone, lanoHere, shiftLano, undoLanoShift, toggleLanoSund, monday, friday, key, week, calMon, calWed, calThu, monDate, wedDate, thuDate, monReplacement, wedReplacement, toIso, isMonday, isWednesday, shiftMonSector, shiftWedSector, undoMonShift, undoWedShift, doReplace, undoReplace, cancelMonSector, undoMonCancel, cancelWedSector, undoWedCancel, renderSlots, clearSession, remove, toggleSundavac, toggleMyti, assign, setMonDate, setWedDate, setThuDate, setCapacity, setLanoCapacity, capDefault, monBaseDates, wedBaseDates, thuBaseDates, weekMin, weekMax };
       }
 
       const curView = buildWeekView(offset);
@@ -4880,8 +4948,9 @@
           push('Tělocvična', 'green', v.thuDate, v.calThu.sector, v.week.thursday, capThu(v.week),
             { session: 'thursday', regular: slotsOf(v.week.thursday, capThu(v.week)), movedFrom: moved(v.thuDate, v.thuBaseDates), setDate: v.setThuDate });
         // volný týden (stěna se ten týden nestaví) — pro „Obsazenost dopředu" a karty
-        [[v.calMon, v.monDate, 'Lanovka', 'yellow'], [v.calWed, v.wedDate, 'Limit', 'dark']].forEach(([c, d, wall, theme]) => {
-          if (c?.isOff && d && !gone(d) && !(wall === 'Lanovka' && v.lanoAlone)) offWeeks.push({ i, v, wall, theme, date: d, sector: c.sector, off: true, target: wall === 'Lanovka' ? 'lanovka' : 'limit' });
+        // Tělocvična jen zrušená / přesunutá Správou (thuSectorOverride), ať jde vrátit i z Karet a Kam se zapsat
+        [[v.calMon, v.monDate, 'Lanovka', 'yellow'], [v.calWed, v.wedDate, 'Limit', 'dark'], [v.week.thuSectorOverride ? v.calThu : null, v.thuDate, 'Tělocvična', 'green']].forEach(([c, d, wall, theme]) => {
+          if (c?.isOff && d && !gone(d) && !(wall === 'Lanovka' && v.lanoAlone)) offWeeks.push({ i, v, wall, theme, date: d, sector: c.sector, off: true, target: { Lanovka: 'lanovka', Limit: 'limit', 'Tělocvična': 'telocvicna' }[wall] });
         });
       });
       builds.sort(sameDayFirst);
@@ -5847,7 +5916,7 @@
               </div>
               {b.movedFrom && <p className="mt-2 text-xs text-brand-muted border-l-2 border-brand-accent pl-2">Jiný den, místo {dShort(b.movedFrom)} {dm(b.movedFrom)}{reason ? ` (${reason})` : ''}</p>}
             </Grp>
-            {admin && (b.target === 'lanovka' || b.target === 'limit') && (
+            {admin && (b.target === 'lanovka' || b.target === 'limit' || b.target === 'telocvicna') && (
               <Grp t="Úpravy stavění">
                 <div className="[&>div]:p-0 [&>div]:border-0">{renderAdminActions(b.target, b.v)}</div>
                 <div className="flex gap-2 mt-2"><button onClick={() => setShowAddRace(true)} className={`${btn} flex-1`}>+ Přidat závod</button>
@@ -6165,7 +6234,7 @@
       const renderAdminActions = (only, vw) => {
               // vw = týden z buildWeekView (panel Kam se zapsat); bez něj aktuální týden v Plánu týdne
               const { calMon, calWed, week, key, monday, shiftMonSector, shiftWedSector, undoMonShift, undoWedShift,
-                undoReplace, cancelMonSector, undoMonCancel, cancelWedSector, undoWedCancel } = vw || curView;
+                undoReplace, cancelMonSector, undoMonCancel, cancelWedSector, undoWedCancel, thuActions } = vw || curView;
               // modal Nahradit pracuje s aktuálním týdnem → nejdřív na ten týden přepnout
               const openReplace = venue => {
                 if (vw && vw.key !== curView.key) setOffset(Math.round((vw.monday - getMonday(new Date())) / (7 * 86400000)));
@@ -6215,20 +6284,20 @@
               const hasLimitActions   = wedLimShift || wedLimReplace || wedLimCancel || wedLimUndoShift || wedLimUndoReplace || wedLimUndoCancel;
 
               if (only) {
-                const keys = only === 'lanovka'
+                const keys = only === 'telocvicna' ? thuActions : only === 'lanovka'
                   ? [[monLanShift, shiftMonSector, '↪', 'Posun', `→ ${monLandWk}`], [monLanReplace, () => openReplace('mon'), '↔', 'Nahradit'],
                      [monLanCancel, cancelMonSector, '✕', 'Smazat'], [monLanUndoShift, undoMonShift, '↩', 'Vrátit posun'],
                      [monLanUndoReplace, () => undoReplace('mon'), '↩', 'Vrátit nahrazení'], [monLanUndoCancel, undoMonCancel, '↩', 'Obnovit']]
                   : [[wedLimShift, shiftWedSector, '↪', 'Posun', `→ ${wedLandWk}`], [wedLimReplace, () => openReplace('wed'), '↔', 'Nahradit'],
                      [wedLimCancel, cancelWedSector, '✕', 'Smazat'], [wedLimUndoShift, undoWedShift, '↩', 'Vrátit posun'],
                      [wedLimUndoReplace, () => undoReplace('wed'), '↩', 'Vrátit nahrazení'], [wedLimUndoCancel, undoWedCancel, '↩', 'Obnovit']];
-                const sector = only === 'lanovka' ? calMon?.sector : calWed?.sector;
+                const sector = only === 'lanovka' ? calMon?.sector : only === 'limit' ? calWed?.sector : 'Tělocvična';
                 const list = keys.filter(k => k[0]);
                 if (!list.length) return null;
                 return (
                   <div className="flex flex-wrap gap-1.5 px-3 pb-3 pt-3 border-t border-brand-border">
                     {list.map(([, fn, icon, action, suffix]) => (
-                      <button key={action} onClick={fn} title={`${action}${sector ? ' ' + sector : ''}${suffix ? ' ' + suffix : ''}`}
+                      <button key={action + (suffix || '')} onClick={fn} title={`${action}${sector ? ' ' + sector : ''}${suffix ? ' ' + suffix : ''}`}
                         className={`flex-auto px-2.5 py-2 rounded-ctl whitespace-nowrap text-xs font-semibold bg-brand-surface-2 hover:bg-brand-border transition-colors flex items-center justify-center gap-1.5
                           ${icon === '✕' ? 'text-bad' : 'text-brand-text'}`}>
                         <span>{icon}</span><span>{action}</span>{suffix && <span className="text-brand-muted tnum">{suffix}</span>}
@@ -6264,6 +6333,13 @@
                           {wedLimUndoCancel && wallBtn('lim-undocancel', 'bg-brand-surface-2 text-brand-text hover:bg-brand-border',  undoWedCancel,   '↩', 'Obnovit',      null,          null)}
                         </div>
                       )}
+                    </div>
+                  )}
+                  {/* TĚLOCVIČNA — stejná tlačítka jako v detailu (Posun o týden / Smazat / Vrátit) */}
+                  {thuActions.some(a => a[0]) && (
+                    <div className="flex flex-col lg:flex-row gap-2" data-thu-actions>
+                      {thuActions.filter(a => a[0]).map(([, fn, icon, action, suffix]) =>
+                        wallBtn('thu-' + action + (suffix || ''), 'bg-brand-surface text-brand-text ring-1 ring-inset ring-venue-telocvicna/50 hover:ring-venue-telocvicna hover:bg-brand-surface-2', fn, icon, action, 'Tělocvična', suffix))}
                     </div>
                   )}
 
@@ -6537,7 +6613,7 @@
                           <button onClick={() => setDetail(null)} title="Zavřít detail"
                             className="absolute top-2 right-2 z-10 p-1 text-brand-muted hover:text-brand-text"><X c="w-3.5 h-3.5" /></button>
                           <div className="pr-6">{detailContent}</div>
-                          {admin && detailOpen.part === 'build' && (detailOpen.target === 'lanovka' || detailOpen.target === 'limit') && renderAdminActions(detailOpen.target)}
+                          {admin && detailOpen.part === 'build' && (detailOpen.target === 'lanovka' || detailOpen.target === 'limit' || detailOpen.target === 'telocvicna') && renderAdminActions(detailOpen.target)}
                           <p className="px-4 pb-3 pt-1 text-xs text-brand-muted">
                             {sel ? <>Klikni na volný slot pro <b className="text-brand-text">{sel}</b> · <button onClick={() => setSel(null)} className="underline underline-offset-2">Zrušit</button></>
                                  : detailOpen.part === 'sund' ? 'Klikni na jméno pro zapsání nebo odebrání.' : 'Stavěče přetáhni z levého panelu na slot, nebo je tam vyber a klikni na slot.'}

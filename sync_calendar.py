@@ -252,6 +252,18 @@ def has_lano_build(week_id, cfg=LANO_DEFAULT):
     return (week_dt - ref).days % 14 == 0
 
 
+def thu_effective(cal_thu, override):
+    """Tělocvična v týdnu: CAL kód (TG) přebije nepovinné pole thuSectorOverride z appky (Cyril 19. 11.):
+    {isOff: true, ...} = zrušeno nebo přesunuto jinam → None; {sector, kind: 'move', from} = sem přesunuto → 'TG'.
+    (parita s effThu v index.html; bez pole beze změny)"""
+    if isinstance(override, dict):
+        if override.get('isOff'):
+            return None
+        if override.get('sector'):
+            return 'TG'
+    return cal_thu
+
+
 def lano_on(week_id, fw, cfg=LANO_DEFAULT):
     """Staví se ten týden lano? Pole monLanoSlotCount z nové appky přebíjí rozpis:
     1 = lano navíc i mimo rozpis, 0 = lano ten týden ubrané, chybí = podle has_lano_build.
@@ -366,7 +378,7 @@ def sync_calendar(request):
                 'mon', 'monSectorOverride', SECTORS_MON, LANOVKA_WEEKS, shifts_lanovka)
             wed_sector, wed_is_off = resolve_sector(
                 'wed', 'wedSectorOverride', SECTORS_WED, LIMIT_WEEKS, shifts_limit)
-            thu_code = cal_entry.get('thu')  # only TG, no override
+            thu_code = thu_effective(cal_entry.get('thu'), firestore_value(fw.get('thuSectorOverride')))
 
             # ── Effective dates ─────────────────────────────────────────────
             # Pomocná pole _monDate/_wedDate/_thuDate se ZÁMĚRNĚ NEČTOU.
