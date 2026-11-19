@@ -5081,7 +5081,6 @@
                 {theme
                   ? <span className="flex items-center gap-2 text-xs font-bold text-brand-text"><VMark theme={theme} size={10} />{label}</span>
                   : <span className="block text-[11px] leading-tight text-brand-muted">{label}</span>}
-                {row === 'lanovka' && lanoOn(g.monday, g.week) && <span className="block mt-1.5 text-[11px] leading-snug"><span className="font-bold uppercase tracking-[0.1em] text-venue-lanovka text-[10px]">+ Lano</span>{lanoMap[weekKey(g.monday)] ? <><br /><span className="font-semibold text-brand-text">{lanoMap[weekKey(g.monday)].p.name}</span><span className="text-brand-muted"> · {linesTxt(lanoMap[weekKey(g.monday)].p.lines)}</span></> : ''}</span>}
               </div>
               {gridDays.map((d, di) => {
                 const its = gridItems.filter(it => it.row === row && it.day === di);
