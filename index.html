@@ -99,6 +99,11 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
     }
+    /* Kalendář (Cyril 19. 11.: „celý kalendář je pro mě na plánování lepší… mít tam celá jména, to se tam vejde"):
+       rozhoduje šířka položky dne, ne šířka okna — v široké buňce celá jména pod sebou, v úzké (půlka dne, telefon) iniciály. */
+    .cal-it { container-type: inline-size; }
+    .cal-full { display: none; }
+    @container (min-width: 104px) { .cal-full { display: flex; } .cal-ini { display: none !important; } }
   </style>
 </head>
 <body>
@@ -613,6 +618,21 @@
             boxShadow: name ? (me ? '0 0 0 1.5px #F5F2F2' : undefined) : `inset 0 0 0 1.5px ${h}` }}>
           {name && <span style={{ transform: sh === 'diamond' ? 'rotate(-45deg)' : undefined }}>{initials(name)[0]}</span>}
         </i>
+      );
+    }
+    // Celá jména v Kalendáři: malá značka stěny před jménem, volné místo = prázdná značka + „volné místo"; jména se zalamují, neusekávají
+    function NameRows({ theme, names, me, label }) {
+      return (
+        <span className="cal-full flex-col items-stretch gap-[3px] w-full">
+          {label && <span className="text-[10px] text-brand-text/60 leading-tight">{label}</span>}
+          {names.map((n, k) => (
+            <span key={k} className="flex items-start gap-1.5 min-w-0 text-[11px] leading-[1.25]">
+              <VMark theme={theme} size={7} outline={!n} className="shrink-0 mt-[3px]" />
+              {n ? <span className={`min-w-0 break-words ${n === me ? 'text-brand-accent-lite font-semibold' : n === 'NEOBSADITELNÉ' ? 'text-[#FDBA74]' : 'text-brand-text'}`}>{n === 'NEOBSADITELNÉ' ? 'neobsaditelné' : n}</span>
+                 : <span className="text-brand-muted">volné místo</span>}
+            </span>
+          ))}
+        </span>
       );
     }
     function NameMarks({ theme, names, lano, me, size = 18 }) {
@@ -1688,7 +1708,7 @@
                           const lanoV = e.muted ? e.lanoS : e.lano, hasL = lanoV !== undefined && (!e.muted || !!e.lanoP);
                           return (
                             <button key={j} type="button" onClick={ev => { ev.stopPropagation(); onPick && onPick(e.pick); }} title={`${e.wall}: ${e.sector}`}
-                              className={`flex-[1_0_auto] min-h-[34px] w-full text-left whitespace-normal px-0.5 lg:px-1 py-0.5 flex flex-col gap-0.5 lg:gap-1 cursor-pointer
+                              className={`cal-it flex-[1_0_auto] min-h-[34px] w-full text-left whitespace-normal px-0.5 lg:px-1 py-0.5 flex flex-col gap-0.5 lg:gap-1 cursor-pointer
                                 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-text rounded-[4px]
                                 ${gOne ? '' : `transition-colors hover:bg-white/[0.06] ${sel ? 'bg-white/[0.09]' : ''}`} ${j > 0 ? 'border-t border-white/10 pt-1.5' : ''}`}>
                               <span className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[9px] lg:text-[10px] text-brand-text/75 min-w-0">
@@ -1699,14 +1719,21 @@
                               </span>
                               <span className="shrink-0 text-[9px] lg:text-[12px] leading-tight font-semibold text-brand-text line-clamp-2 lg:line-clamp-3 break-words">
                                 {e.sector}{mine && <span className="text-brand-accent-lite font-normal"> · ty</span>}</span>
-                              {(e.muted || (e.regular || []).length > 0) && <span className="hidden lg:flex pt-1 items-center justify-center gap-x-2 gap-y-1 flex-wrap">
+                              {(e.muted || (e.regular || []).length > 0) && <span className="hidden lg:block pt-1">
+                                {e.muted
+                                  ? <><NameRows theme={e.theme} names={e.names.length ? e.names : [null]} me={me} />
+                                      <span className="block h-1" /><NameRows theme={e.theme} names={[e.myti || null]} me={me} label="mytí" /></>
+                                  : <NameRows theme={e.theme} names={e.regular || []} me={me} />}
+                              </span>}
+                              {(e.muted || (e.regular || []).length > 0) && <span className="cal-ini hidden lg:flex pt-1 items-center justify-center gap-x-2 gap-y-1 flex-wrap">
                                 {e.muted
                                   ? <><NameMarks theme={e.theme} names={e.names.length ? e.names : [null]} me={me} /><span className="text-[9px] text-brand-text/60">mytí</span><NameMark theme={e.theme} name={e.myti} me={e.myti && e.myti === me} /></>
                                   : <NameMarks theme={e.theme} names={e.regular || []} me={me} />}
                               </span>}
                               {hasL && <span className="hidden lg:flex mt-auto flex-col gap-1">
                                 <LanoHead sm sund={e.muted} name={e.lanoP?.p.name} filled={!!lanoV} />
-                                <span className="flex justify-center"><NameMark theme={e.theme} name={lanoV} me={lanoV && lanoV === me} lano /></span>
+                                <span className="cal-ini flex justify-center"><NameMark theme={e.theme} name={lanoV} me={lanoV && lanoV === me} lano /></span>
+                                <NameRows theme={e.theme} names={[lanoV || null]} me={me} />
                               </span>}
                               <span className="lg:hidden mt-auto flex flex-col gap-0.5"><SlotMarks theme={e.theme} regular={e.muted ? e.names : (e.regular || [])} size={6} />
                                 {hasL && <SlotMarks theme={e.theme} regular={[]} lano={lanoV} size={6} />}</span>
@@ -2313,21 +2340,24 @@
     }
 
     // ── AddRaceModal (Limit brand) ───────────────────────────────────────────
-    function AddRaceModal({ onClose, onSave, existingRaceDates }) {
-      const [name,           setName]          = useState('');
-      const [date,           setDate]          = useState(null);
-      const [sectors,        setSectors]       = useState([]);
-      const [slotCount,      setSlotCount]     = useState(4);
-      const [dostavbaCount,  setDostavbaCount] = useState(0);
-      const [dostavbaDays,   setDostavbaDays]  = useState([]);
+    // initial = úprava existujícího závodu (Cyril 19. 11.: „u závodů potřebuji mít možnost je taky editovat") — stejný formulář, předvyplněný
+    function AddRaceModal({ onClose, onSave, existingRaceDates, initial }) {
+      const [name,           setName]          = useState(initial?.name || '');
+      const [date,           setDate]          = useState(initial?.date || null);
+      const [sectors,        setSectors]       = useState(initial?.sectors || []);
+      const [slotCount,      setSlotCount]     = useState(initial?.slotCount || 4);
+      const [dostavbaCount,  setDostavbaCount] = useState((initial?.dostavba || []).length);
+      const [dostavbaDays,   setDostavbaDays]  = useState((initial?.dostavba || []).map(d => ({ date: d.date, sectors: d.sectors || [], slotCount: d.slotCount || 4 })));
       const _allRaceDates = [date, ...dostavbaDays.map(d => d.date)].filter(Boolean);
       const _hasInternalDup = new Set(_allRaceDates).size !== _allRaceDates.length;
       const valid = date && sectors.length > 0 && slotCount > 0
         && dostavbaDays.every(d => d.sectors.length > 0 && d.slotCount > 0)
         && !_hasInternalDup;
       // Kolize hlavního data NEBO kterékoli dostavby s už existujícím závodem/dostavbou.
-      const dateConflict = (date && existingRaceDates.has(date))
-        || _allRaceDates.some(dt => existingRaceDates.has(dt));
+      // při úpravě nehlídat data, která závod měl už předtím (kolize už byla v datech, úprava ji nemá blokovat)
+      const _initDates = new Set(initial ? [initial.date, ...((initial.dostavba || []).map(d => d?.date))] : []);
+      const dateConflict = (date && !_initDates.has(date) && existingRaceDates.has(date))
+        || _allRaceDates.some(dt => !_initDates.has(dt) && existingRaceDates.has(dt));
       const toggleSector = s => setSectors(curr => curr.includes(s) ? curr.filter(x => x !== s) : [...curr, s]);
       const isoDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
@@ -2379,7 +2409,7 @@
             {/* Header */}
             <div className="px-6 pt-6 pb-4 border-b border-brand-border flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-black tracking-widest text-brand-accent-lite leading-none">PŘIDAT ZÁVOD</h2>
+                <h2 className="text-2xl font-black tracking-widest text-brand-accent-lite leading-none">{initial ? 'UPRAVIT ZÁVOD' : 'PŘIDAT ZÁVOD'}</h2>
                 <p className="text-[11px] uppercase tracking-widest text-brand-muted mt-2 font-bold">Limit Boulder</p>
               </div>
               <button onClick={onClose} className="p-2 rounded-ctl hover:bg-brand-border text-brand-muted hover:text-white">
@@ -2538,7 +2568,7 @@
               </button>
               <button onClick={handleSave} disabled={!valid || dateConflict}
                 className="px-6 py-2.5 rounded-ctl bg-brand-accent text-white text-sm font-black tracking-widest uppercase hover:bg-brand-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                Přidat závod
+                {initial ? 'Uložit závod' : 'Přidat závod'}
               </button>
             </div>
           </div>
@@ -2549,7 +2579,7 @@
     // ── RaceCard (Limit brand) ───────────────────────────────────────────────
     // Karta závodu nebo dostavby. Pro dostavbu předej `kind="dostavba"` + `day` (1-indexed).
     function RaceCard({ race, day, sectors, slotCount, setters, kind = 'race', sel,
-                        onSlotClick, onDragStartSlot, onDragOverSlot, onDropSlot, onDelete }) {
+                        onSlotClick, onDragStartSlot, onDragOverSlot, onDropSlot, onDelete, onCapacity }) {
       const isDostavba = kind === 'dostavba';
       const admin = React.useContext(AdminCtx);
       const dateIso = isDostavba ? day.date : race.date;
@@ -2598,17 +2628,22 @@
                 <Slot key={i} num={i+1} name={name} {...slotProps} compact roomy mark="#E21074"
                   onClick={() => onSlotClick(i)}
                   onDragStart={() => onDragStartSlot(i, name)}
-                  onDrop={() => onDropSlot(i)} />
+                  onDrop={() => onDropSlot(i)}
+                  onRemoveSlot={admin && onCapacity && total > 1 ? () => onCapacity('remove', i) : undefined} />
               );
             })}
+            {admin && onCapacity && total < SLOT_MAX && <div className="pt-2 text-xs"><button onClick={() => onCapacity('add')} className="text-brand-muted hover:text-brand-text">+ přidat místo</button></div>}
           </div>
         </div>
       );
     }
 
+    // Strop počtu míst u závodu / dostavby / extra — stejně jako formulář závodu (1–8) a bouldry (setCapacity, max 8)
+    const SLOT_MAX = 8;
+
     // ── ExtraCard — jednorázové stavění mimo rotaci ──────────────────────────
     // Nezasahuje do rotace ani do standardních karet, jen se přidá vedle nich.
-    function ExtraCard({ extra, sel, onSlotClick, onLanoClick, onDelete, onToggleLanoSlot }) {
+    function ExtraCard({ extra, sel, onSlotClick, onLanoClick, onDelete, onToggleLanoSlot, onCapacity }) {
       const isLan = extra.venue === 'lanovka';
       const admin = React.useContext(AdminCtx);
       const date = new Date(extra.date + 'T12:00:00');
@@ -2659,8 +2694,10 @@
               <Slot key={i} num={i+1} name={setters[i] ?? null} {...slotProps} compact roomy mark={vu.hex}
                 onClick={() => onSlotClick(i)}
                 onDragStart={() => {}}
-                onDrop={() => {}} />
+                onDrop={() => {}}
+                onRemoveSlot={admin && onCapacity && n > (hasLanoSlot ? 0 : 1) ? () => onCapacity('remove', i) : undefined} />
             ))}
+            {admin && onCapacity && n < SLOT_MAX && <div className="pt-2 text-xs"><button onClick={() => onCapacity('add')} className="text-brand-muted hover:text-brand-text">+ přidat místo</button></div>}
             {hasLanoSlot && (
               <div className={n > 0 ? 'mt-2' : ''}>
                 <div className="flex items-center justify-between pt-2 pb-1">
@@ -2687,14 +2724,14 @@
     }
 
     // ── AddExtraModal — přidání extra stavění (1 a více termínů) ─────────────
-    function AddExtraModal({ onClose, onSave, existingIds }) {
-      const [venue,     setVenue]     = useState('lanovka');
-      const [name,      setName]      = useState('');
-      const [dates,     setDates]     = useState([]);
-      const [sectors,   setSectors]   = useState([]);
-      const [lano,      setLano]      = useState(false);
-      const [lanoSlot,  setLanoSlot]  = useState(false);  // samostatný slot „L" navíc
-      const [slotCount, setSlotCount] = useState(2);
+    function AddExtraModal({ onClose, onSave, existingIds, initial }) {
+      const [venue,     setVenue]     = useState(initial?.venue || 'lanovka');
+      const [name,      setName]      = useState(initial?.name || '');
+      const [dates,     setDates]     = useState(initial?.date ? [initial.date] : []);
+      const [sectors,   setSectors]   = useState(initial?.sectors || []);
+      const [lano,      setLano]      = useState(!!initial?.lano);
+      const [lanoSlot,  setLanoSlot]  = useState(!!initial?.lanoSlot);  // samostatný slot „L" navíc
+      const [slotCount, setSlotCount] = useState(initial ? (initial.slotCount || 0) : 2);
       const isLan = venue === 'lanovka';
       const sectorList = isLan ? LANOVKA_SECTORS : LIMIT_SECTORS;
       const acc = isLan
@@ -2709,7 +2746,8 @@
         setVenue(v); setSectors([]);
         if (v !== 'lanovka') { setLano(false); setLanoSlot(false); if (slotCount === 0) setSlotCount(2); }
       };
-      const toggleDate   = iso => setDates(cur => cur.includes(iso) ? cur.filter(x => x !== iso) : [...cur, iso].sort());
+      // úprava = jeden termín (jedno extra), výběr dne ho jen přesune
+      const toggleDate   = iso => setDates(cur => initial ? [iso] : cur.includes(iso) ? cur.filter(x => x !== iso) : [...cur, iso].sort());
       // Profil bez stavěče nedává smysl → první vybraný profil vrátí počet z 0 na 2.
       const toggleSector = s => {
         const next = sectors.includes(s) ? sectors.filter(x => x !== s) : [...sectors, s];
@@ -2744,7 +2782,7 @@
             {/* Header */}
             <div className="px-6 pt-6 pb-4 border-b border-brand-border flex items-start justify-between gap-4">
               <div>
-                <h2 className={`text-2xl font-black tracking-widest leading-none ${acc.title}`}>EXTRA STAVĚNÍ</h2>
+                <h2 className={`text-2xl font-black tracking-widest leading-none ${acc.title}`}>{initial ? 'UPRAVIT EXTRA' : 'EXTRA STAVĚNÍ'}</h2>
                 <p className="text-[11px] uppercase tracking-widest text-brand-muted mt-2 font-bold">Mimo rotaci — nic neposouvá</p>
               </div>
               <button onClick={onClose} className="p-2 rounded-ctl hover:bg-brand-border text-brand-muted hover:text-white">
@@ -2859,7 +2897,7 @@
               </button>
               <button onClick={handleSave} disabled={!valid}
                 className={`px-6 py-2.5 rounded-ctl text-sm font-black tracking-widest uppercase disabled:opacity-30 disabled:cursor-not-allowed transition-colors ${acc.btn}`}>
-                Přidat {dates.length > 1 ? `${dates.length} ${dates.length < 5 ? 'termíny' : 'termínů'}` : 'stavění'}
+                {initial ? 'Uložit' : `Přidat ${dates.length > 1 ? `${dates.length} ${dates.length < 5 ? 'termíny' : 'termínů'}` : 'stavění'}`}
               </button>
             </div>
           </div>
@@ -2907,8 +2945,11 @@
       const [detail, setDetail] = useState(null); // { target, part: 'build'|'sund', wk } — otevřený detail na Macu
       // Kam se zapsat (UX maketa): vybrané stavění/sundávání v panelu, filtr karet, menu Víc na telefonu, výběr dne v panelu
       const [pick, setPick] = useState(null);       // { kind: 'build'|'sund', i, target }
-      const [calCard, setCalCard] = useState(null); // Kalendář, Správa: závod / dostavba / extra → { i, target, part, extraId }
-      React.useEffect(() => { if (view !== 'kalendar') setCalCard(null); }, [view]);
+      const [calCard, setCalCard] = useState(null); // Kalendář, Správa: závod / dostavba / extra → { i, target, part, extraId, date, dost }
+      const [editRace, setEditRace] = useState(null);   // id (datum) závodu ve formuláři Upravit
+      const [editExtra, setEditExtra] = useState(null); // id extra ve formuláři Upravit
+      const [hostDraft, setHostDraft] = useState(null); // „+ Host" v Kdo se zapíše: null = zavřeno, jinak rozepsané jméno
+      React.useEffect(() => { if (view !== 'kalendar' && view !== 'zavody') setCalCard(null); setHostDraft(null); }, [view]);
       const [zFilter, setZFilter] = useState('vse');
       const [moreOpen, setMoreOpen] = useState(false);
       const [panelDay, setPanelDay] = useState(false);
@@ -4138,6 +4179,7 @@
               kind={repl.kind}
               race={repl.race}
               day={repl.day}
+              onCapacity={(op, i) => repl.kind === 'race' ? setRaceCapacity(repl.race.date, op, i) : setDostavbaCapacity(repl.race.date, repl.dIdx, op, i)}
               sel={sel}
               onSlotClick={i => repl.kind === 'race'
                 ? onRaceSlotClick(repl.race.date, i)
@@ -4264,7 +4306,8 @@
                   onDragStartSlot={() => {}}
                   onDragOverSlot={e => e.preventDefault()}
                   onDropSlot={() => {}}
-                  onDelete={() => deleteRace(item.race.date)} />,
+                  onDelete={() => deleteRace(item.race.date)}
+                  onCapacity={(op, i) => setRaceCapacity(item.race.date, op, i)} />,
                 sundavani: renderRaceSund(item.race),
               });
             } else {
@@ -4279,7 +4322,8 @@
                   onDragStartSlot={() => {}}
                   onDragOverSlot={e => e.preventDefault()}
                   onDropSlot={() => {}}
-                  onDelete={() => deleteDostavbaDay(item.race.date, item.day.date)} />,
+                  onDelete={() => deleteDostavbaDay(item.race.date, item.day.date)}
+                  onCapacity={(op, i) => setDostavbaCapacity(item.race.date, item.dIdx, op, i)} />,
                 sundavani: null,
               });
             }
@@ -4293,7 +4337,8 @@
               onSlotClick={i => onExtraSlotClick(ex.id, i)}
               onLanoClick={() => onExtraLanoClick(ex.id)}
               onToggleLanoSlot={() => toggleExtraLanoSlot(ex.id)}
-              onDelete={() => deleteExtra(ex.id)} />;
+              onDelete={() => deleteExtra(ex.id)}
+              onCapacity={(op, i) => setExtraCapacity(ex.id, op, i)} />;
             const host = slots.find(s => s.venue === ex.venue);
             if (host) { if (!host.stacked) host.stacked = []; host.stacked.push(card); }
             else slots.push({ venue: ex.venue, stavba: card, sundavani: null });
@@ -4475,6 +4520,30 @@
           setRaces(r => ({ ...r, [date]: { ...r[date], setters: next } }));
         }
       }
+      // ── Počet míst u závodu / dostavby / extra (Cyril 19. 11.: „chci mít v kalendáři možnost upravovat počet slotů pro stavěče")
+      // Jen existující pole slotCount + setters (jako formulář v Závodech a extra). Pravidla jako u bouldrů (setCapacity):
+      // ubrat jde jen VOLNÉ místo (obsazené se nejdřív uvolní), nejméně 1 (extra se slotem L i 0), nejvýš SLOT_MAX.
+      // Kdo by stál za hranicí (stará data), zůstává uložený za ní — nic se nemaže.
+      const capChange = (setters, n, op, idx, min) => {
+        const arr = Array.from({ length: Math.max(n, (setters || []).length) }, (_, k) => (setters || [])[k] ?? null);
+        if (op === 'add') { if (n >= SLOT_MAX) return null; arr.splice(n, 0, null); return { slotCount: n + 1, setters: arr }; }
+        const k = idx != null ? idx : arr.slice(0, n).lastIndexOf(null);
+        if (n <= min || k < 0 || k >= n || arr[k]) return null;
+        arr.splice(k, 1); return { slotCount: n - 1, setters: arr };
+      };
+      function setRaceCapacity(date, op, idx) {
+        setRaces(r => { const cur = r[date]; if (!cur) return r; const c = capChange(cur.setters, cur.slotCount || 0, op, idx, 1);
+          return c ? { ...r, [date]: { ...cur, ...c } } : r; });
+      }
+      function setDostavbaCapacity(raceDate, dIdx, op, idx) {
+        setRaces(r => { const cur = r[raceDate], day = cur?.dostavba?.[dIdx]; if (!day) return r;
+          const c = capChange(day.setters, day.slotCount || 0, op, idx, 1); if (!c) return r;
+          return { ...r, [raceDate]: { ...cur, dostavba: cur.dostavba.map((d, i) => i === dIdx ? { ...d, ...c } : d) } }; });
+      }
+      function setExtraCapacity(id, op, idx) {
+        setExtras(cur => { const ex = cur[id]; if (!ex) return cur; const c = capChange(ex.setters, ex.slotCount || 0, op, idx, extraHasLanoSlot(ex) ? 0 : 1);
+          return c ? { ...cur, [id]: { ...ex, ...c } } : cur; });
+      }
       function onDostavbaSlotClick(raceDate, dIdx, slotIdx) {
         const race = races[raceDate]; if (!race) return;
         const day = race.dostavba?.[dIdx]; if (!day) return;
@@ -4546,6 +4615,41 @@
           }
           return { ...cur, [id]: { ...c, lanoSlot: true } };
         });
+      }
+      // ── Upravit závod / extra (Cyril 19. 11.) — stejný formulář, zapsaní lidé zůstávají na svých místech ──
+      // Id závodu = jeho datum, id extra = datum_stěna: při změně data se záznam přestěhuje pod nové id (lidé jdou s ním).
+      // Kdo by po ubrání míst stál za hranicí, nezmizí — zůstane uložený, jen ho appka neukáže; proto se před uložením varuje.
+      const keepSlots = (arr, n) => Array.from({ length: Math.max(n, (arr || []).length) }, (_, k) => (arr || [])[k] ?? null);
+      function updateRace(oldDate, f) {
+        const cur = races[oldDate]; if (!cur) return;
+        const oldD = cur.dostavba || [];
+        const over = [...(cur.setters || []).slice(f.slotCount).filter(Boolean),
+          ...f.dostavbaDays.flatMap((d, i) => (oldD[i]?.setters || []).slice(d.slotCount).filter(Boolean)),
+          ...oldD.slice(f.dostavbaDays.length).flatMap(d => (d?.setters || []).filter(Boolean))];
+        if (over.length && !window.confirm(`Po úpravě se nevejdou: ${over.join(', ')}.\n\nUložit i tak? (Nejdřív je můžeš uvolnit nebo přidat místa.)`)) return;
+        const rec = { ...cur, name: f.name || '', date: f.date, sectors: f.sectors, slotCount: f.slotCount, setters: keepSlots(cur.setters, f.slotCount),
+          dostavba: f.dostavbaDays.map((d, i) => ({ ...(oldD[i] || {}), date: d.date, sectors: d.sectors, slotCount: d.slotCount, setters: keepSlots(oldD[i]?.setters, d.slotCount) })) };
+        const moved = f.date !== oldDate || (f.name || '') !== (cur.name || '') || f.dostavbaDays.some((d, i) => d.date !== oldD[i]?.date);
+        if (moved) logChange({ kind: 'date', wk: oldDate, target: 'race', day: oldDate,
+          names: [...(cur.setters || []), ...(cur.sundavaci || []), cur.myti, ...oldD.flatMap(d => d?.setters || [])],
+          text: `Změna závodu: ${cur.name || 'závod'} ${dayTxt(oldDate)} → ${f.name || 'závod'} ${dayTxt(f.date)}${f.dostavbaDays.length ? `, dostavba ${f.dostavbaDays.map(d => dayTxt(d.date)).join(', ')}` : ''}` });
+        setRaces(r => { const n = { ...r }; if (f.date !== oldDate) delete n[oldDate]; n[f.date] = rec; return n; });
+        if (f.date !== oldDate) db.collection('races').doc(oldDate).delete().catch(() => {});
+        setEditRace(null); setCalCard(null);
+      }
+      function updateExtra(oldId, f) {
+        const cur = extras[oldId]; if (!cur) return;
+        const date = f.dates[0], id = extraId(date, f.venue), lanoSlot = !!(f.lano && f.lanoSlot);
+        const over = [...(cur.setters || []).slice(f.slotCount).filter(Boolean), ...(!lanoSlot && cur.lanoSetter ? [cur.lanoSetter] : [])];
+        if (over.length && !window.confirm(`Po úpravě se nevejdou: ${over.join(', ')}.\n\nUložit i tak? (Nejdřív je můžeš uvolnit nebo přidat místa.)`)) return;
+        const rec = { ...cur, id, date, venue: f.venue, name: f.name || '', sectors: f.sectors || [], slotCount: f.slotCount, lano: !!f.lano, lanoSlot,
+          setters: keepSlots(cur.setters, f.slotCount), lanoSetter: lanoSlot ? (cur.lanoSetter ?? null) : null };
+        if (date !== cur.date || (f.name || '') !== (cur.name || '') || f.venue !== cur.venue) logChange({ kind: 'date', wk: cur.date, target: 'extra', day: cur.date,
+          names: [...(cur.setters || []), cur.lanoSetter],
+          text: `Změna extra stavění: ${dayTxt(cur.date)}${cur.name ? ` (${cur.name})` : ''} → ${dayTxt(date)}${f.name ? ` (${f.name})` : ''}` });
+        setExtras(e => { const n = { ...e }; if (id !== oldId) delete n[oldId]; n[id] = rec; return n; });
+        if (id !== oldId) db.collection('extras').doc(oldId).delete().catch(() => {});
+        setEditExtra(null); setCalCard(null);
       }
       function deleteExtra(id) {
         if (!window.confirm('Opravdu smazat toto extra stavění?')) return;
@@ -5428,7 +5532,7 @@
       const pickObj = pick && (pick.kind === 'sund'
         ? (showS ? allS.find(x => x.i === pick.i && x.target === pick.target) : null)
         : (showB ? (allB.find(b => b.i === pick.i && b.target === pick.target) || allOff.find(o => o.i === pick.i && o.target === pick.target)) : null));
-      const panelView = zView || view === 'kalendar';
+      const panelView = zView || view === 'kalendar' || view === 'zavody';
       // Mac: panel vždy něco ukazuje (první stavění s volným místem), telefon jen po klepnutí
       const selObj = pickObj;  // detail až po kliknutí, nic předvybraného
       const isSel = o => selObj && o && selObj.i === o.i && selObj.target === o.target;
@@ -5947,7 +6051,16 @@
                 : <Li empty>{hasLanoBuild(b.v.monday) ? 'Lano tento týden bez místa' : 'Lano se tento týden nestaví'}<button onClick={() => b.v.setLanoCapacity(1)} className="ml-auto text-[13px] text-brand-muted hover:text-brand-text">{hasLanoBuild(b.v.monday) ? '+ vrátit místo' : '+ přidat lano'}</button></Li>}</Grp>
             )}
             {rem && <Grp t="Den předem"><Li onClick={() => { setRole('sund'); openS(rem); }}><span className="flex-1">Sundávání {dShort(rem.date)} {dm(rem.date)} · {sundWord(rem.names.length)}, mytí {rem.myti ? '1/1' : '0/1'}</span><span className="text-brand-muted">→</span></Li></Grp>}
-            {admin && b.free > 0 && cand.length > 0 && <Grp t="Přidat stavěče"><div className="flex flex-wrap gap-1.5">{cand.map(n => <button key={n} onClick={() => addTo(b, n)} className={`${NAME_BTN} px-3 rounded-ctl bg-brand-surface text-brand-muted text-sm hover:text-brand-text hover:bg-brand-surface-2`}>{n}</button>)}</div></Grp>}
+            {admin && b.free > 0 && <Grp t="Přidat stavěče"><div className="flex flex-wrap gap-1.5">{cand.map(n => <button key={n} onClick={() => addTo(b, n)} className={`${NAME_BTN} px-3 rounded-ctl bg-brand-surface text-brand-muted text-sm hover:text-brand-text hover:bg-brand-surface-2`}>{n}</button>)}
+              {/* host jen na toto místo (do týmu se neuloží) — stejné jako u závodů v Kalendáři */}
+              {hostDraft == null
+                ? <button onClick={() => setHostDraft('')} className={`${NAME_BTN} px-3 rounded-ctl text-sm text-brand-muted border border-dashed border-brand-border-hi hover:text-brand-text`} data-host-add>+ Host</button>
+                : <form onSubmit={e => { e.preventDefault(); const n = (hostDraft || '').trim().replace(/\s+/g, ' ').slice(0, 30); if (n && !b.setters.includes(n)) addTo(b, n); setHostDraft(null); }} className="basis-full flex gap-1.5" data-host-form>
+                    <input autoFocus value={hostDraft} onChange={e => setHostDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setHostDraft(null); }}
+                      placeholder="Jméno hosta" maxLength={30} className="flex-1 min-w-0 min-h-[56px] lg:min-h-[40px] px-3 rounded-ctl bg-brand-surface text-brand-text text-base lg:text-sm outline-none focus:ring-2 focus:ring-brand-accent" />
+                    <button type="submit" className={btn}>Přidat</button>
+                    <button type="button" onClick={() => setHostDraft(null)} className="px-2 text-brand-muted" title="Zrušit"><X c="w-4 h-4" /></button>
+                  </form>}</div></Grp>}
             {b.free > 0 && me && team.includes(me) && !b.setters.includes(me) && (
               <button onClick={() => claimB(b)} className="w-full py-3.5 rounded-ctl bg-brand-accent hover:bg-brand-accent-dark text-white font-bold text-[15px]">Zapsat se na {dShort(b.date)} {dm(b.date)}</button>)}
           </>
@@ -5961,27 +6074,56 @@
       const calCardOf = pk => {
         const iso = pk.dost || pk.date, i = Math.round((getMonday(new Date(iso + 'T12:00:00')) - getMonday(new Date())) / (7 * 86400000));
         if (pk.kind === 'extra') { const ex = Object.values(extras || {}).find(e => e && e.date === pk.date && e.venue === pk.venue);
-          return ex ? { i, target: pk.venue, part: 'build', extraId: ex.id } : null; }
+          return ex ? { i, target: pk.venue, part: 'build', extraId: ex.id, date: pk.date } : null; }
         const v = i === offset ? curView : buildWeekView(i);
         const isRepl = pk.dost ? (x => x.kind === 'dostavba' && x.day.date === pk.dost && x.race.date === pk.date) : (x => x.kind === 'race' && x.race.date === pk.date);
         const t = v.monReplacement && isRepl(v.monReplacement) ? 'lanovka' : v.wedReplacement && isRepl(v.wedReplacement) ? 'limit'
           : pk.dost ? 'dost-' + pk.date + '-' + pk.dost : 'race-' + pk.date;
-        return { i, target: t, part: pk.part === 'sund' ? 'sund' : 'build' };
+        return { i, target: t, part: pk.part === 'sund' ? 'sund' : 'build', date: pk.date, dost: pk.dost || null };
       };
-      const calCardOn = admin && view === 'kalendar' && !!calCard;
-      const closeCalCard = () => { setCalCard(null); setSel(null); };
+      const calCardOn = admin && (view === 'kalendar' || view === 'zavody') && !!calCard;
+      const closeCalCard = () => { setCalCard(null); setSel(null); setHostDraft(null); };
+      // kdo už na kartě je (závod / dostavba / extra) — jeho čip je neaktivní, ať nejde zapsat dvakrát (Cyril 19. 11.)
+      const calCardNames = c => {
+        if (c.extraId) { const ex = extras[c.extraId]; return ex ? [...(ex.setters || []).slice(0, ex.slotCount || 0), ex.lanoSetter].filter(Boolean) : []; }
+        const r = races[c.date]; if (!r) return [];
+        if (c.dost) { const d = (r.dostavba || []).find(x => x?.date === c.dost); return d ? (d.setters || []).slice(0, d.slotCount || 0).filter(Boolean) : []; }
+        return (r.setters || []).slice(0, r.slotCount || 0).filter(Boolean);
+      };
       const renderCalCard = () => {
         const c = calCard, v = c.i === offset ? curView : buildWeekView(c.i);
         const card = v.renderSlots(null, { target: c.target, part: c.part, extraId: c.extraId, cardOnly: true });
+        const onCard = calCardNames(c);
+        const hostSel = sel && !team.includes(sel);
+        const pickHost = () => { const n = (hostDraft || '').trim().replace(/\s+/g, ' ').slice(0, 30); if (!n) { setHostDraft(null); return; }
+          setSel(n); setHostDraft(null); };
+        const chip = on => `${NAME_BTN} px-3 rounded-ctl text-sm ${on ? 'bg-brand-text text-brand-bg font-semibold' : 'bg-brand-surface text-brand-muted hover:text-brand-text hover:bg-brand-surface-2'}`;
         return (
           <>
             <div data-cal-card={c.extraId ? 'extra' : c.target} className="-mx-1 [&>div]:w-full [&>div]:max-w-none">{card || <p className="text-sm text-brand-muted">Toto stavění už v rozpisu není.</p>}</div>
             {card && c.part === 'build' && (
+              <div className="flex gap-2">
+                <button onClick={() => (c.extraId ? setEditExtra(c.extraId) : setEditRace(c.date))} className={`${btn} flex-1`} data-edit-card>Upravit {c.extraId ? 'extra stavění' : c.dost ? 'závod a dostavbu' : 'závod'}</button>
+              </div>
+            )}
+            {card && c.part === 'build' && (
               <Grp t="Kdo se zapíše">
-                <div className="flex flex-wrap gap-1.5">{team.filter(n => n !== 'NEOBSADITELNÉ').map(n => (
-                  <button key={n} onClick={() => setSel(s => s === n ? null : n)} aria-pressed={sel === n}
-                    className={`${NAME_BTN} px-3 rounded-ctl text-sm ${sel === n ? 'bg-brand-text text-brand-bg font-semibold' : 'bg-brand-surface text-brand-muted hover:text-brand-text hover:bg-brand-surface-2'}`}>{n}</button>))}</div>
-                <p className="mt-2 text-xs text-brand-muted">{sel ? <>Klikni na volné místo pro <b className="text-brand-text">{sel}</b>.</> : 'Vyber jméno a klikni na volné místo. Klik na obsazené místo ho uvolní.'}</p>
+                <div className="flex flex-wrap gap-1.5">{team.filter(n => n !== 'NEOBSADITELNÉ').map(n => {
+                  const there = onCard.includes(n);
+                  return <button key={n} disabled={there} onClick={() => setSel(s => s === n ? null : n)} aria-pressed={sel === n}
+                    title={there ? `${n} už je zapsaný — klik na jeho místo ho uvolní` : undefined}
+                    className={`${chip(sel === n)} ${there ? 'opacity-35 cursor-not-allowed hover:text-brand-muted hover:bg-brand-surface' : ''}`}>{n}</button>; })}
+                  {hostSel && <button onClick={() => setSel(null)} aria-pressed className={chip(true)}>Host · {sel}</button>}
+                  {hostDraft == null
+                    ? <button onClick={() => setHostDraft('')} className={`${NAME_BTN} px-3 rounded-ctl text-sm text-brand-muted border border-dashed border-brand-border-hi hover:text-brand-text`} data-host-add>+ Host</button>
+                    : <form onSubmit={e => { e.preventDefault(); pickHost(); }} className="basis-full flex gap-1.5" data-host-form>
+                        <input autoFocus value={hostDraft} onChange={e => setHostDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setHostDraft(null); }}
+                          placeholder="Jméno hosta" maxLength={30} className="flex-1 min-w-0 min-h-[56px] lg:min-h-[40px] px-3 rounded-ctl bg-brand-surface text-brand-text text-base lg:text-sm outline-none focus:ring-2 focus:ring-brand-accent" />
+                        <button type="submit" className={`${btn}`}>Přidat</button>
+                        <button type="button" onClick={() => setHostDraft(null)} className="px-2 text-brand-muted" title="Zrušit"><X c="w-4 h-4" /></button>
+                      </form>}
+                </div>
+                <p className="mt-2 text-xs text-brand-muted">{sel ? <>Klikni na volné místo pro <b className="text-brand-text">{sel}</b>{hostSel ? ' (host — jen na toto místo, do týmu se neuloží)' : ''}.</> : 'Vyber jméno a klikni na volné místo. Klik na obsazené místo ho uvolní.'}</p>
               </Grp>
             )}
           </>
@@ -6034,7 +6176,14 @@
         </span>
       );
       // Jeden den akce: datum | typ | značky obsazenosti | jména textem | Zapsat se (jen kde je volno)
-      const DayRow = ({ date, type, marks, names, free, onClaim, onOpen, note }) => {
+      // Správa: počet míst přímo v řádku (stejné setRaceCapacity / setDostavbaCapacity / setExtraCapacity jako na kartách).
+      // Ubrat = poslední VOLNÉ místo; když volné není, tlačítko chybí (obsazené se nejdřív uvolní).
+      const CapCtl = ({ padded, min, onCap }) => admin ? (
+        <span className="inline-flex items-center gap-3 text-[13px]" data-cap-ctl onClick={e => e.stopPropagation()}>
+          {padded.length > min && padded.some(x => !x) && <button onClick={() => onCap('remove')} title="Ubrat volné místo" className="text-brand-muted hover:text-brand-text whitespace-nowrap">− místo</button>}
+          {padded.length < SLOT_MAX && <button onClick={() => onCap('add')} title="Přidat místo" className="text-brand-muted hover:text-brand-text whitespace-nowrap">+ místo</button>}
+        </span>) : null;
+      const DayRow = ({ date, type, marks, names, free, onClaim, onOpen, note, cap }) => {
         const d = isoD(date);
         return (
           <div onClick={onOpen || undefined}
@@ -6043,7 +6192,8 @@
               <span className="text-sm font-semibold tnum whitespace-nowrap">{dShort(d)} {dm(d)}<span className="lg:hidden text-brand-muted font-normal"> · {type}</span></span>
               <span className="hidden lg:block text-sm text-brand-muted whitespace-nowrap">{type}{note && <span className="block text-[11px] text-[#FDBA74]">{note}</span>}</span>
             </div>
-            <div className="row-span-2 lg:row-span-1 lg:order-last justify-self-end">
+            <div className="row-span-2 lg:row-span-1 lg:order-last justify-self-end flex items-center gap-3">
+              {cap}
               {free && onClaim ? <button onClick={e => { e.stopPropagation(); onClaim(); }} className={claimBtn}>Zapsat se</button> : null}
             </div>
             <div className="lg:contents">
@@ -6072,14 +6222,16 @@
                   marks={<><SlotMarks theme="dark" regular={r.names} /><span className="text-[11px] text-brand-muted">mytí</span><VMark theme="dark" outline={!r.myti} /></>}
                   names={<NamesTxt list={r.names} extra={r.myti ? <span className="text-brand-muted">{r.names.length ? ' · ' : ''}mytí {r.myti}</span> : null} />}
                   free={need && !g.past} onClaim={canSund && !r.names.includes(me) ? () => { toggleRaceSundavac(r.race.date, me); sayThanks('rs' + r.date, `Sundávání ${dm(isoD(r.date))} · ${g.name}`); } : null}
-                  onOpen={() => openInPlan(r.race.date, 'race-' + r.race.date, x => x.kind === 'race' && x.race.date === r.race.date)} />;
+                  onOpen={() => admin ? setCalCard(calCardOf({ kind: 'race', date: r.race.date, part: 'sund' })) : openInPlan(r.race.date, 'race-' + r.race.date, x => x.kind === 'race' && x.race.date === r.race.date)} />;
               }
               const isRace = r.kind === 'race'; if (isRace) den++;
               const f = r.setters.filter(Boolean).length, padded = Array.from({ length: r.total }, (_, j) => r.setters[j] ?? null);
               const mine = padded.includes(me);
-              const open = isRace ? () => openInPlan(r.race.date, 'race-' + r.race.date, x => x.kind === 'race' && x.race.date === r.race.date)
+              const open = admin ? () => { setSel(null); setCalCard(calCardOf(isRace ? { kind: 'race', date: r.race.date } : { kind: 'race', date: r.race.date, dost: r.day.date })); }
+                : isRace ? () => openInPlan(r.race.date, 'race-' + r.race.date, x => x.kind === 'race' && x.race.date === r.race.date)
                 : () => openInPlan(r.day.date, 'dost-' + r.race.date + '-' + r.day.date, x => x.kind === 'dostavba' && x.day.date === r.day.date && x.race.date === r.race.date);
               return <DayRow key={k} date={r.date} type={isRace ? `Den ${den}` : 'Dostavba'} note={r.dup ? 'druhý zápis téhož dne' : null}
+                cap={!g.past && <CapCtl padded={padded} min={1} onCap={op => isRace ? setRaceCapacity(r.race.date, op) : setDostavbaCapacity(r.race.date, (r.race.dostavba || []).findIndex(d => d?.date === r.day.date), op)} />}
                 marks={<SlotMarks theme="dark" regular={padded} />} names={<NamesTxt list={padded.filter(Boolean)} />}
                 free={f < r.total && !mine && !g.past} onClaim={() => { if (claimRaceDay(r)) sayThanks('r' + r.date + k, `${isRace ? `Den ${den}` : 'Dostavba'} ${dm(isoD(r.date))} · ${g.name}`); }} onOpen={open} />;
             })}
@@ -6105,10 +6257,11 @@
               <span className="text-sm text-brand-muted tnum">{dShort(isoD(ex.date))} {dm(isoD(ex.date))} · {theme === 'yellow' ? 'Lanovka' : 'Limit'}{ex.name && what ? ` · ${what}` : ''}</span>
               <span className={`ml-auto text-sm font-semibold ${filled < total ? 'text-brand-accent-lite' : 'text-brand-muted'}`}>{filled < total ? `chybí ${total - filled}` : 'plno'}</span>
             </div>
-            <DayRow date={ex.date} type="Extra" marks={<SlotMarks theme={theme} regular={padded} lano={lano ? (ex.lanoSetter || null) : undefined} />}
+            <DayRow date={ex.date} type="Extra" cap={!past && <CapCtl padded={padded} min={lano ? 0 : 1} onCap={op => setExtraCapacity(ex.id, op)} />}
+              marks={<SlotMarks theme={theme} regular={padded} lano={lano ? (ex.lanoSetter || null) : undefined} />}
               names={<NamesTxt list={padded.filter(Boolean)} extra={ex.lanoSetter ? <span className="text-brand-muted">{padded.some(Boolean) ? ' · ' : ''}lano {ex.lanoSetter}</span> : null} />}
               free={filled < total && !mine && !past} onClaim={() => { if (claimExtra(ex.id)) sayThanks('x' + ex.id, `Extra ${dm(isoD(ex.date))} · ${ex.name || what}`); }}
-              onOpen={() => openInPlan(ex.date, ex.venue, () => false)} />
+              onOpen={() => admin ? (setSel(null), setCalCard(calCardOf({ kind: 'extra', date: ex.date, venue: ex.venue }))) : openInPlan(ex.date, ex.venue, () => false)} />
           </div>
         );
       };
@@ -6693,12 +6846,12 @@
                 {Array.from({ length: kalCount }, (_, i) => (
                   <MonthCalendar key={i} data={data} role={role} stickyTop={hdrH} me={me} picked={pick} dayTags={dayTags} compact={!isDesk}
                     onPick={pk => {
-                      if (admin && (pk.kind === 'extra' || pk.kind === 'race')) { setPick(null); setSel(null); setCalCard(calCardOf(pk)); return; }
+                      if (admin && (pk.kind === 'extra' || pk.kind === 'race')) { setPick(null); setSel(null); setHostDraft(null); setCalCard(calCardOf(pk)); return; }
                       setCalCard(null);
                       if (pk.kind === 'extra') { openInPlan(pk.date, pk.venue, () => false); return; }
                       if (pk.kind === 'race') { if (pk.dost) openInPlan(pk.dost, 'dost-' + pk.date + '-' + pk.dost, x => x.kind === 'dostavba' && x.day.date === pk.dost && x.race.date === pk.date);
                         else openInPlan(pk.date, 'race-' + pk.date, x => x.kind === 'race' && x.race.date === pk.date); return; }
-                      setPanelDay(false); setPick(pk); }}
+                      setPanelDay(false); setHostDraft(null); setPick(pk); }}
                     viewMonday={new Date(kalBase.getFullYear(), kalBase.getMonth() + i, 15)}
                     rotationShifts={rotationShifts} extras={extras} races={races} lanoMap={lanoMap} />
                 ))}
@@ -6807,6 +6960,18 @@
               existingRaceDates={new Set(Object.values(races || {}).flatMap(r => [r.date, ...((r.dostavba || []).map(d => d.date))]).filter(Boolean))}
               onClose={() => setShowAddRace(false)}
               onSave={addRace} />
+          )}
+          {editRace && races[editRace] && (
+            <AddRaceModal initial={races[editRace]}
+              existingRaceDates={new Set(Object.values(races || {}).filter(r => r.date !== editRace).flatMap(r => [r.date, ...((r.dostavba || []).map(d => d.date))]).filter(Boolean))}
+              onClose={() => setEditRace(null)}
+              onSave={f => updateRace(editRace, f)} />
+          )}
+          {editExtra && extras[editExtra] && (
+            <AddExtraModal initial={extras[editExtra]}
+              existingIds={new Set(Object.keys(extras || {}).filter(id => id !== editExtra))}
+              onClose={() => setEditExtra(null)}
+              onSave={f => updateExtra(editExtra, f)} />
           )}
 
           {/* Modal: Extra stavění */}
